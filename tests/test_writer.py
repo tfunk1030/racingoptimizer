@@ -76,6 +76,26 @@ def test_write_session_creates_parquet_and_catalog_row(tmp_corpus: Path) -> None
     conn.close()
 
 
+def test_data_quality_mask_column_present_and_all_true(tmp_corpus: Path) -> None:
+    """Slice D handshake: writer reserves a `data_quality_mask` boolean column."""
+    db = tmp_corpus / "catalog.sqlite"
+    conn = sqlite3.connect(db)
+    init_schema(conn)
+    pr = _fake_parse_result()
+    parquet_p = write_session(
+        conn=conn,
+        corpus_root=tmp_corpus,
+        session_id="aaaabbbbccccdddd",
+        source_path="X:/a.ibt",
+        parse=pr,
+    )
+    df = pl.read_parquet(parquet_p)
+    assert "data_quality_mask" in df.columns
+    assert df.schema["data_quality_mask"] == pl.Boolean
+    assert df["data_quality_mask"].all()
+    conn.close()
+
+
 def test_write_session_is_idempotent_on_same_id(tmp_corpus: Path) -> None:
     db = tmp_corpus / "catalog.sqlite"
     conn = sqlite3.connect(db)

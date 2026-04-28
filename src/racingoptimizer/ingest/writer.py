@@ -38,10 +38,17 @@ def _build_dataframe(pr: ParseResult) -> pl.DataFrame:
     for span in pr.lap_spans:
         lap_index[span.start_sample : span.end_sample] = span.lap_index
 
+    # Reserved column for slice D's track-model handshake: True for every
+    # freshly ingested sample. Slice D will flip dirty samples (curb strikes,
+    # off-track excursions, etc.) to False without rewriting the rest of the
+    # schema across the entire corpus.
+    data_quality_mask = np.ones(n, dtype=bool)
+
     data: dict[str, np.ndarray] = {
         "t_s": t_s,
         "lap_index": lap_index,
         "lap_dist_pct": pr.channels["LapDistPct"],
+        "data_quality_mask": data_quality_mask,
     }
     for name, arr in pr.channels.items():
         if name == "LapDistPct":
