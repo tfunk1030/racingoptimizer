@@ -7,6 +7,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 IBT_DIR = REPO_ROOT / "ibtfiles"
+AERO_DIR = REPO_ROOT / "aero-maps"
 
 # A small-enough real IBT for end-to-end tests. Picked because it's ~10 MB
 # (a few clean laps), runs fast, and exercises the full parser path.
@@ -28,3 +29,11 @@ def tmp_corpus(tmp_path: Path) -> Path:
     root = tmp_path / "corpus"
     root.mkdir()
     return root
+
+
+@pytest.fixture
+def aero_dir() -> Path:
+    """Path to the real aero-maps/ directory in the repo."""
+    if not AERO_DIR.is_dir():
+        pytest.skip(f"aero-maps/ not present at {AERO_DIR}")
+    return AERO_DIR

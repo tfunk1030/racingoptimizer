@@ -9,6 +9,7 @@ dependencies = [
     "pyarrow>=16.0",
     "click>=8.1",
     "numpy>=1.26",
+    "scipy>=1.13",
 ]
 
 [project.optional-dependencies]
