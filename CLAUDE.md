@@ -4,22 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-This is a **greenfield project**. Only data assets and `VISION.md` exist — no source code, package manifest, build scripts, tests, or CI. The IBT-ingestion subsystem (`racingoptimizer.ingest`) is now implemented and the `optimize` CLI is wired up; install with `uv venv && uv pip install -e ".[dev]"`, then run `uv run optimize learn ./ibtfiles` to ingest telemetry into the corpus and `uv run pytest` to exercise the suite. Everything else (corner-phase decomposition, aero-map loader, fitter, optimizer, track model) is still unimplemented — when asked to build them, you are creating them from scratch. Read `VISION.md` first — it is the spec.
-
-There is no `pyproject.toml`/`setup.py`/`package.json` yet. The vision targets a `pip install .` Python package exposing an `optimize` CLI (see VISION.md §8 for the intended UX). Match that when scaffolding.
+`racingoptimizer` is a partially-built Python package targeting `pip install .` and the `optimize` CLI (VISION.md §8). Five of the six VISION slices are merged; the recommendation half of slice E and slice F (CLI) remain. Install with `uv venv && uv pip install -e ".[dev]"`; run `uv run optimize learn ./ibtfiles` to ingest telemetry into the corpus and `uv run pytest` to exercise the ~250-test suite. Read `VISION.md` first — it is the spec.
 
 ## Active build
 
-VISION.md is decomposed into independent slices, each with its own spec → plan → implementation cycle:
+VISION.md is decomposed into six slices plus three cross-cutting modules. Status reflects what is **merged** AND what has been **verified across all 5 GTP cars** (BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, Ferrari 499P) versus only single-car (BMW Sebring fixture) smoke. Per VISION.md "do not assume a unified setup schema across cars" — the five cars have different suspension architectures, IBT YAML setup-blob shapes, and aero-map step sizes. **A green BMW test is not a "works" claim.**
 
-- **A — IBT ingestion** (`racingoptimizer.ingest`). Spec: `docs/superpowers/specs/2026-04-28-ibt-ingestion-design.md`. Plan: `docs/superpowers/plans/2026-04-28-ibt-ingestion.md`. **This is the current slice.** Until it lands, no other slice can be built.
-- **B — Corner-phase decomposition.** Depends on A.
-- **C — Aero-map loader & interpolator.** Independent of A; smallest well-bounded unit.
-- **D — Track model.** Depends on A + B.
-- **E — Physics fitter.** Depends on A + B (+ C).
-- **F — CLI scaffolding.** Skeleton wired up incrementally as A–E land.
+| Slice | Module | Code merged | Per-car verification scope |
+|---|---|---|---|
+| **A — IBT ingestion** | `racingoptimizer.ingest` | ✅ | Detect/normalize: ✓ all 5 (`tests/test_detect.py`). Parser/writer/api end-to-end: ✓ BMW Sebring fixture only. **Per-car parser smoke is the gap.** |
+| **B — Corner-phase decomposition** | `racingoptimizer.corner` | ✅ | ✓ all 5 (`tests/corner/test_per_car_smoke.py` loops the canonical car fixtures and asserts ≥1 corner detected). |
+| **C — Aero-map loader & interpolator** | `racingoptimizer.aero` | ✅ | ✓ all 5 (`tests/aero/test_loader.py::test_load_real_corpus_per_car` and `tests/aero/test_smoke.py::test_load_aero_maps_per_car_smoke`). |
+| **D — Track model** | `racingoptimizer.track` | ✅ | Synthetic only — **untested against real per-car IBT corpora.** Per-car compounding-regime smoke is the gap. |
+| **E — Physics fitter** | `racingoptimizer.physics` | 🟡 partial — training half merged (U9: `fit`, `PhysicsModel.predict`, ontology, GP/RF fitters). Score/recommend (U10) in flight. | ✓ BMW Sebring fixture only. **Acura is a known divergence (no shock-deflection channels).** Per-car ontology coverage and per-car fit smoke are gaps. |
+| **F — CLI / recommendation rendering** | `racingoptimizer.cli`, `racingoptimizer.explain` | ⏳ pending (U11). Only `optimize learn` subcommand exists today. | n/a until built. |
 
-Specs and plans live under `docs/superpowers/`. Read the active slice's spec before touching its code.
+**Verification convention:** before claiming a slice "works" or marking it ✅, the slice must have a `tests/<slice>/test_per_car_smoke.py` (or equivalent) that loops the five canonical car fixtures (skipping when missing) and asserts the slice's contract holds. Single-car smoke tests are gaps to fill before the slice is called done.
+
+Cross-cutting modules (master-plan §2) — all merged:
+
+- `racingoptimizer.context.EnvironmentFrame` — per-corner-phase atmospheric snapshot (`AirDensity`, `TrackTempCrew`, `WindVel`, `WindDir`, `TrackWetness`).
+- `racingoptimizer.confidence.Confidence` — frozen `(value, lo, hi, n_samples, regime)` with `Confidence.derive(...)` regime-derivation classmethod (sparse short-circuits noisy at `n_samples < 30`).
+- `racingoptimizer.constraints.{ConstraintsTable, load_constraints, clamp}` — markdown parser for `constraints.md` plus per-car-shadowing `clamp(value, parameter, car)`.
+
+Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/`. Read the active slice's spec before touching its code. The Wave-by-Wave decomposition that produced the eleven implementation units (U1–U11, of which 1–9 are merged) lives in `C:/Users/VYRAL/.claude/plans/ultrathink-and-read-through-wobbly-horizon.md`.
+
+`constraints.md` covers the bounded subset (wing, tyre pressure, heave spring/slider, static ride heights). ARBs, dampers, corner weights, brake bias, differential, camber, toe, brake ducts, and throttle/brake mapping are all `<TODO: from iRacing UI>` placeholders awaiting manual UI capture. Slice E's `fit` gracefully degrades — it lists CE-gated unbounded parameters in `untrained_parameters` and does not refuse to run.
 
 ## Project automations (`.claude/`)
 
