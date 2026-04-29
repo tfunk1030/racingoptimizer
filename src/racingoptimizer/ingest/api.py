@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterable
-from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -15,7 +14,7 @@ from racingoptimizer.ingest.paths import (
     parquet_path,
     resolve_corpus_root,
 )
-from racingoptimizer.ingest.writer import session_id_from_bytes, write_session
+from racingoptimizer.ingest.writer import _now_iso, session_id_from_bytes, write_session
 
 
 def learn(path: Path | str, corpus_root: Path | str | None = None) -> list[str]:
@@ -165,14 +164,10 @@ def _process_one(conn: sqlite3.Connection, root: Path, ibt_path: Path) -> str:
                 weather_summary=None,
                 setup=None,
                 source_path=str(ibt_path),
-                ingested_at=_iso_now(),
+                ingested_at=_now_iso(),
                 parquet_path=None,
                 status="failed",
                 error=f"{type(exc).__name__}: {exc}",
             ),
         )
     return sid
-
-
-def _iso_now() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds")
