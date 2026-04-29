@@ -10,6 +10,7 @@ dependencies = [
     "click>=8.1",
     "numpy>=1.26",
     "scipy>=1.13",
+    "scikit-learn>=1.5",
 ]
 
 [project.optional-dependencies]
