@@ -1,0 +1,309 @@
+"""Per-car garage parameter ontology.
+
+Maps the bounded parameter names from `constraints.md` to the JSON paths in
+slice A's catalog `setup` blob. Five frozen dicts (one per car) cover both
+the bounded `fittable=True` families and the CE-gated `fittable=False`
+ones (ARBs, dampers, corner weights, brake bias, diff). The CE-gated entries
+are emitted so `PhysicsModel.untrained_parameters` can list them.
+
+JSON path resolution is NaN-tolerant: missing keys return `None`, missing
+units return `None`. The fitter drops rows where `setup_value` returns `None`
+rather than aborting the model build.
+"""
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from typing import Any, Literal
+
+from racingoptimizer.constraints import ConstraintsTable
+
+Family = Literal[
+    "heave_spring",
+    "heave_slider",
+    "tyre_pressure",
+    "front_wing",
+    "rear_wing",
+    "ride_height",
+    "arb",
+    "damper",
+    "corner_weight",
+    "brake_bias",
+    "diff",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ParameterSpec:
+    json_path: tuple[str, ...]
+    dtype: type
+    units: str
+    family: Family
+    fittable: bool
+
+
+# --- Path-extraction helpers ----------------------------------------------
+
+# Strip "12 kPa" / "+0.3 mm" / "47.00%" / "10 clicks" → 12.0 / 0.3 / 47.0 / 10.0.
+# First number wins, sign retained, fractional optional.
+_NUMERIC_RE = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def _scalar(text: Any) -> float | None:
+    """Coerce an IBT setup field to a single float, or `None` if unavailable."""
+    if text is None:
+        return None
+    if isinstance(text, (int, float)):
+        return float(text)
+    if not isinstance(text, str):
+        return None
+    m = _NUMERIC_RE.search(text)
+    if m is None:
+        return None
+    return float(m.group(0))
+
+
+def _walk(setup: dict, path: tuple[str, ...]) -> Any:
+    cur: Any = setup
+    for key in path:
+        if not isinstance(cur, dict) or key not in cur:
+            return None
+        cur = cur[key]
+    return cur
+
+
+# --- Per-car ontologies ----------------------------------------------------
+
+# All five GTP cars use the same TiresAero / Chassis top-level layout but
+# diverge inside Chassis.LeftFront/LeftRear/Rear, especially around damper
+# placement (Acura/Porsche have a separate `Dampers` block; BMW/Cadillac
+# inline per-corner) and CE-gated families. The dicts below pin one
+# representative path per bounded `constraints.md` key plus untyped CE
+# entries for graceful enumeration.
+
+_TYRE_FL = ("TiresAero", "LeftFront", "StartingPressure")
+_AERO_REAR_WING = ("TiresAero", "AeroSettings", "RearWingAngle")
+_RIDE_LF = ("Chassis", "LeftFront", "RideHeight")
+_RIDE_LR = ("Chassis", "LeftRear", "RideHeight")
+_HEAVE_SPRING_F = ("Chassis", "Front", "HeaveSpringDefl")
+_HEAVE_SLIDER_F = ("Chassis", "Front", "HeaveSliderDefl")
+_BRAKE_BIAS = ("BrakesDriveUnit", "BrakeSpec", "BrakePressureBias")
+
+
+def _common_bounded() -> dict[str, ParameterSpec]:
+    """Bounded families that every car shares (path conventions vary; see overrides)."""
+    return {
+        "rear_wing_angle_deg": ParameterSpec(
+            json_path=_AERO_REAR_WING, dtype=float, units="deg",
+            family="rear_wing", fittable=True,
+        ),
+        "tyre_cold_pressure_kpa": ParameterSpec(
+            json_path=_TYRE_FL, dtype=float, units="kPa",
+            family="tyre_pressure", fittable=True,
+        ),
+        "static_ride_height_front_mm": ParameterSpec(
+            json_path=_RIDE_LF, dtype=float, units="mm",
+            family="ride_height", fittable=True,
+        ),
+        "static_ride_height_rear_mm": ParameterSpec(
+            json_path=_RIDE_LR, dtype=float, units="mm",
+            family="ride_height", fittable=True,
+        ),
+        "heave_spring_mm": ParameterSpec(
+            json_path=_HEAVE_SPRING_F, dtype=float, units="mm",
+            family="heave_spring", fittable=True,
+        ),
+        "heave_slider_mm": ParameterSpec(
+            json_path=_HEAVE_SLIDER_F, dtype=float, units="mm",
+            family="heave_slider", fittable=True,
+        ),
+    }
+
+
+def _common_ce_gated() -> dict[str, ParameterSpec]:
+    """CE-gated entries: present in the ontology, never fitted until bounds land."""
+    return {
+        "anti_roll_bar_front": ParameterSpec(
+            json_path=("Chassis", "Front", "ArbBlades"), dtype=float, units="click",
+            family="arb", fittable=False,
+        ),
+        "anti_roll_bar_rear": ParameterSpec(
+            json_path=("Chassis", "Rear", "ArbBlades"), dtype=float, units="click",
+            family="arb", fittable=False,
+        ),
+        "brake_bias_pct": ParameterSpec(
+            json_path=_BRAKE_BIAS, dtype=float, units="pct",
+            family="brake_bias", fittable=False,
+        ),
+        "diff_preload_nm": ParameterSpec(
+            json_path=("BrakesDriveUnit", "RearDiffSpec", "Preload"),
+            dtype=float, units="Nm", family="diff", fittable=False,
+        ),
+        "corner_weight_fl_kg": ParameterSpec(
+            json_path=("Chassis", "LeftFront", "CornerWeight"), dtype=float,
+            units="N", family="corner_weight", fittable=False,
+        ),
+        "corner_weight_fr_kg": ParameterSpec(
+            json_path=("Chassis", "RightFront", "CornerWeight"), dtype=float,
+            units="N", family="corner_weight", fittable=False,
+        ),
+        "corner_weight_rl_kg": ParameterSpec(
+            json_path=("Chassis", "LeftRear", "CornerWeight"), dtype=float,
+            units="N", family="corner_weight", fittable=False,
+        ),
+        "corner_weight_rr_kg": ParameterSpec(
+            json_path=("Chassis", "RightRear", "CornerWeight"), dtype=float,
+            units="N", family="corner_weight", fittable=False,
+        ),
+    }
+
+
+# (constraint suffix, IBT field name) for the four damper modes.
+_DAMPER_MODES: tuple[tuple[str, str], ...] = (
+    ("lsc", "LsCompDamping"),
+    ("hsc", "HsCompDamping"),
+    ("lsr", "LsRbdDamping"),
+    ("hsr", "HsRbdDamping"),
+)
+
+
+def _damper_paths(
+    corner_to_path: tuple[tuple[str, tuple[str, ...]], ...],
+) -> dict[str, ParameterSpec]:
+    """Generate `damper_<mode>_<corner>` entries from a (corner_code → path) map."""
+    out: dict[str, ParameterSpec] = {}
+    for code, parent_path in corner_to_path:
+        for suffix, field_name in _DAMPER_MODES:
+            out[f"damper_{suffix}_{code}"] = ParameterSpec(
+                json_path=(*parent_path, field_name), dtype=float, units="click",
+                family="damper", fittable=False,
+            )
+    return out
+
+
+# BMW / Cadillac / Ferrari inline per-corner damper clicks under Chassis.<corner>.
+_INLINE_DAMPERS = _damper_paths(
+    (
+        ("fl", ("Chassis", "LeftFront")),
+        ("fr", ("Chassis", "RightFront")),
+        ("rl", ("Chassis", "LeftRear")),
+        ("rr", ("Chassis", "RightRear")),
+    )
+)
+# Acura / Porsche keep a top-level `Dampers` block keyed by axle/role. The two
+# front damper paths share the FrontHeave block and the two rear paths share
+# RearHeave — the per-corner click is the same scalar today and a future
+# refinement can split them when iRacing exposes per-corner Dampers entries.
+_SPLIT_DAMPERS = _damper_paths(
+    (
+        ("fl", ("Dampers", "FrontHeave")),
+        ("fr", ("Dampers", "FrontHeave")),
+        ("rl", ("Dampers", "RearHeave")),
+        ("rr", ("Dampers", "RearHeave")),
+    )
+)
+
+
+def _build(
+    damper_paths: dict[str, ParameterSpec],
+    **overrides: ParameterSpec,
+) -> dict[str, ParameterSpec]:
+    return {**_common_bounded(), **overrides, **_common_ce_gated(), **damper_paths}
+
+
+# Acura uses HeaveDamperDefl for the heave slider; the rest follow the
+# common bounded layout. Cadillac/BMW/Ferrari share the inline damper layout;
+# Porsche/Acura share the split layout.
+_ACURA_HEAVE_SLIDER = ParameterSpec(
+    json_path=("Chassis", "Front", "HeaveDamperDefl"),
+    dtype=float, units="mm", family="heave_slider", fittable=True,
+)
+
+ACURA: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, heave_slider_mm=_ACURA_HEAVE_SLIDER)
+BMW: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS)
+CADILLAC: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS)
+FERRARI: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS)
+PORSCHE: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS)
+
+_BY_CAR: dict[str, dict[str, ParameterSpec]] = {
+    "acura": ACURA,
+    "bmw": BMW,
+    "cadillac": CADILLAC,
+    "ferrari": FERRARI,
+    "porsche": PORSCHE,
+}
+
+
+def ontology_for(car: str) -> dict[str, ParameterSpec]:
+    """Return the per-car ontology dict; raises KeyError on unknown car."""
+    key = car.strip().lower()
+    if key not in _BY_CAR:
+        raise KeyError(
+            f"unknown car: {car!r}; expected one of {sorted(_BY_CAR)}"
+        )
+    return _BY_CAR[key]
+
+
+def parameters(car: str) -> list[str]:
+    """Sorted list of every typed parameter name for `car`."""
+    return sorted(ontology_for(car).keys())
+
+
+def fittable_parameters(car: str, table: ConstraintsTable) -> list[str]:
+    """Parameters that are both `fittable=True` AND bounded by `constraints.md`.
+
+    A spec marked `fittable=True` whose constraint bound is `None` (CE TODO)
+    is excluded — it must wait for CE to land.
+    """
+    onto = ontology_for(car)
+    out: list[str] = []
+    for name, spec in onto.items():
+        if not spec.fittable:
+            continue
+        bound = table.bounds(car.strip().lower(), name)
+        if bound is None:
+            continue
+        out.append(name)
+    return sorted(out)
+
+
+def setup_value(car: str, parameter: str, setup_json: dict | str) -> float | None:
+    """Resolve `parameter` against a session's setup blob.
+
+    Accepts either a parsed dict or a raw JSON string (slice A persists JSON).
+    Returns `None` when the JSON path is missing or the value cannot be
+    coerced to a float — the fitter drops such rows rather than aborting.
+    """
+    onto = ontology_for(car)
+    if parameter not in onto:
+        raise KeyError(f"parameter {parameter!r} not in ontology for car={car!r}")
+    spec = onto[parameter]
+
+    if isinstance(setup_json, str):
+        try:
+            setup = json.loads(setup_json)
+        except json.JSONDecodeError:
+            return None
+    else:
+        setup = setup_json
+    if not isinstance(setup, dict):
+        return None
+
+    raw = _walk(setup, spec.json_path)
+    return _scalar(raw)
+
+
+__all__ = [
+    "ACURA",
+    "BMW",
+    "CADILLAC",
+    "FERRARI",
+    "PORSCHE",
+    "Family",
+    "ParameterSpec",
+    "fittable_parameters",
+    "ontology_for",
+    "parameters",
+    "setup_value",
+]
