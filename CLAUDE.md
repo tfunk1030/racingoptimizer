@@ -4,22 +4,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-This is a **greenfield project**. Only data assets and `VISION.md` exist — no source code, package manifest, build scripts, tests, or CI. The IBT-ingestion subsystem (`racingoptimizer.ingest`) is now implemented and the `optimize` CLI is wired up; install with `uv venv && uv pip install -e ".[dev]"`, then run `uv run optimize learn ./ibtfiles` to ingest telemetry into the corpus and `uv run pytest` to exercise the suite. Everything else (corner-phase decomposition, aero-map loader, fitter, optimizer, track model) is still unimplemented — when asked to build them, you are creating them from scratch. Read `VISION.md` first — it is the spec.
-
-There is no `pyproject.toml`/`setup.py`/`package.json` yet. The vision targets a `pip install .` Python package exposing an `optimize` CLI (see VISION.md §8 for the intended UX). Match that when scaffolding.
+`racingoptimizer` is a partially-built Python package targeting `pip install .` and the `optimize` CLI (VISION.md §8). Five of the six VISION slices are merged; the recommendation half of slice E and slice F (CLI) remain. Install with `uv venv && uv pip install -e ".[dev]"`; run `uv run optimize learn ./ibtfiles` to ingest telemetry into the corpus and `uv run pytest` to exercise the ~250-test suite. Read `VISION.md` first — it is the spec.
 
 ## Active build
 
-VISION.md is decomposed into independent slices, each with its own spec → plan → implementation cycle:
+VISION.md is decomposed into six slices plus three cross-cutting modules. Status as of the latest merge:
 
-- **A — IBT ingestion** (`racingoptimizer.ingest`). Spec: `docs/superpowers/specs/2026-04-28-ibt-ingestion-design.md`. Plan: `docs/superpowers/plans/2026-04-28-ibt-ingestion.md`. **This is the current slice.** Until it lands, no other slice can be built.
-- **B — Corner-phase decomposition.** Depends on A.
-- **C — Aero-map loader & interpolator.** Independent of A; smallest well-bounded unit.
-- **D — Track model.** Depends on A + B.
-- **E — Physics fitter.** Depends on A + B (+ C).
-- **F — CLI scaffolding.** Skeleton wired up incrementally as A–E land.
+| Slice | Module | Status |
+|---|---|---|
+| **A — IBT ingestion** | `racingoptimizer.ingest` | ✅ merged |
+| **B — Corner-phase decomposition** | `racingoptimizer.corner` | ✅ merged (`detect_corners`, `assign_phases`, `segment_lap`, `corner_phase_states`) |
+| **C — Aero-map loader & interpolator** | `racingoptimizer.aero` | ✅ merged (`load_aero_maps`, `AeroSurface`, `BASELINE_AIR_DENSITY`) |
+| **D — Track model** | `racingoptimizer.track` | ✅ merged (`build_track_model`, `TrackModel`, `compute_curb_mask`, `compute_off_track_mask`, `apply_quality_mask`) |
+| **E — Physics fitter** | `racingoptimizer.physics` | 🟡 partial — `fit`, `PhysicsModel.predict`, ontology, GP/RF fitters merged (U9). `score_setup`, `recommend`, corner-weight derivation, `SetupRecommendation` are unmerged (U10, in flight). |
+| **F — CLI / recommendation rendering** | `racingoptimizer.cli`, `racingoptimizer.explain` | ⏳ pending (U11). Slice A's `optimize learn` subcommand is wired; the `optimize <car> <track>`, `compare`, and `status` subcommands and the engineering-briefing renderer are not built yet. |
 
-Specs and plans live under `docs/superpowers/`. Read the active slice's spec before touching its code.
+Cross-cutting modules (master-plan §2) — all merged:
+
+- `racingoptimizer.context.EnvironmentFrame` — per-corner-phase atmospheric snapshot (`AirDensity`, `TrackTempCrew`, `WindVel`, `WindDir`, `TrackWetness`).
+- `racingoptimizer.confidence.Confidence` — frozen `(value, lo, hi, n_samples, regime)` with `Confidence.derive(...)` regime-derivation classmethod (sparse short-circuits noisy at `n_samples < 30`).
+- `racingoptimizer.constraints.{ConstraintsTable, load_constraints, clamp}` — markdown parser for `constraints.md` plus per-car-shadowing `clamp(value, parameter, car)`.
+
+Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/`. Read the active slice's spec before touching its code. The Wave-by-Wave decomposition that produced the eleven implementation units (U1–U11, of which 1–9 are merged) lives in `C:/Users/VYRAL/.claude/plans/ultrathink-and-read-through-wobbly-horizon.md`.
+
+`constraints.md` covers the bounded subset (wing, tyre pressure, heave spring/slider, static ride heights). ARBs, dampers, corner weights, brake bias, differential, camber, toe, brake ducts, and throttle/brake mapping are all `<TODO: from iRacing UI>` placeholders awaiting manual UI capture. Slice E's `fit` gracefully degrades — it lists CE-gated unbounded parameters in `untrained_parameters` and does not refuse to run.
 
 ## Project automations (`.claude/`)
 
