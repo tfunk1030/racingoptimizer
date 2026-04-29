@@ -4,16 +4,17 @@ Physics-based setup optimizer for iRacing GTP cars. See `VISION.md` for the full
 
 ## Status
 
-Five of the six VISION slices are merged; the optimizer's recommendation step and the user-facing CLI are still in flight.
+Five of the six VISION slices have code merged on master; the recommendation step (slice E second half) and the user-facing CLI (slice F) are still in flight. **Code-merged is not the same as verified-across-all-5-cars** — per-car coverage is tracked separately because the BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, and Ferrari 499P have different suspension architectures and IBT setup-blob shapes.
 
-| Slice | Module | Status |
-|---|---|---|
-| A — IBT ingestion | `racingoptimizer.ingest` | ✅ |
-| B — Corner-phase decomposition | `racingoptimizer.corner` | ✅ |
-| C — Aero-map loader & interpolator | `racingoptimizer.aero` | ✅ |
-| D — Track model (curbs, off-track, quality mask) | `racingoptimizer.track` | ✅ |
-| E — Physics fitter (training half) | `racingoptimizer.physics` | ✅ training; 🟡 score/recommend in flight |
-| F — Recommendation CLI + briefing renderer | `racingoptimizer.cli`, `racingoptimizer.explain` | ⏳ pending |
+| Slice | Module | Code | Verified across all 5 cars? |
+|---|---|---|---|
+| A — IBT ingestion | `racingoptimizer.ingest` | merged | car/track detect ✓ all 5; parser/writer/api end-to-end smoke = BMW only |
+| B — Corner-phase decomposition | `racingoptimizer.corner` | merged | ✓ all 5 (`test_per_car_smoke.py`) |
+| C — Aero-map loader & interpolator | `racingoptimizer.aero` | merged | ✓ all 5 |
+| D — Track model | `racingoptimizer.track` | merged | synthetic only — no real per-car IBT integration test |
+| E — Physics fitter (training) | `racingoptimizer.physics` | merged (U9) | BMW only; Acura known divergence (no shock-deflection channels) |
+| E — Physics fitter (score + recommend) | `racingoptimizer.physics` | in flight (U10) | n/a |
+| F — Recommendation CLI + briefing renderer | `racingoptimizer.cli`, `racingoptimizer.explain` | not started (U11) | n/a |
 
 Cross-cutting modules already shipped: `racingoptimizer.context.EnvironmentFrame`, `racingoptimizer.confidence.Confidence`, `racingoptimizer.constraints.{ConstraintsTable, clamp}`.
 

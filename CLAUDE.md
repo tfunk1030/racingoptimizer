@@ -8,16 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Active build
 
-VISION.md is decomposed into six slices plus three cross-cutting modules. Status as of the latest merge:
+VISION.md is decomposed into six slices plus three cross-cutting modules. Status reflects what is **merged** AND what has been **verified across all 5 GTP cars** (BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, Ferrari 499P) versus only single-car (BMW Sebring fixture) smoke. Per VISION.md "do not assume a unified setup schema across cars" — the five cars have different suspension architectures, IBT YAML setup-blob shapes, and aero-map step sizes. **A green BMW test is not a "works" claim.**
 
-| Slice | Module | Status |
-|---|---|---|
-| **A — IBT ingestion** | `racingoptimizer.ingest` | ✅ merged |
-| **B — Corner-phase decomposition** | `racingoptimizer.corner` | ✅ merged (`detect_corners`, `assign_phases`, `segment_lap`, `corner_phase_states`) |
-| **C — Aero-map loader & interpolator** | `racingoptimizer.aero` | ✅ merged (`load_aero_maps`, `AeroSurface`, `BASELINE_AIR_DENSITY`) |
-| **D — Track model** | `racingoptimizer.track` | ✅ merged (`build_track_model`, `TrackModel`, `compute_curb_mask`, `compute_off_track_mask`, `apply_quality_mask`) |
-| **E — Physics fitter** | `racingoptimizer.physics` | 🟡 partial — `fit`, `PhysicsModel.predict`, ontology, GP/RF fitters merged (U9). `score_setup`, `recommend`, corner-weight derivation, `SetupRecommendation` are unmerged (U10, in flight). |
-| **F — CLI / recommendation rendering** | `racingoptimizer.cli`, `racingoptimizer.explain` | ⏳ pending (U11). Slice A's `optimize learn` subcommand is wired; the `optimize <car> <track>`, `compare`, and `status` subcommands and the engineering-briefing renderer are not built yet. |
+| Slice | Module | Code merged | Per-car verification scope |
+|---|---|---|---|
+| **A — IBT ingestion** | `racingoptimizer.ingest` | ✅ | Detect/normalize: ✓ all 5 (`tests/test_detect.py`). Parser/writer/api end-to-end: ✓ BMW Sebring fixture only. **Per-car parser smoke is the gap.** |
+| **B — Corner-phase decomposition** | `racingoptimizer.corner` | ✅ | ✓ all 5 (`tests/corner/test_per_car_smoke.py` loops the canonical car fixtures and asserts ≥1 corner detected). |
+| **C — Aero-map loader & interpolator** | `racingoptimizer.aero` | ✅ | ✓ all 5 (`tests/aero/test_loader.py::test_load_real_corpus_per_car` and `tests/aero/test_smoke.py::test_load_aero_maps_per_car_smoke`). |
+| **D — Track model** | `racingoptimizer.track` | ✅ | Synthetic only — **untested against real per-car IBT corpora.** Per-car compounding-regime smoke is the gap. |
+| **E — Physics fitter** | `racingoptimizer.physics` | 🟡 partial — training half merged (U9: `fit`, `PhysicsModel.predict`, ontology, GP/RF fitters). Score/recommend (U10) in flight. | ✓ BMW Sebring fixture only. **Acura is a known divergence (no shock-deflection channels).** Per-car ontology coverage and per-car fit smoke are gaps. |
+| **F — CLI / recommendation rendering** | `racingoptimizer.cli`, `racingoptimizer.explain` | ⏳ pending (U11). Only `optimize learn` subcommand exists today. | n/a until built. |
+
+**Verification convention:** before claiming a slice "works" or marking it ✅, the slice must have a `tests/<slice>/test_per_car_smoke.py` (or equivalent) that loops the five canonical car fixtures (skipping when missing) and asserts the slice's contract holds. Single-car smoke tests are gaps to fill before the slice is called done.
 
 Cross-cutting modules (master-plan §2) — all merged:
 
