@@ -28,6 +28,7 @@ from racingoptimizer.track.paths import (
     summary_path,
     track_models_root,
 )
+from racingoptimizer.track.rewrite import ApplyMaskResult, apply_quality_mask
 
 __all__ = [
     "BUMP_RANGE_MAX_MM_S",
@@ -40,9 +41,11 @@ __all__ = [
     "OFFTRACK_WHEELSPEED_RATIO",
     "T_CURB_AGGREGATE_MM_S",
     "T_CURB_SESSION_MM_S",
+    "ApplyMaskResult",
     "TrackModel",
     "aggregate_curb_likelihood",
     "aggregate_grip_map",
+    "apply_quality_mask",
     "bin_index",
     "build_track_model",
     "cache_path",
