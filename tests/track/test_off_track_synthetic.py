@@ -21,7 +21,7 @@ def _build_lap(*, accel_lat: np.ndarray, wheel_diff: np.ndarray) -> pl.DataFrame
     return pl.DataFrame(
         {
             "lap_dist_pct": lap_dist_pct,
-            "AccelLat": accel_lat,
+            "LatAccel": accel_lat,
             "LFspeed": lf,
             "RFspeed": rf,
             "LRspeed": lr,
@@ -77,7 +77,7 @@ def test_wheel_speed_spike_dilates_to_half_second_window():
     diff = np.zeros(n)
     diff[40:43] = 200.0  # 200 m/s differential
 
-    # AccelLat 0 keeps grip-loss detector quiet (no high-grip history ever).
+    # LatAccel 0 keeps grip-loss detector quiet (no high-grip history ever).
     df = _build_lap(accel_lat=np.zeros(n), wheel_diff=diff)
     grip_map = _grip_map_for_lap(n, p95=8.0 / _GRAVITY)
 
