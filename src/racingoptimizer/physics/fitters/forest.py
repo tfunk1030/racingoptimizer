@@ -7,6 +7,8 @@ the per-estimator predictions for each input row.
 """
 from __future__ import annotations
 
+import pickle
+
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 
@@ -44,7 +46,10 @@ class ForestFitter(FitterBase):
                     n_jobs=1,
                 )
                 rf.fit(X, y)
-                self._rf = rf
+                # Pickle round-trip canonicalizes the fitted estimator so
+                # subsequent `pickle.dumps` calls are byte-identical (spec
+                # §12). See `GPFitter.fit` for the dtype-singleton rationale.
+                self._rf = pickle.loads(pickle.dumps(rf, protocol=pickle.HIGHEST_PROTOCOL))
                 self.is_trained = True
                 self.n_samples = X.shape[0]
                 return
