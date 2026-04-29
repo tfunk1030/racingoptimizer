@@ -1,10 +1,9 @@
-"""Cold-start regime: < 3 sessions → empty maps + no-op cache (U6)."""
+"""Cold-start regime: < 3 sessions → empty maps + no-op cache (U6 + U7)."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import polars as pl
-import pytest
 
 from racingoptimizer.track import (
     build_track_model,
@@ -29,16 +28,15 @@ def test_single_session_yields_cold_start(tmp_corpus: Path):
     assert latest_pointer_path(tmp_corpus, "fake_track").exists()
 
 
-def test_cold_start_curb_mask_raises(tmp_corpus: Path):
+def test_cold_start_masks_return_all_false(tmp_corpus: Path):
     model = build_track_model(
         "fake_track",
         ["00000000deadbeef"],
         corpus_root=tmp_corpus,
     )
-    with pytest.raises(NotImplementedError):
-        model.curb_mask(pl.DataFrame({"x": [1, 2, 3]}))
-    with pytest.raises(NotImplementedError):
-        model.off_track_mask(pl.DataFrame({"x": [1, 2, 3]}))
+    df = pl.DataFrame({"x": [1, 2, 3]})
+    assert model.curb_mask(df).tolist() == [False, False, False]
+    assert model.off_track_mask(df).tolist() == [False, False, False]
 
 
 def test_cache_hit_replays_without_session_data(tmp_corpus: Path):
