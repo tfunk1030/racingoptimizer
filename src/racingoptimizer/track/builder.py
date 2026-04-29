@@ -1,13 +1,17 @@
-"""Track-model builder + cache (slice D-1, unit U6).
+"""Track-model builder + cache (slice D-1 / D-2, units U6 + U7).
 
 Aggregates per-session per-bin shock-velocity p99 and lateral-G p95/median
 across `track_pos_m` bins, then collapses across sessions into a track-wide
 summary. Persistent on disk so downstream slices read parquet, not raw
-60 Hz data. Curb / bump detection (the actual likelihoods) is U7's job —
-this unit ships placeholder zeros and the bin pipeline.
+60 Hz data. Curb / bump / off-track classification (U7) plugs into the
+compounding regime via `racingoptimizer.track.masks` aggregators; cold-start
+keeps the U6 placeholder zeros.
 
 Determinism contract: same `(track, sorted(session_ids))` → byte-identical
-persisted parquet. Sort orders are pinned explicitly.
+persisted parquet. Sort orders are pinned explicitly. The build-time
+`lap_length_m` is stored as a constant column on the summary parquet so
+`TrackModel.lap_length_m` and `curb_mask` / `off_track_mask` can recover it
+without re-reading the IBT YAML.
 """
 from __future__ import annotations
 
@@ -25,6 +29,12 @@ from racingoptimizer.ingest import api as ingest_api
 from racingoptimizer.ingest import catalog as cat
 from racingoptimizer.ingest.paths import catalog_path, resolve_corpus_root
 from racingoptimizer.track.bins import DEFAULT_BIN_SIZE_M, bin_index, track_pos_m_from_pct
+from racingoptimizer.track.masks import (
+    aggregate_curb_likelihood,
+    aggregate_grip_map,
+    compute_curb_mask,
+    compute_off_track_mask,
+)
 from racingoptimizer.track.paths import (
     cache_path,
     latest_pointer_path,
@@ -45,6 +55,7 @@ _PER_SESSION_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 _BUMP_SCHEMA: dict[str, type[pl.DataType]] = {
+    "bin_index": pl.Int32,
     "track_pos_m": pl.Float64,
     "shock_v_p99_mm_s": pl.Float64,
     "n_samples": pl.Int64,
@@ -54,6 +65,7 @@ _BUMP_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 _GRIP_SCHEMA: dict[str, type[pl.DataType]] = {
+    "bin_index": pl.Int32,
     "track_pos_m": pl.Float64,
     "lateral_g_p95": pl.Float64,
     "lateral_g_median": pl.Float64,
@@ -61,8 +73,10 @@ _GRIP_SCHEMA: dict[str, type[pl.DataType]] = {
     "n_sessions": pl.Int64,
 }
 
-# Summary parquet merges bump + grip on track_pos_m. Consumers project columns.
+# Summary parquet merges bump + grip on bin_index. lap_length_m repeats per row
+# (constant per build) so consumers reconstruct track_pos_m without sidecars.
 _SUMMARY_SCHEMA: dict[str, type[pl.DataType]] = {
+    "bin_index": pl.Int32,
     "track_pos_m": pl.Float64,
     "shock_v_p99_mm_s": pl.Float64,
     "lateral_g_p95": pl.Float64,
@@ -71,6 +85,7 @@ _SUMMARY_SCHEMA: dict[str, type[pl.DataType]] = {
     "n_sessions": pl.Int64,
     "curb_likelihood": pl.Float64,
     "bump_likelihood": pl.Float64,
+    "lap_length_m": pl.Float64,
 }
 
 
@@ -85,11 +100,43 @@ class TrackModel:
     cache_path: Path
     summary_path: Path
 
+    @property
+    def lap_length_m(self) -> float | None:
+        if not self.summary_path.exists():
+            return None
+        df = pl.read_parquet(self.summary_path, columns=["lap_length_m"])
+        if df.height == 0:
+            return None
+        value = df["lap_length_m"][0]
+        return float(value) if value is not None else None
+
     def curb_mask(self, lap_df: pl.DataFrame) -> np.ndarray:
-        raise NotImplementedError("curb_mask deferred to U7 (Wave 2)")
+        if self.regime == "cold_start":
+            return np.zeros(lap_df.height, dtype=bool)
+        lap_length = self._resolve_lap_length(lap_df)
+        return compute_curb_mask(
+            lap_df, self.bump_map, lap_length_m=lap_length, bin_size_m=self.bin_size_m
+        )
 
     def off_track_mask(self, lap_df: pl.DataFrame) -> np.ndarray:
-        raise NotImplementedError("off_track_mask deferred to U7 (Wave 2)")
+        if self.regime == "cold_start":
+            return np.zeros(lap_df.height, dtype=bool)
+        lap_length = self._resolve_lap_length(lap_df)
+        return compute_off_track_mask(
+            lap_df,
+            self.grip_map,
+            lap_length_m=lap_length,
+            bin_size_m=self.bin_size_m,
+            sample_rate_hz=60,
+        )
+
+    def _resolve_lap_length(self, lap_df: pl.DataFrame) -> float:
+        stored = self.lap_length_m
+        if stored is not None and stored > 0.0:
+            return stored
+        if "Speed" in lap_df.columns and lap_df.height > 0:
+            return float(np.sum(lap_df["Speed"].to_numpy()) / 60.0)
+        return 1.0
 
 
 def build_track_model(
@@ -129,10 +176,12 @@ def build_track_model(
         per_session = pl.DataFrame(schema=_PER_SESSION_SCHEMA)
         summary_df = pl.DataFrame(schema=_SUMMARY_SCHEMA)
     else:
-        per_session = _aggregate_per_session(
+        per_session, lap_length_m = _aggregate_per_session(
             sorted_ids, bin_size_m=bin_size_m, corpus_root=root
         )
-        summary_df = _collapse_across_sessions(per_session)
+        summary_df = _collapse_across_sessions(
+            per_session, bin_size_m=bin_size_m, lap_length_m=lap_length_m
+        )
 
     per_session.write_parquet(cache, compression="zstd")
     summary_df.write_parquet(summary, compression="zstd")
@@ -154,9 +203,10 @@ def build_track_model(
 # ---- internals ----
 
 def _project_maps(summary_df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
-    bump_map = summary_df.select(list(_BUMP_SCHEMA.keys()))
-    grip_map = summary_df.select(list(_GRIP_SCHEMA.keys()))
-    return bump_map, grip_map
+    return (
+        summary_df.select(list(_BUMP_SCHEMA.keys())),
+        summary_df.select(list(_GRIP_SCHEMA.keys())),
+    )
 
 
 def _write_pointer(
@@ -176,8 +226,9 @@ def _aggregate_per_session(
     *,
     bin_size_m: float,
     corpus_root: Path,
-) -> pl.DataFrame:
+) -> tuple[pl.DataFrame, float]:
     frames: list[pl.DataFrame] = []
+    chosen_lap_length: float | None = None
     with cat.open_catalog(catalog_path(corpus_root)) as conn:
         for sid in session_ids:
             sess = cat.get_session(conn, sid)
@@ -186,15 +237,20 @@ def _aggregate_per_session(
             lap_length_m = _lap_length_for_session(conn, sid, corpus_root=corpus_root)
             if lap_length_m is None or lap_length_m <= 0.0:
                 continue
+            if chosen_lap_length is None:
+                chosen_lap_length = float(lap_length_m)
             session_frame = _aggregate_one_session(
                 sid, bin_size_m=bin_size_m, lap_length_m=lap_length_m, corpus_root=corpus_root
             )
             if session_frame.height > 0:
                 frames.append(session_frame)
     if not frames:
-        return pl.DataFrame(schema=_PER_SESSION_SCHEMA)
+        return pl.DataFrame(schema=_PER_SESSION_SCHEMA), float(chosen_lap_length or 0.0)
     out = pl.concat(frames, how="vertical_relaxed")
-    return out.sort(["session_id", "track_pos_m"], maintain_order=True)
+    return (
+        out.sort(["session_id", "track_pos_m"], maintain_order=True),
+        float(chosen_lap_length or 0.0),
+    )
 
 
 def _aggregate_one_session(
@@ -260,8 +316,8 @@ def _aggregate_one_session(
         samples.group_by("bin")
         .agg(
             pl.len().cast(pl.Int64).alias("n_samples"),
-            pl.col("shock").quantile(0.99).alias("shock_v_p99_mm_s"),
-            pl.col("lat_g").quantile(0.95).alias("lateral_g_p95"),
+            pl.col("shock").quantile(0.99, "linear").alias("shock_v_p99_mm_s"),
+            pl.col("lat_g").quantile(0.95, "linear").alias("lateral_g_p95"),
             pl.col("lat_g").median().alias("lateral_g_median"),
         )
         .with_columns(
@@ -273,25 +329,52 @@ def _aggregate_one_session(
     return out.sort("track_pos_m", maintain_order=True)
 
 
-def _collapse_across_sessions(per_session: pl.DataFrame) -> pl.DataFrame:
+def _collapse_across_sessions(
+    per_session: pl.DataFrame, *, bin_size_m: float, lap_length_m: float
+) -> pl.DataFrame:
     if per_session.height == 0:
         return pl.DataFrame(schema=_SUMMARY_SCHEMA)
-    grouped = (
-        per_session.group_by("track_pos_m")
-        .agg(
-            pl.col("shock_v_p99_mm_s").quantile(0.99).alias("shock_v_p99_mm_s"),
-            pl.col("lateral_g_p95").median().alias("lateral_g_p95"),
-            pl.col("lateral_g_median").median().alias("lateral_g_median"),
-            pl.col("n_samples").sum().alias("n_samples"),
-            pl.col("session_id").n_unique().cast(pl.Int64).alias("n_sessions"),
-        )
+
+    indexed = per_session.with_columns(
+        (pl.col("track_pos_m") / bin_size_m).round().cast(pl.Int32).alias("bin_index")
+    )
+
+    per_session_p99 = [
+        sub.select(["bin_index", "shock_v_p99_mm_s"])
+        for _, sub in indexed.group_by("session_id", maintain_order=True)
+    ]
+    per_session_grip = [
+        sub.select(["bin_index", "lateral_g_p95", "lateral_g_median", "n_samples"])
         .with_columns(
-            pl.lit(0.0, dtype=pl.Float64).alias("curb_likelihood"),
-            pl.lit(0.0, dtype=pl.Float64).alias("bump_likelihood"),
+            pl.col("n_samples").cast(pl.UInt32),
+            pl.lit(1, dtype=pl.Int64).alias("n_sessions"),
+        )
+        for _, sub in indexed.group_by("session_id", maintain_order=True)
+    ]
+
+    bump = aggregate_curb_likelihood(per_session_p99)
+    grip = aggregate_grip_map(per_session_grip)
+
+    n_samples_per_bin = (
+        indexed.group_by("bin_index")
+        .agg(pl.col("n_samples").sum().cast(pl.Int64).alias("n_samples_total"))
+    )
+
+    grip_no_n = grip.drop("n_sessions")
+    merged = (
+        bump.join(grip_no_n, on="bin_index", how="left")
+        .join(n_samples_per_bin, on="bin_index", how="left")
+        .with_columns(
+            (pl.col("bin_index").cast(pl.Float64) * bin_size_m).alias("track_pos_m"),
+            pl.lit(lap_length_m, dtype=pl.Float64).alias("lap_length_m"),
+            pl.col("n_samples_total").fill_null(0).cast(pl.Int64).alias("n_samples"),
+            pl.col("lateral_g_p95").fill_null(0.0),
+            pl.col("lateral_g_median").fill_null(0.0),
         )
         .select(list(_SUMMARY_SCHEMA.keys()))
+        .sort("bin_index", maintain_order=True)
     )
-    return grouped.sort("track_pos_m", maintain_order=True)
+    return merged
 
 
 _TRACK_LENGTH_PATTERN = re.compile(r"([\d.]+)\s*(km|m)\b", re.IGNORECASE)
@@ -315,8 +398,6 @@ def _lap_length_for_session(
     parsed = _parse_track_length(raw)
     if parsed is not None and parsed > 0.0:
         return parsed
-    # Fallback: integrate Speed × dt over the longest valid lap. Used when the
-    # IBT YAML header does not expose TrackLength (or it parses to zero).
     return _lap_length_from_speed_fallback(session_id, corpus_root=corpus_root)
 
 
@@ -352,3 +433,5 @@ def _lap_length_from_speed_fallback(
     if df.height == 0:
         return None
     return float(np.sum(df["Speed"].to_numpy()) / 60.0)
+
+

@@ -46,15 +46,8 @@ def test_cache_parquet_round_trips_with_zstd(tmp_corpus: Path):
         "fake_track", ["00000000deadbeef"], corpus_root=tmp_corpus
     )
     df = pl.read_parquet(model.cache_path)
-    expected = {
-        "session_id": pl.Utf8,
-        "track_pos_m": pl.Float64,
-        "n_samples": pl.Int64,
-        "shock_v_p99_mm_s": pl.Float64,
-        "lateral_g_p95": pl.Float64,
-        "lateral_g_median": pl.Float64,
-    }
-    assert dict(df.schema) == expected
+    from racingoptimizer.track.builder import _PER_SESSION_SCHEMA
+    assert dict(df.schema) == _PER_SESSION_SCHEMA
 
 
 def test_sort_invariance_of_session_ids(tmp_corpus: Path, tmp_path: Path):

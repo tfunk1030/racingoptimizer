@@ -1,0 +1,278 @@
+"""Curb / bump / off-track detectors and mask APIs (slice D-2, unit U7).
+
+Pure functions over polars frames + numpy arrays. No I/O. The aggregators
+compose: per-session p99 → cross-session likelihoods → per-sample masks at
+lap_data() time. See `docs/superpowers/specs/2026-04-28-track-model-design.md`
+§4 + §5 for the algorithm narrative.
+
+Thresholds default to the spec §5 values; callers can override for unit tests
+or future tuning. Mutual exclusivity (curb suppresses bump_likelihood) is
+enforced at aggregate time, not at sample time.
+"""
+from __future__ import annotations
+
+import numpy as np
+import polars as pl
+
+from racingoptimizer.track.bins import DEFAULT_BIN_SIZE_M, bin_index, track_pos_m_from_pct
+
+T_CURB_SESSION_MM_S: float = 350.0
+T_CURB_AGGREGATE_MM_S: float = 400.0
+CURB_AGREEMENT_FRACTION: float = 0.6
+BUMP_RANGE_MIN_MM_S: float = 150.0
+BUMP_RANGE_MAX_MM_S: float = 350.0
+OFFTRACK_GRIP_LOSS_RATIO: float = 0.5
+OFFTRACK_GRIP_HISTORY_MS: int = 100
+OFFTRACK_WHEELSPEED_RATIO: float = 3.0
+OFFTRACK_MASK_WINDOW_S: float = 0.5
+
+_GRAVITY_M_S2 = 9.80665
+
+_PER_SESSION_P99_SCHEMA: dict[str, type[pl.DataType]] = {
+    "bin_index": pl.Int32,
+    "shock_v_p99_mm_s": pl.Float64,
+    "n_samples": pl.UInt32,
+}
+
+_BUMP_MAP_SCHEMA: dict[str, type[pl.DataType]] = {
+    "bin_index": pl.Int32,
+    "shock_v_p99_mm_s": pl.Float64,
+    "n_sessions": pl.Int64,
+    "curb_likelihood": pl.Float64,
+    "bump_likelihood": pl.Float64,
+}
+
+_GRIP_MAP_SCHEMA: dict[str, type[pl.DataType]] = {
+    "bin_index": pl.Int32,
+    "lateral_g_p95": pl.Float64,
+    "lateral_g_median": pl.Float64,
+    "n_samples": pl.UInt32,
+    "n_sessions": pl.Int64,
+}
+
+
+def compute_session_shock_v_p99_per_bin(
+    lap_df: pl.DataFrame,
+    *,
+    lap_length_m: float,
+    bin_size_m: float = DEFAULT_BIN_SIZE_M,
+) -> pl.DataFrame:
+    if lap_df.height == 0:
+        return pl.DataFrame(schema=_PER_SESSION_P99_SCHEMA)
+
+    df = lap_df
+    if "lap_index" in df.columns:
+        df = df.filter(pl.col("lap_index") != -1)
+    if "data_quality_mask" in df.columns:
+        df = df.filter(pl.col("data_quality_mask"))
+    if df.height == 0:
+        return pl.DataFrame(schema=_PER_SESSION_P99_SCHEMA)
+
+    track_pos = track_pos_m_from_pct(df["lap_dist_pct"].to_numpy(), lap_length_m)
+    idx = bin_index(track_pos, bin_size_m=bin_size_m)
+    shock = np.maximum.reduce(
+        [
+            np.abs(df["LFshockVel"].to_numpy()),
+            np.abs(df["RFshockVel"].to_numpy()),
+            np.abs(df["LRshockVel"].to_numpy()),
+            np.abs(df["RRshockVel"].to_numpy()),
+        ]
+    )
+    samples = pl.DataFrame(
+        {
+            "bin_index": idx.astype(np.int32),
+            "shock_v_p99_mm_s": shock.astype(np.float64),
+        }
+    ).filter(pl.col("bin_index") >= 0)
+    if samples.height == 0:
+        return pl.DataFrame(schema=_PER_SESSION_P99_SCHEMA)
+
+    out = (
+        samples.group_by("bin_index")
+        .agg(
+            pl.col("shock_v_p99_mm_s").quantile(0.99, "linear").alias("shock_v_p99_mm_s"),
+            pl.len().cast(pl.UInt32).alias("n_samples"),
+        )
+        .sort("bin_index", maintain_order=True)
+    )
+    return out.select(list(_PER_SESSION_P99_SCHEMA.keys()))
+
+
+def aggregate_curb_likelihood(
+    per_session_p99: list[pl.DataFrame],
+    *,
+    t_session: float = T_CURB_SESSION_MM_S,
+    t_aggregate: float = T_CURB_AGGREGATE_MM_S,
+    agreement: float = CURB_AGREEMENT_FRACTION,
+) -> pl.DataFrame:
+    if not per_session_p99:
+        return pl.DataFrame(schema=_BUMP_MAP_SCHEMA)
+
+    tagged: list[pl.DataFrame] = []
+    for frame in per_session_p99:
+        if frame.height == 0:
+            continue
+        tagged.append(
+            frame.with_columns(
+                (pl.col("shock_v_p99_mm_s") > t_session).alias("is_curb_session"),
+            )
+        )
+    if not tagged:
+        return pl.DataFrame(schema=_BUMP_MAP_SCHEMA)
+
+    stacked = pl.concat(tagged, how="vertical_relaxed")
+    grouped = (
+        stacked.group_by("bin_index")
+        .agg(
+            pl.col("shock_v_p99_mm_s").max().alias("shock_v_p99_mm_s"),
+            pl.col("is_curb_session").sum().cast(pl.Int64).alias("_n_curb_sessions"),
+            pl.len().cast(pl.Int64).alias("n_sessions"),
+        )
+        .with_columns(
+            (
+                pl.col("_n_curb_sessions").cast(pl.Float64)
+                / pl.max_horizontal(pl.col("n_sessions").cast(pl.Float64), pl.lit(1.0))
+            ).alias("curb_likelihood"),
+        )
+    )
+    persistently_curb = (pl.col("curb_likelihood") >= agreement) & (
+        pl.col("shock_v_p99_mm_s") >= t_aggregate
+    )
+    bump_raw = (
+        (pl.col("shock_v_p99_mm_s") - BUMP_RANGE_MIN_MM_S)
+        / (BUMP_RANGE_MAX_MM_S - BUMP_RANGE_MIN_MM_S)
+    ).clip(0.0, 1.0)
+    out = grouped.with_columns(
+        pl.when(persistently_curb)
+        .then(pl.lit(0.0, dtype=pl.Float64))
+        .otherwise(bump_raw)
+        .alias("bump_likelihood"),
+    )
+    return out.select(list(_BUMP_MAP_SCHEMA.keys())).sort("bin_index", maintain_order=True)
+
+
+def aggregate_grip_map(per_session_grip: list[pl.DataFrame]) -> pl.DataFrame:
+    if not per_session_grip:
+        return pl.DataFrame(schema=_GRIP_MAP_SCHEMA)
+
+    frames = [f for f in per_session_grip if f.height > 0]
+    if not frames:
+        return pl.DataFrame(schema=_GRIP_MAP_SCHEMA)
+
+    stacked = pl.concat(frames, how="vertical_relaxed")
+    out = (
+        stacked.group_by("bin_index")
+        .agg(
+            pl.col("lateral_g_p95").median().alias("lateral_g_p95"),
+            pl.col("lateral_g_median").median().alias("lateral_g_median"),
+            pl.col("n_samples").sum().cast(pl.UInt32).alias("n_samples"),
+            pl.col("n_sessions").sum().cast(pl.Int64).alias("n_sessions"),
+        )
+        .sort("bin_index", maintain_order=True)
+    )
+    return out.select(list(_GRIP_MAP_SCHEMA.keys()))
+
+
+def compute_curb_mask(
+    lap_df: pl.DataFrame,
+    bump_map: pl.DataFrame,
+    *,
+    lap_length_m: float,
+    bin_size_m: float = DEFAULT_BIN_SIZE_M,
+) -> np.ndarray:
+    n = lap_df.height
+    if n == 0 or bump_map.height == 0:
+        return np.zeros(n, dtype=bool)
+
+    curb_bins = (
+        bump_map.filter(pl.col("curb_likelihood") >= CURB_AGREEMENT_FRACTION)["bin_index"]
+        .to_numpy()
+        .astype(np.int32)
+    )
+    if curb_bins.size == 0:
+        return np.zeros(n, dtype=bool)
+
+    track_pos = track_pos_m_from_pct(lap_df["lap_dist_pct"].to_numpy(), lap_length_m)
+    idx = bin_index(track_pos, bin_size_m=bin_size_m)
+    return np.isin(idx, curb_bins)
+
+
+def compute_off_track_mask(
+    lap_df: pl.DataFrame,
+    grip_map: pl.DataFrame,
+    *,
+    lap_length_m: float,
+    bin_size_m: float = DEFAULT_BIN_SIZE_M,
+    sample_rate_hz: int = 60,
+) -> np.ndarray:
+    n = lap_df.height
+    if n == 0 or grip_map.height == 0:
+        return np.zeros(n, dtype=bool)
+
+    track_pos = track_pos_m_from_pct(lap_df["lap_dist_pct"].to_numpy(), lap_length_m)
+    idx = bin_index(track_pos, bin_size_m=bin_size_m)
+
+    grip_lookup = dict(
+        zip(
+            grip_map["bin_index"].to_numpy().astype(np.int32),
+            grip_map["lateral_g_p95"].to_numpy().astype(np.float64),
+            strict=True,
+        )
+    )
+    bin_p95 = np.array([grip_lookup.get(int(b), np.nan) for b in idx], dtype=np.float64)
+
+    triggers = np.zeros(n, dtype=bool)
+
+    # Detector 1: sudden grip loss after a sustained high-grip window.
+    lat_g = np.abs(lap_df["AccelLat"].to_numpy()) / _GRAVITY_M_S2
+    history_samples = max(1, int(round(OFFTRACK_GRIP_HISTORY_MS * sample_rate_hz / 1000)))
+    high_grip = lat_g >= 0.8 * bin_p95
+    grip_loss = lat_g < OFFTRACK_GRIP_LOSS_RATIO * bin_p95
+    if history_samples > 0:
+        window = np.ones(history_samples, dtype=np.float64)
+        high_count = np.convolve(high_grip.astype(np.float64), window, mode="full")[
+            : n
+        ]
+        history_ok = np.zeros(n, dtype=bool)
+        if n > history_samples:
+            history_ok[history_samples:] = (
+                high_count[history_samples - 1 : n - 1] >= 0.5 * history_samples
+            )
+        valid_p95 = ~np.isnan(bin_p95)
+        triggers |= grip_loss & history_ok & valid_p95
+
+    # Detector 2: wheel-speed differential spike vs forward 1s rolling-median baseline.
+    speeds = np.stack(
+        [
+            lap_df["LFspeed"].to_numpy().astype(np.float64),
+            lap_df["RFspeed"].to_numpy().astype(np.float64),
+            lap_df["LRspeed"].to_numpy().astype(np.float64),
+            lap_df["RRspeed"].to_numpy().astype(np.float64),
+        ]
+    )
+    diff = speeds.max(axis=0) - speeds.min(axis=0)
+    baseline_window = max(1, int(round(sample_rate_hz)))  # 1 second
+    baseline = _rolling_median_forward(diff, baseline_window)
+    spike = diff > OFFTRACK_WHEELSPEED_RATIO * baseline
+    triggers |= spike
+
+    window_samples = int(round(OFFTRACK_MASK_WINDOW_S * sample_rate_hz))
+    return _dilate(triggers, window_samples)
+
+
+# ---- internals ----
+
+def _rolling_median_forward(values: np.ndarray, window: int) -> np.ndarray:
+    n = values.size
+    out = np.zeros(n, dtype=np.float64)
+    for i in range(n):
+        lo = max(0, i - window + 1)
+        out[i] = float(np.median(values[lo : i + 1]))
+    return out
+
+
+def _dilate(mask: np.ndarray, window: int) -> np.ndarray:
+    if window <= 0 or mask.size == 0:
+        return mask.astype(bool, copy=True)
+    kernel = np.ones(2 * window + 1, dtype=np.int32)
+    return np.convolve(mask.astype(np.int32), kernel, mode="same") > 0
