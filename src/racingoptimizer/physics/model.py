@@ -69,6 +69,25 @@ class PhysicsModel:
     baseline_setup: dict[str, float] = field(default_factory=dict)
     seed: int = 0xC0FFEE
 
+    def score_setup(
+        self,
+        setup: dict[str, float],
+        track: str,
+        env: EnvironmentFrame,
+    ) -> float:
+        # Local import sidesteps the module-graph cycle: score imports model.
+        from racingoptimizer.physics.score import score_setup as _score
+        return _score(self, setup, track, env)
+
+    def recommend(
+        self,
+        track: str,
+        env: EnvironmentFrame,
+        constraints: ConstraintsTable,
+    ):
+        from racingoptimizer.physics.recommend import recommend as _recommend
+        return _recommend(self, track, env, constraints)
+
     def predict(
         self,
         setup: dict[str, float],
