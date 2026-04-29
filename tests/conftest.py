@@ -13,6 +13,11 @@ AERO_DIR = REPO_ROOT / "aero-maps"
 # (a few clean laps), runs fast, and exercises the full parser path.
 SMALL_IBT_NAME = "bmwlmdh_sebring international 2026-03-22 14-47-42.ibt"
 
+# A multi-lap BMW Sebring fixture. Slice E's `fit` needs ≥3 rows per
+# (parameter, corner, phase, channel) quadruple — 1-lap fixtures collapse
+# to 1 row per quadruple and produce zero fitters. ~56 MB / 7 valid laps.
+MULTI_LAP_IBT_NAME = "bmwlmdh_sebring international 2026-03-22 14-52-24.ibt"
+
 
 @pytest.fixture
 def small_ibt() -> Path:
@@ -20,6 +25,15 @@ def small_ibt() -> Path:
     candidate = IBT_DIR / SMALL_IBT_NAME
     if not candidate.exists():
         pytest.skip(f"fixture IBT not present at {candidate}")
+    return candidate
+
+
+@pytest.fixture
+def multi_lap_ibt() -> Path:
+    """Path to a multi-lap real .ibt fixture (BMW Sebring, ≥3 valid laps)."""
+    candidate = IBT_DIR / MULTI_LAP_IBT_NAME
+    if not candidate.exists():
+        pytest.skip(f"multi-lap fixture not present at {candidate}")
     return candidate
 
 

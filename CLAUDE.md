@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-`racingoptimizer` is a partially-built Python package targeting `pip install .` and the `optimize` CLI (VISION.md §8). Five of the six VISION slices are merged; the recommendation half of slice E and slice F (CLI) remain. Install with `uv venv && uv pip install -e ".[dev]"`; run `uv run optimize learn ./ibtfiles` to ingest telemetry into the corpus and `uv run pytest` to exercise the ~250-test suite. Read `VISION.md` first — it is the spec.
+`racingoptimizer` is the `optimize` Python CLI for iRacing GTP setup recommendations (VISION.md §8). All six VISION slices (A–F) plus three cross-cutting modules are merged. Install with `uv venv && uv pip install -e ".[dev]"`; ingest telemetry with `uv run optimize learn ./ibtfiles`; recommend a setup with `uv run optimize bmw sebring`; compare two IBTs with `uv run optimize compare a.ibt b.ibt`; coverage report with `uv run optimize status bmw`; the full ~325-test suite runs via `uv run pytest`. Read `VISION.md` first — it is the spec.
 
 ## Active build
 
@@ -16,8 +16,8 @@ VISION.md is decomposed into six slices plus three cross-cutting modules. Status
 | **B — Corner-phase decomposition** | `racingoptimizer.corner` | ✅ | ✓ all 5 (`tests/corner/test_per_car_smoke.py` loops the canonical car fixtures and asserts ≥1 corner detected). |
 | **C — Aero-map loader & interpolator** | `racingoptimizer.aero` | ✅ | ✓ all 5 (`tests/aero/test_loader.py::test_load_real_corpus_per_car` and `tests/aero/test_smoke.py::test_load_aero_maps_per_car_smoke`). |
 | **D — Track model** | `racingoptimizer.track` | ✅ | Synthetic only — **untested against real per-car IBT corpora.** Per-car compounding-regime smoke is the gap. |
-| **E — Physics fitter** | `racingoptimizer.physics` | 🟡 partial — training half merged (U9: `fit`, `PhysicsModel.predict`, ontology, GP/RF fitters). Score/recommend (U10) in flight. | ✓ BMW Sebring fixture only. **Acura is a known divergence (no shock-deflection channels).** Per-car ontology coverage and per-car fit smoke are gaps. |
-| **F — CLI / recommendation rendering** | `racingoptimizer.cli`, `racingoptimizer.explain` | ⏳ pending (U11). Only `optimize learn` subcommand exists today. | n/a until built. |
+| **E — Physics fitter** | `racingoptimizer.physics` | ✅ — both halves merged (U9 train + U10 score/recommend). | ✓ BMW Sebring fixture only. **Acura is a known divergence (no shock-deflection channels).** Per-car ontology coverage and per-car fit smoke are gaps. |
+| **F — CLI / recommendation rendering** | `racingoptimizer.cli`, `racingoptimizer.explain` | ✅ — `optimize <car> <track>`, `optimize compare`, `optimize status` (U11). `optimize learn` (slice A) preserved. | ✓ all 5 (`tests/cli/test_per_car_smoke.py` loops the canonical car fixtures, runs `optimize <car> <track>` text + JSON, and asserts an exit-0 briefing with confidence + parameter blocks for every car). |
 
 **Verification convention:** before claiming a slice "works" or marking it ✅, the slice must have a `tests/<slice>/test_per_car_smoke.py` (or equivalent) that loops the five canonical car fixtures (skipping when missing) and asserts the slice's contract holds. Single-car smoke tests are gaps to fill before the slice is called done.
 
