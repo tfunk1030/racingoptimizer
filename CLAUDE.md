@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-This is a **greenfield project**. Only data assets and `VISION.md` exist — no source code, package manifest, build scripts, tests, or CI. There is nothing to build, lint, or run yet. When asked to implement features, the engine itself does not exist; you are creating it from scratch. Read `VISION.md` first — it is the spec.
+This is a **greenfield project**. Only data assets and `VISION.md` exist — no source code, package manifest, build scripts, tests, or CI. The IBT-ingestion subsystem (`racingoptimizer.ingest`) is now implemented and the `optimize` CLI is wired up; install with `uv venv && uv pip install -e ".[dev]"`, then run `uv run optimize learn ./ibtfiles` to ingest telemetry into the corpus and `uv run pytest` to exercise the suite. Everything else (corner-phase decomposition, aero-map loader, fitter, optimizer, track model) is still unimplemented — when asked to build them, you are creating them from scratch. Read `VISION.md` first — it is the spec.
 
 There is no `pyproject.toml`/`setup.py`/`package.json` yet. The vision targets a `pip install .` Python package exposing an `optimize` CLI (see VISION.md §8 for the intended UX). Match that when scaffolding.
 
