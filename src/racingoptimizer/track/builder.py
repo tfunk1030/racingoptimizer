@@ -188,6 +188,30 @@ class TrackModel:
             bin_size_m=self.bin_size_m,
         )
 
+    @property
+    def corner_landmarks(self) -> pl.DataFrame:
+        """Cross-lap braking / apex / exit positions per corner (S4.2, VISION §9).
+
+        Lazily delegates to `racingoptimizer.track.corners.compute_corner_landmarks`
+        for the model's `(track, session_ids)`. Returns an empty frame on
+        cold-start or when no session yields a usable lap. Computed on each
+        access — no caching at the model layer because the underlying source
+        parquets are already on disk and the per-lap detector is fast.
+        """
+        from racingoptimizer.track.corners import (
+            _empty_landmarks_frame,
+            compute_corner_landmarks,
+        )
+
+        if self.regime == "cold_start":
+            return _empty_landmarks_frame()
+        # cache_path = <corpus_root>/track_models/<track>.<hash>.parquet, so
+        # the corpus_root is the file's grandparent.
+        corpus_root = self.cache_path.parent.parent
+        return compute_corner_landmarks(
+            self.track, list(self.session_ids), corpus_root=corpus_root
+        )
+
     def flag_anomalies(
         self, lap_df: pl.DataFrame, *, car: str | None = None, z_threshold: float = 3.0
     ) -> pl.DataFrame:
