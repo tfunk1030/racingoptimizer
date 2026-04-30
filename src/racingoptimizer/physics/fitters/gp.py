@@ -8,6 +8,7 @@ Fallback chain: Matérn-2.5 + WhiteKernel → RBF + WhiteKernel → untrained.
 """
 from __future__ import annotations
 
+import pickle
 import warnings
 
 import numpy as np
@@ -55,7 +56,17 @@ class GPFitter(FitterBase):
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", ConvergenceWarning)
                     gp.fit(X, y)
-                self._gp = gp
+                # Pickle round-trip canonicalizes the fitted estimator so
+                # subsequent `pickle.dumps` calls are byte-identical (spec
+                # §12). A freshly-fit sklearn estimator shares numpy dtype
+                # singletons across its fitted scalars/arrays via Python
+                # identity; pickle's memo dedupes those once, but after a
+                # load/dump cycle the array dtypes are fresh per-array
+                # objects (no longer identity-shared with scalar dtypes),
+                # so a re-pickle emits dtypes inline and grows by ~30 bytes
+                # per estimator. One eager round-trip here puts the state
+                # at the post-pickle fixed point.
+                self._gp = pickle.loads(pickle.dumps(gp, protocol=pickle.HIGHEST_PROTOCOL))
                 self.is_trained = True
                 self.n_samples = X.shape[0]
                 return

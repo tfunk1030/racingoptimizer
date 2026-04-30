@@ -85,17 +85,6 @@ def test_predict_per_car(
         assert isinstance(conf, Confidence)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PhysicsModel pickle round-trip is non-deterministic across all 5 cars; "
-        "byte diff at the size-header byte of the pickle frame indicates an "
-        "unsorted dict iteration or sklearn fitter state that does not survive "
-        "a load/dump cycle bytewise. Slice E spec §12 promises determinism — "
-        "real bug to fix in racingoptimizer.physics.model. Strict xfail will "
-        "demand removal once fixed."
-    ),
-)
 @pytest.mark.parametrize(
     ("car", "track", "fixtures"), PER_CAR_CASES, ids=PER_CAR_CASE_IDS
 )
