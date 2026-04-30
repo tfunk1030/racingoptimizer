@@ -66,10 +66,12 @@ def test_derive_regime_table(
     assert c.regime == expected_regime
 
 
-def test_derive_band_is_one_sigma() -> None:
+def test_derive_band_is_95_pct() -> None:
+    # Spec §3 pins (lo, hi) as the 95% bracket. Under a Gaussian residual
+    # assumption that is value ± 1.96 * cv_residual_std on either side.
     c = Confidence.derive(value=2.0, n_samples=100, cv_residual_std=0.1, signal_std=1.0)
-    assert c.lo == pytest.approx(1.9)
-    assert c.hi == pytest.approx(2.1)
+    assert c.lo == pytest.approx(2.0 - 1.96 * 0.1)
+    assert c.hi == pytest.approx(2.0 + 1.96 * 0.1)
     assert c.value == pytest.approx(2.0)
 
 

@@ -24,6 +24,11 @@ BUMP_RANGE_MAX_MM_S: float = 350.0
 OFFTRACK_GRIP_LOSS_RATIO: float = 0.5
 OFFTRACK_GRIP_HISTORY_MS: int = 100
 OFFTRACK_WHEELSPEED_RATIO: float = 3.0
+# Total mask window centred on the trigger sample, in seconds. Per
+# `docs/superpowers/specs/2026-04-28-track-model-design.md` §4.4 / §8 this is
+# 0.5 s = ±15 samples at 60 Hz around the trigger. The dilation kernel uses
+# the half-window (window_samples = WINDOW * rate / 2) so its size is
+# 2*window_samples + 1 ≈ rate * WINDOW total samples flagged.
 OFFTRACK_MASK_WINDOW_S: float = 0.5
 
 _GRAVITY_M_S2 = 9.80665
@@ -256,7 +261,8 @@ def compute_off_track_mask(
     spike = diff > OFFTRACK_WHEELSPEED_RATIO * baseline
     triggers |= spike
 
-    window_samples = int(round(OFFTRACK_MASK_WINDOW_S * sample_rate_hz))
+    # Half-window in samples; kernel size = 2*half + 1 ≈ OFFTRACK_MASK_WINDOW_S * rate.
+    window_samples = int(round(OFFTRACK_MASK_WINDOW_S * sample_rate_hz / 2))
     return _dilate(triggers, window_samples)
 
 
