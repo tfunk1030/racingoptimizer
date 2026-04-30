@@ -38,6 +38,7 @@ from racingoptimizer.physics.recommend import recommend
 from racingoptimizer.physics.recommendation import SetupRecommendation
 from racingoptimizer.physics.score import score_setup
 from racingoptimizer.physics.weights import weight_corners
+from racingoptimizer.physics.wind import aero_wind_modifier, decompose_wind
 
 __all__ = [
     "DEFAULT_BASELINES",
@@ -51,7 +52,9 @@ __all__ = [
     "SUB_UTILIZATIONS",
     "SetupRecommendation",
     "UntrainedError",
+    "aero_wind_modifier",
     "baselines_for",
+    "decompose_wind",
     "derive_baselines",
     "fit",
     "fittable_parameters",
