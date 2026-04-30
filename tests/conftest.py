@@ -19,6 +19,15 @@ SMALL_IBT_NAME = "bmwlmdh_sebring international 2026-03-22 14-47-42.ibt"
 MULTI_LAP_IBT_NAME = "bmwlmdh_sebring international 2026-03-22 14-52-24.ibt"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--regenerate-golden",
+        action="store_true",
+        default=False,
+        help="Regenerate golden snapshot files instead of comparing to them.",
+    )
+
+
 @pytest.fixture
 def small_ibt() -> Path:
     """Path to a small real .ibt fixture from the repo's ibtfiles/ corpus."""

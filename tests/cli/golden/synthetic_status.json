@@ -1,0 +1,34 @@
+{
+  "car": "bmw",
+  "overall_regime": "confident",
+  "coverage": [
+    {
+      "track": "sebring_international",
+      "n_sessions": 4,
+      "n_valid_laps": 28,
+      "n_clean_corner_phases": 420,
+      "fit_quality": 0.187,
+      "regime": "dense"
+    },
+    {
+      "track": "daytona_road",
+      "n_sessions": 2,
+      "n_valid_laps": 11,
+      "n_clean_corner_phases": 132,
+      "fit_quality": 0.412,
+      "regime": "confident"
+    },
+    {
+      "track": "watkins_glen",
+      "n_sessions": 1,
+      "n_valid_laps": 3,
+      "n_clean_corner_phases": 24,
+      "fit_quality": null,
+      "regime": "sparse"
+    }
+  ],
+  "notes": [
+    "watkins_glen has < 30 clean corner-phases; recommendations will short-circuit to sparse",
+    "no Acura-style shock-deflection gap detected for this car"
+  ]
+}

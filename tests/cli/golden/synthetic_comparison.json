@@ -1,0 +1,56 @@
+{
+  "car": "bmw",
+  "track": "sebring_international",
+  "setup_a_id": "baseline_session_a",
+  "setup_b_id": "candidate_session_b",
+  "total_score_a": 8.124,
+  "total_score_b": 8.391,
+  "total_delta": 0.26699999999999946,
+  "per_corner_phase": [
+    {
+      "corner_id": 1,
+      "phase": "braking",
+      "score_a": 0.812,
+      "score_b": 0.844,
+      "delta": 0.032,
+      "drivers": [
+        "rear_wing_angle_deg shifted +0.5 deg",
+        "tyre_cold_pressure_kpa shifted -1.0 kPa"
+      ]
+    },
+    {
+      "corner_id": 3,
+      "phase": "trail_brake",
+      "score_a": 0.685,
+      "score_b": 0.712,
+      "delta": 0.027,
+      "drivers": [
+        "static_ride_height_rear_mm shifted +0.5 mm"
+      ]
+    },
+    {
+      "corner_id": 5,
+      "phase": "exit",
+      "score_a": 0.902,
+      "score_b": 0.881,
+      "delta": -0.021,
+      "drivers": [
+        "static_ride_height_front_mm shifted -0.5 mm"
+      ]
+    },
+    {
+      "corner_id": 7,
+      "phase": "straight",
+      "score_a": 0.954,
+      "score_b": 0.965,
+      "delta": 0.011,
+      "drivers": [
+        "rear_wing_angle_deg shifted +0.5 deg"
+      ]
+    }
+  ],
+  "notes": [
+    "candidate session lapped 0.18s faster on average over 7 clean laps",
+    "wind delta < 1 m/s vs baseline; air density within 0.5%"
+  ]
+}

@@ -1,0 +1,12 @@
+bmw - coverage report
+-------------------------------------------------------------------------
+Track                       Sessions  Valid laps  Clean CP  Fit sigma     Regime
+sebring_international              4          28       420      0.187      dense
+daytona_road                       2          11       132      0.412  confident
+watkins_glen                       1           3        24          -     sparse
+-------------------------------------------------------------------------
+Overall regime: confident
+
+Notes:
+  - watkins_glen has < 30 clean corner-phases; recommendations will short-circuit to sparse
+  - no Acura-style shock-deflection gap detected for this car
