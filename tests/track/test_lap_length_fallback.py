@@ -80,7 +80,9 @@ def _seed_two_lap_session(corpus_root: Path) -> str:
                 parquet_path=str(pq.relative_to(corpus_root).as_posix()),
                 status="ok",
                 error=None,
-            ),
+            dropped_channels=json.dumps({}),
+            sample_rate_hz=60.0,
+        ),
         )
         insert_laps(
             conn,
@@ -152,7 +154,9 @@ def test_fallback_returns_none_when_only_pit_laps(tmp_corpus: Path) -> None:
                 parquet_path=str(pq.relative_to(tmp_corpus).as_posix()),
                 status="ok",
                 error=None,
-            ),
+            dropped_channels=json.dumps({}),
+            sample_rate_hz=60.0,
+        ),
         )
         insert_laps(
             conn,
