@@ -1,4 +1,5 @@
 """Track model — bin-indexed compounding aggregates per track."""
+from racingoptimizer.track.anomaly import flag_anomalies_from_cache
 from racingoptimizer.track.bins import (
     DEFAULT_BIN_SIZE_M,
     bin_index,
@@ -28,6 +29,11 @@ from racingoptimizer.track.paths import (
     summary_path,
     track_models_root,
 )
+from racingoptimizer.track.predict import (
+    PREDICTABLE_CHANNELS,
+    Expected,
+    expected_from_cache,
+)
 from racingoptimizer.track.rewrite import ApplyMaskResult, apply_quality_mask
 
 __all__ = [
@@ -42,6 +48,8 @@ __all__ = [
     "T_CURB_AGGREGATE_MM_S",
     "T_CURB_SESSION_MM_S",
     "ApplyMaskResult",
+    "Expected",
+    "PREDICTABLE_CHANNELS",
     "TrackModel",
     "aggregate_curb_likelihood",
     "aggregate_grip_map",
@@ -52,6 +60,8 @@ __all__ = [
     "compute_curb_mask",
     "compute_off_track_mask",
     "compute_session_shock_v_p99_per_bin",
+    "expected_from_cache",
+    "flag_anomalies_from_cache",
     "latest_pointer_path",
     "sessions_hash",
     "summary_path",
