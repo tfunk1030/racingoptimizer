@@ -139,7 +139,9 @@ def _seed_acura_session(corpus_root: Path, sid: str, *, curb_bin: int, bump_bin:
                 parquet_path=str(pq.relative_to(corpus_root).as_posix()),
                 status="ok",
                 error=None,
-            ),
+            dropped_channels=json.dumps({}),
+            sample_rate_hz=60.0,
+        ),
         )
         insert_laps(
             conn,
