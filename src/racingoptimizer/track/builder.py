@@ -57,6 +57,9 @@ _PER_SESSION_SCHEMA: dict[str, type[pl.DataType]] = {
     "shock_v_p99_mm_s": pl.Float64,
     "lateral_g_p95": pl.Float64,
     "lateral_g_median": pl.Float64,
+    "speed_min_ms": pl.Float64,
+    "speed_median_ms": pl.Float64,
+    "speed_max_ms": pl.Float64,
 }
 
 _BUMP_SCHEMA: dict[str, type[pl.DataType]] = {
@@ -78,14 +81,31 @@ _GRIP_SCHEMA: dict[str, type[pl.DataType]] = {
     "n_sessions": pl.Int64,
 }
 
-# Summary parquet merges bump + grip on bin_index. lap_length_m repeats per row
-# (constant per build) so consumers reconstruct track_pos_m without sidecars.
+# Speed envelope (VISION §9: "Typical speed envelope at every point — min/median/max
+# from all laps"). Speed is m/s as iRacing emits it; downstream consumers convert
+# to km/h or mph at render time.
+_SPEED_ENVELOPE_SCHEMA: dict[str, type[pl.DataType]] = {
+    "bin_index": pl.Int32,
+    "track_pos_m": pl.Float64,
+    "speed_min_ms": pl.Float64,
+    "speed_median_ms": pl.Float64,
+    "speed_max_ms": pl.Float64,
+    "n_samples": pl.Int64,
+    "n_sessions": pl.Int64,
+}
+
+# Summary parquet merges bump + grip + speed envelope on bin_index. lap_length_m
+# repeats per row (constant per build) so consumers reconstruct track_pos_m without
+# sidecars.
 _SUMMARY_SCHEMA: dict[str, type[pl.DataType]] = {
     "bin_index": pl.Int32,
     "track_pos_m": pl.Float64,
     "shock_v_p99_mm_s": pl.Float64,
     "lateral_g_p95": pl.Float64,
     "lateral_g_median": pl.Float64,
+    "speed_min_ms": pl.Float64,
+    "speed_median_ms": pl.Float64,
+    "speed_max_ms": pl.Float64,
     "n_samples": pl.Int64,
     "n_sessions": pl.Int64,
     "curb_likelihood": pl.Float64,
@@ -102,6 +122,7 @@ class TrackModel:
     bin_size_m: float
     bump_map: pl.DataFrame
     grip_map: pl.DataFrame
+    speed_envelope: pl.DataFrame
     cache_path: Path
     summary_path: Path
 
@@ -214,7 +235,7 @@ def build_track_model(
 
     if cache.exists() and summary.exists():
         summary_df = pl.read_parquet(summary)
-        bump_map, grip_map = _project_maps(summary_df)
+        bump_map, grip_map, speed_envelope = _project_maps(summary_df)
         _write_pointer(root, track, digest, regime, len(sorted_ids))
         return TrackModel(
             track=track,
@@ -223,6 +244,7 @@ def build_track_model(
             bin_size_m=bin_size_m,
             bump_map=bump_map,
             grip_map=grip_map,
+            speed_envelope=speed_envelope,
             cache_path=cache,
             summary_path=summary,
         )
@@ -242,7 +264,7 @@ def build_track_model(
     summary_df.write_parquet(summary, compression="zstd")
     _write_pointer(root, track, digest, regime, len(sorted_ids))
 
-    bump_map, grip_map = _project_maps(summary_df)
+    bump_map, grip_map, speed_envelope = _project_maps(summary_df)
     return TrackModel(
         track=track,
         regime=regime,
@@ -250,6 +272,7 @@ def build_track_model(
         bin_size_m=bin_size_m,
         bump_map=bump_map,
         grip_map=grip_map,
+        speed_envelope=speed_envelope,
         cache_path=cache,
         summary_path=summary,
     )
@@ -257,10 +280,13 @@ def build_track_model(
 
 # ---- internals ----
 
-def _project_maps(summary_df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame]:
+def _project_maps(
+    summary_df: pl.DataFrame,
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
     return (
         summary_df.select(list(_BUMP_SCHEMA.keys())),
         summary_df.select(list(_GRIP_SCHEMA.keys())),
+        summary_df.select(list(_SPEED_ENVELOPE_SCHEMA.keys())),
     )
 
 
@@ -330,7 +356,7 @@ def _aggregate_one_session(
         return pl.DataFrame(schema=_PER_SESSION_SCHEMA)
 
     shock_channels = shock_vel_channels(car)
-    needed = ["lap_dist_pct", *shock_channels, "LatAccel"]
+    needed = ["lap_dist_pct", *shock_channels, "LatAccel", "Speed"]
     sample_frames: list[pl.DataFrame] = []
     for lap_idx in lap_rows["lap_index"].to_list():
         try:
@@ -353,12 +379,14 @@ def _aggregate_one_session(
         idx = bin_index(track_pos, bin_size_m=bin_size_m)
         shock = _max_abs_shock_vel(df, shock_channels)
         lat_g = np.abs(df["LatAccel"].to_numpy()) / _GRAVITY_M_S2
+        speed = df["Speed"].to_numpy().astype(np.float64)
         sample_frames.append(
             pl.DataFrame(
                 {
                     "bin": idx.astype(np.int64),
                     "shock": shock.astype(np.float64),
                     "lat_g": lat_g.astype(np.float64),
+                    "speed": speed,
                 }
             )
         )
@@ -377,6 +405,9 @@ def _aggregate_one_session(
             pl.col("shock").quantile(0.99, "linear").alias("shock_v_p99_mm_s"),
             pl.col("lat_g").quantile(0.95, "linear").alias("lateral_g_p95"),
             pl.col("lat_g").median().alias("lateral_g_median"),
+            pl.col("speed").min().alias("speed_min_ms"),
+            pl.col("speed").median().alias("speed_median_ms"),
+            pl.col("speed").max().alias("speed_max_ms"),
         )
         .with_columns(
             pl.lit(session_id).alias("session_id"),
@@ -412,6 +443,7 @@ def _collapse_across_sessions(
 
     bump = aggregate_curb_likelihood(per_session_p99)
     grip = aggregate_grip_map(per_session_grip)
+    speed_env = _aggregate_speed_envelope(indexed)
 
     n_samples_per_bin = (
         indexed.group_by("bin_index")
@@ -421,6 +453,7 @@ def _collapse_across_sessions(
     grip_no_n = grip.drop("n_sessions")
     merged = (
         bump.join(grip_no_n, on="bin_index", how="left")
+        .join(speed_env, on="bin_index", how="left")
         .join(n_samples_per_bin, on="bin_index", how="left")
         .with_columns(
             (pl.col("bin_index").cast(pl.Float64) * bin_size_m).alias("track_pos_m"),
@@ -428,11 +461,32 @@ def _collapse_across_sessions(
             pl.col("n_samples_total").fill_null(0).cast(pl.Int64).alias("n_samples"),
             pl.col("lateral_g_p95").fill_null(0.0),
             pl.col("lateral_g_median").fill_null(0.0),
+            pl.col("speed_min_ms").fill_null(0.0),
+            pl.col("speed_median_ms").fill_null(0.0),
+            pl.col("speed_max_ms").fill_null(0.0),
         )
         .select(list(_SUMMARY_SCHEMA.keys()))
         .sort("bin_index", maintain_order=True)
     )
     return merged
+
+
+def _aggregate_speed_envelope(indexed: pl.DataFrame) -> pl.DataFrame:
+    """Cross-session speed envelope per bin.
+
+    `min` collapses to the smallest seen across all sessions; `max` to the
+    largest. `median_ms` is the median of the per-session medians — using the
+    median (not the mean) so a single anomalous session does not dominate, the
+    same convention as `aggregate_grip_map` (spec §4.3).
+    """
+    return (
+        indexed.group_by("bin_index")
+        .agg(
+            pl.col("speed_min_ms").min().alias("speed_min_ms"),
+            pl.col("speed_median_ms").median().alias("speed_median_ms"),
+            pl.col("speed_max_ms").max().alias("speed_max_ms"),
+        )
+    )
 
 
 _TRACK_LENGTH_PATTERN = re.compile(r"([\d.]+)\s*(km|m)\b", re.IGNORECASE)
