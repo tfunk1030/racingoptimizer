@@ -29,11 +29,13 @@ def _build_lap_samples(*, curb_bin: int | None, bump_bin: int | None) -> dict:
     track_pos_m = lap_dist_pct * _LAP_LENGTH_M
     bin_idx = np.floor(track_pos_m / _BIN_SIZE).astype(np.int32)
 
-    shock = np.full(n, 50.0, dtype=np.float64)
+    # iRacing shockVel channels are in m/s; the slice-D pipeline scales
+    # ×1000 at the read site to land in mm/s for the spec thresholds.
+    shock = np.full(n, 0.05, dtype=np.float64)  # 50 mm/s baseline
     if curb_bin is not None:
-        shock = np.where(bin_idx == curb_bin, 600.0, shock)
+        shock = np.where(bin_idx == curb_bin, 0.6, shock)  # 600 mm/s curb
     if bump_bin is not None:
-        shock = np.where(bin_idx == bump_bin, 250.0, shock)
+        shock = np.where(bin_idx == bump_bin, 0.25, shock)  # 250 mm/s bump
 
     accel_lat = np.zeros(n, dtype=np.float64)
     return {
@@ -42,9 +44,9 @@ def _build_lap_samples(*, curb_bin: int | None, bump_bin: int | None) -> dict:
         "lap_dist_pct": lap_dist_pct.astype(np.float64),
         "data_quality_mask": np.ones(n, dtype=bool),
         "LFshockVel": shock,
-        "RFshockVel": np.full(n, 50.0, dtype=np.float64),
-        "LRshockVel": np.full(n, 50.0, dtype=np.float64),
-        "RRshockVel": np.full(n, 50.0, dtype=np.float64),
+        "RFshockVel": np.full(n, 0.05, dtype=np.float64),
+        "LRshockVel": np.full(n, 0.05, dtype=np.float64),
+        "RRshockVel": np.full(n, 0.05, dtype=np.float64),
         "LatAccel": accel_lat,
         "LFspeed": np.full(n, 60.0, dtype=np.float64),
         "RFspeed": np.full(n, 60.0, dtype=np.float64),

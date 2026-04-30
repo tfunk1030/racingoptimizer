@@ -16,6 +16,7 @@ without re-reading the IBT YAML.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -30,10 +31,12 @@ from racingoptimizer.ingest import catalog as cat
 from racingoptimizer.ingest.paths import catalog_path, resolve_corpus_root
 from racingoptimizer.track.bins import DEFAULT_BIN_SIZE_M, bin_index, track_pos_m_from_pct
 from racingoptimizer.track.masks import (
+    _max_abs_shock_vel,
     aggregate_curb_likelihood,
     aggregate_grip_map,
     compute_curb_mask,
     compute_off_track_mask,
+    shock_vel_channels,
 )
 from racingoptimizer.track.paths import (
     cache_path,
@@ -41,6 +44,8 @@ from racingoptimizer.track.paths import (
     sessions_hash,
     summary_path,
 )
+
+_LOG = logging.getLogger(__name__)
 
 _COLD_START_THRESHOLD = 3
 _GRAVITY_M_S2 = 9.80665
@@ -177,7 +182,7 @@ def build_track_model(
         summary_df = pl.DataFrame(schema=_SUMMARY_SCHEMA)
     else:
         per_session, lap_length_m = _aggregate_per_session(
-            sorted_ids, bin_size_m=bin_size_m, corpus_root=root
+            sorted_ids, bin_size_m=bin_size_m, corpus_root=root, track=track
         )
         summary_df = _collapse_across_sessions(
             per_session, bin_size_m=bin_size_m, lap_length_m=lap_length_m
@@ -226,6 +231,7 @@ def _aggregate_per_session(
     *,
     bin_size_m: float,
     corpus_root: Path,
+    track: str,
 ) -> tuple[pl.DataFrame, float]:
     frames: list[pl.DataFrame] = []
     chosen_lap_length: float | None = None
@@ -240,7 +246,12 @@ def _aggregate_per_session(
             if chosen_lap_length is None:
                 chosen_lap_length = float(lap_length_m)
             session_frame = _aggregate_one_session(
-                sid, bin_size_m=bin_size_m, lap_length_m=lap_length_m, corpus_root=corpus_root
+                sid,
+                bin_size_m=bin_size_m,
+                lap_length_m=lap_length_m,
+                corpus_root=corpus_root,
+                car=sess.car,
+                track=track,
             )
             if session_frame.height > 0:
                 frames.append(session_frame)
@@ -259,6 +270,8 @@ def _aggregate_one_session(
     bin_size_m: float,
     lap_length_m: float,
     corpus_root: Path,
+    car: str | None,
+    track: str,
 ) -> pl.DataFrame:
     lap_rows = ingest_api.laps(
         session_id=session_id, valid_only=True, corpus_root=corpus_root
@@ -266,34 +279,29 @@ def _aggregate_one_session(
     if lap_rows.height == 0:
         return pl.DataFrame(schema=_PER_SESSION_SCHEMA)
 
-    needed = [
-        "lap_dist_pct",
-        "LFshockVel",
-        "RFshockVel",
-        "LRshockVel",
-        "RRshockVel",
-        "LatAccel",
-    ]
+    shock_channels = shock_vel_channels(car)
+    needed = ["lap_dist_pct", *shock_channels, "LatAccel"]
     sample_frames: list[pl.DataFrame] = []
     for lap_idx in lap_rows["lap_index"].to_list():
         try:
             df = ingest_api.lap_data(
                 session_id, int(lap_idx), channels=needed, corpus_root=corpus_root
             )
-        except Exception:
-            continue
+        except pl.exceptions.ColumnNotFoundError as exc:
+            # Spec §9: skip curb/bump for the session and log; do not silently
+            # drop the lap. Log once per session — the mismatch is structural.
+            _LOG.warning(
+                "track=%s session=%s: skipped curb/bump (channel absent: %s)",
+                track,
+                session_id,
+                exc,
+            )
+            return pl.DataFrame(schema=_PER_SESSION_SCHEMA)
         if df.height == 0:
             continue
         track_pos = track_pos_m_from_pct(df["lap_dist_pct"].to_numpy(), lap_length_m)
         idx = bin_index(track_pos, bin_size_m=bin_size_m)
-        shock = np.maximum.reduce(
-            [
-                np.abs(df["LFshockVel"].to_numpy()),
-                np.abs(df["RFshockVel"].to_numpy()),
-                np.abs(df["LRshockVel"].to_numpy()),
-                np.abs(df["RRshockVel"].to_numpy()),
-            ]
-        )
+        shock = _max_abs_shock_vel(df, shock_channels)
         lat_g = np.abs(df["LatAccel"].to_numpy()) / _GRAVITY_M_S2
         sample_frames.append(
             pl.DataFrame(

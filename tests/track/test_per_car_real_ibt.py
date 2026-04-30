@@ -32,14 +32,20 @@ Source bugs uncovered by this real-IBT pass:
    filter out non-racing laps by minimum mean Speed (>= 30 m/s for GTP
    cars), then pick the candidate with the highest mean Speed.
 
-4. **Acura suspension architecture divergence (TODO).** Acura ARX-06 .ibt
-   files lack the per-corner `LFshockVel`/`RFshockVel`/`LRshockVel`/
+4. **Acura suspension architecture divergence (FIXED — S1.3).** Acura ARX-06
+   .ibt files lack the per-corner `LFshockVel`/`RFshockVel`/`LRshockVel`/
    `RRshockVel` channels that the curb detector consumes — Acura instead
-   exposes heave (`HFshockVel`) and roll (`FROLLshockVel`/`RROLLshockVel`)
-   shock channels. Per slice E's known divergence note in CLAUDE.md, this
-   needs a per-car shock-channel mapping in `track.builder`.
+   exposes heave (`HFshockVel`/`TRshockVel`) and roll (`FROLLshockVel`/
+   `RROLLshockVel`) shock channels. Pre-fix the bare
+   `except Exception: continue` in `_aggregate_one_session` swallowed the
+   resulting `ColumnNotFoundError` and silently dropped every Acura lap.
+   Fix: `track.masks.shock_vel_channels(car)` resolves the right channel
+   names per car; the builder threads the catalog's `car` field down and
+   uses a typed `ColumnNotFoundError` catch with the spec §9 warning.
+   Synthetic-only coverage lives in
+   `tests/track/test_per_car_channel_mapping.py`.
 
-Bugs 2-4 are flagged via `xfail(strict=True)` on
+Bugs 2-3 remain flagged via `xfail(strict=True)` on
 `test_compounding_maps_have_real_content` so the test suite stays green
 against the fixed-but-still-incomplete slice D, while keeping the
 verification contract live for whoever fixes them next. Bug 1's cousin
@@ -84,10 +90,19 @@ _GRIP_COLUMNS = {
     "n_samples",
     "n_sessions",
 }
-_BUG_REAL_IBT_CURB_CONTENT = (
-    "blocked by remaining slice-D bugs: shock-velocity m/s vs mm/s unit "
-    "mismatch (all cars), and Acura's heave/roll-shock architecture "
-    "divergence — see module docstring"
+_BUG_REAL_IBT_CURB_CONTENT_PORSCHE = (
+    "porsche-only: pit-idle lap selection in lap-length fallback yields "
+    "~412 m instead of ~4600 m for Algarve, collapsing curb_mask onto the "
+    "wrong physical positions. Tracked separately in S1.2 (PR #25); will "
+    "flip green once that PR lands."
+)
+_BUG_REAL_IBT_ACURA_AGREEMENT = (
+    "acura-only: with S1.3's per-car heave/roll-shock channel mapping, "
+    "Acura sessions DO produce non-zero curb_likelihood values, but the "
+    "0.6 cross-session agreement threshold (calibrated against per-corner "
+    "shock signals) is too strict for the heave/roll signal. Curb-mask is "
+    "all-False on the sample lap because no Acura bin clears 60% agreement. "
+    "Needs per-car or per-signal threshold recalibration as a follow-up."
 )
 
 
@@ -188,14 +203,21 @@ def test_build_track_model_structure(car: str, per_car_corpora):
 
 
 @pytest.mark.parametrize("car", [c.car for c in _CASES], ids=_CASE_IDS)
-@pytest.mark.xfail(reason=_BUG_REAL_IBT_CURB_CONTENT, strict=True)
-def test_compounding_maps_have_real_content(car: str, per_car_corpora):
+def test_compounding_maps_have_real_content(car: str, per_car_corpora, request):
     """Compounding regime must yield non-empty bump/grip maps with real triggers."""
     case = _CASES_BY_CAR[car]
     if not case.fixtures:
         pytest.skip(f"no .ibt fixtures for car={car}")
     if case.expected_regime != "compounding":
         pytest.skip(f"car={car} only has cold-start fixtures")
+    if car == "porsche":
+        request.node.add_marker(
+            pytest.mark.xfail(reason=_BUG_REAL_IBT_CURB_CONTENT_PORSCHE, strict=True)
+        )
+    if car == "acura":
+        request.node.add_marker(
+            pytest.mark.xfail(reason=_BUG_REAL_IBT_ACURA_AGREEMENT, strict=True)
+        )
     sids, corpus = per_car_corpora[car]
 
     model = build_track_model(case.track, list(sids), corpus_root=corpus)
