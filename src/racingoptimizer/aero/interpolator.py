@@ -1,9 +1,22 @@
 """AeroMapData -> AeroSurface. Per-wing 2D RegularGridInterpolator + linear
-blend on the wing axis + per-call air-density correction.
+blend on the wing axis.
 
 Out-of-envelope inputs clamp to the nearest grid edge; one warning per axis
 that clamps. Calls never raise on geometry — only on physically-invalid
 air density.
+
+**Air-density correction (S2.9 audit):** `ld_ratio` is a *dimensionless*
+lift-to-drag ratio. Empirically the corpus values cluster in [2.86, 4.61]
+across all 33 maps — well within the 3–5 band typical of GTP-class race
+cars and incompatible with a force or coefficient interpretation. Both
+lift and drag scale linearly with air density, so the ratio is
+density-invariant and we deliberately do **not** scale `ld_ratio` by
+`(rho/rho_baseline)`. The `air_density` argument is still required: callers
+must thread environmental context through every aero query (CLAUDE.md
+"every data point carries environmental context"), and downstream consumers
+that need an *absolute* downforce contribution apply the rho factor at
+their own use-site (see `racingoptimizer.physics.score.grip`). The argument
+is also validated here as a guard against pathological inputs.
 """
 from __future__ import annotations
 
@@ -104,7 +117,13 @@ class AeroSurface:
         wing_deg: float,
         air_density: float,
     ) -> tuple[float, float]:
-        """Return (balance_pct, ld_ratio_corrected) at the queried point."""
+        """Return (balance_pct, ld_ratio) at the queried point.
+
+        `ld_ratio` is dimensionless and density-invariant — see module
+        docstring for the S2.9 audit rationale. `air_density` is still
+        required for API uniformity and is validated as a guard, but it
+        does not scale the returned ratio.
+        """
         if air_density <= 0:
             raise ValueError(f"air_density must be > 0, got {air_density!r}")
 
@@ -161,7 +180,8 @@ class AeroSurface:
         ld_hi = float(self._ld_interps[idx + 1](rh_query)[0])
 
         balance = (1.0 - t) * bal_lo + t * bal_hi
-        ld_raw = (1.0 - t) * ld_lo + t * ld_hi
+        ld_ratio = (1.0 - t) * ld_lo + t * ld_hi
 
-        ld_corrected = ld_raw * (air_density / self._baseline_air_density)
-        return balance, ld_corrected
+        # No density correction: ld_ratio is dimensionless (lift / drag),
+        # and rho cancels in the ratio. See module docstring (S2.9 audit).
+        return balance, ld_ratio

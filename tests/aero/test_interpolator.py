@@ -124,18 +124,35 @@ def test_air_density_baseline_returns_raw_ld(
     assert ld == pytest.approx(raw.ld_ratio[wi, fi, ri], abs=1e-12)
 
 
-def test_air_density_doubles_ld_when_density_doubles(
+def test_ld_ratio_is_density_invariant(
     porsche_surface: AeroSurface, aero_dir: Path
 ) -> None:
+    """S2.9 audit: ld_ratio is a dimensionless lift/drag ratio.
+
+    Both lift and drag scale linearly with air density, so the ratio
+    cancels and `interpolate(..., air_density)` must return the same
+    `ld_ratio` regardless of the air-density argument. Callers needing
+    an absolute downforce must apply rho at their own use-site (see
+    `racingoptimizer.physics.score.grip`).
+    """
     raw = load_aero_map_data("porsche", aero_dir=aero_dir)
     fi, ri, wi = 5, 10, 1
     front = float(raw.front_rh_mm[fi])
     rear = float(raw.rear_rh_mm[ri])
     wing = float(raw.wing_angles[wi])
-    bal_base, ld_base = porsche_surface.interpolate(front, rear, wing, BASELINE_AIR_DENSITY)
-    bal_2x, ld_2x = porsche_surface.interpolate(front, rear, wing, 2 * BASELINE_AIR_DENSITY)
-    assert ld_2x == pytest.approx(2 * ld_base, abs=1e-12)
+    bal_base, ld_base = porsche_surface.interpolate(
+        front, rear, wing, BASELINE_AIR_DENSITY
+    )
+    bal_2x, ld_2x = porsche_surface.interpolate(
+        front, rear, wing, 2 * BASELINE_AIR_DENSITY
+    )
+    bal_half, ld_half = porsche_surface.interpolate(
+        front, rear, wing, 0.5 * BASELINE_AIR_DENSITY
+    )
+    assert ld_2x == pytest.approx(ld_base, abs=1e-12)
+    assert ld_half == pytest.approx(ld_base, abs=1e-12)
     assert bal_2x == pytest.approx(bal_base, abs=1e-12)
+    assert bal_half == pytest.approx(bal_base, abs=1e-12)
 
 
 def test_zero_or_negative_air_density_raises(porsche_surface: AeroSurface) -> None:
