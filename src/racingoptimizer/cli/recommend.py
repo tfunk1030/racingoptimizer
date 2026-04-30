@@ -520,32 +520,60 @@ def _env_from_overrides(
 ) -> EnvironmentFrame:
     medians = _environment_from_corpus(sessions, corpus_root=corpus_root)
     return EnvironmentFrame(
-        air_density=medians["air_density"],
-        track_temp_c=track_temp if track_temp is not None else medians["track_temp_c"],
-        wind_vel_ms=wind if wind is not None else medians["wind_vel_ms"],
-        wind_dir_deg=medians["wind_dir_deg"],
-        track_wetness=wetness if wetness is not None else medians["track_wetness"],
+        air_temp_c=air_temp if air_temp is not None else float(medians["air_temp_c"]),
+        air_density=float(medians["air_density"]),
+        air_pressure_mbar=float(medians["air_pressure_mbar"]),
+        relative_humidity=float(medians["relative_humidity"]),
+        wind_vel_ms=wind if wind is not None else float(medians["wind_vel_ms"]),
+        wind_dir_deg=float(medians["wind_dir_deg"]),
+        fog_level=float(medians["fog_level"]),
+        track_temp_c=track_temp if track_temp is not None else float(medians["track_temp_c"]),
+        track_wetness=wetness if wetness is not None else float(medians["track_wetness"]),
+        weather_declared_wet=bool(medians["weather_declared_wet"]),
+        precip_type=int(medians["precip_type"]),
+        skies=int(medians["skies"]),
     )
 
 
 # Per-sample env channel name in IBT/parquet -> EnvironmentFrame field key.
 # Wind direction is handled separately because circular medians cannot be
 # pooled with arithmetic medians.
-_ENV_CHANNELS: dict[str, str] = {
+# Per-sample env channels (continuous floats) → EnvironmentFrame field key.
+# Aggregated via per-sample median across every clean sample in the corpus.
+_ENV_FLOAT_CHANNELS: dict[str, str] = {
+    "AirTemp": "air_temp_c",
     "AirDensity": "air_density",
-    "TrackTempCrew": "track_temp_c",
+    "AirPressure": "air_pressure_mbar",
+    "RelativeHumidity": "relative_humidity",
     "WindVel": "wind_vel_ms",
+    "FogLevel": "fog_level",
+    "TrackTempCrew": "track_temp_c",
     "TrackWetness": "track_wetness",
 }
+# Discrete env channels (bool / int). Aggregated via .max() — any-wet wins.
+_ENV_DISCRETE_CHANNELS: dict[str, str] = {
+    "WeatherDeclaredWet": "weather_declared_wet",
+    "Precipitation": "precip_type",
+    "Skies": "skies",
+}
+# Backward-compat alias used by tests.
+_ENV_CHANNELS = _ENV_FLOAT_CHANNELS
 _WIND_DIR_CHANNEL = "WindDir"
 
 # VISION §10 standard-atmosphere fallback when no clean samples exist.
-_ENV_DEFAULTS: dict[str, float] = {
+_ENV_DEFAULTS: dict[str, float | bool | int] = {
+    "air_temp_c": 25.0,
     "air_density": 1.225,
-    "track_temp_c": 25.0,
+    "air_pressure_mbar": 1013.25,
+    "relative_humidity": 0.5,
     "wind_vel_ms": 0.0,
     "wind_dir_deg": 0.0,
+    "fog_level": 0.0,
+    "track_temp_c": 25.0,
     "track_wetness": 0.0,
+    "weather_declared_wet": False,
+    "precip_type": 0,
+    "skies": 0,
 }
 
 
@@ -564,7 +592,11 @@ def _environment_from_corpus(
     if sessions.height == 0:
         return dict(_ENV_DEFAULTS)
 
-    columns = list(_ENV_CHANNELS) + [_WIND_DIR_CHANNEL, "data_quality_mask"]
+    columns = (
+        list(_ENV_FLOAT_CHANNELS)
+        + list(_ENV_DISCRETE_CHANNELS)
+        + [_WIND_DIR_CHANNEL, "data_quality_mask"]
+    )
     accum: dict[str, list[np.ndarray]] = {c: [] for c in columns if c != "data_quality_mask"}
 
     for sid in sessions["session_id"].to_list():
@@ -586,14 +618,26 @@ def _environment_from_corpus(
                 if channel in df.columns:
                     accum[channel].append(df[channel].to_numpy())
 
-    out: dict[str, float] = dict(_ENV_DEFAULTS)
-    for channel, field in _ENV_CHANNELS.items():
+    out: dict[str, float | bool | int] = dict(_ENV_DEFAULTS)
+    for channel, field in _ENV_FLOAT_CHANNELS.items():
         chunks = accum[channel]
         if not chunks:
             continue
         stacked = np.concatenate(chunks)
         if stacked.size:
             out[field] = float(np.median(stacked))
+    # Discrete channels: any-wet wins. .max() over uint/bool arrays.
+    for channel, field in _ENV_DISCRETE_CHANNELS.items():
+        chunks = accum.get(channel, [])
+        if not chunks:
+            continue
+        stacked = np.concatenate(chunks)
+        if stacked.size:
+            value = stacked.max()
+            if field == "weather_declared_wet":
+                out[field] = bool(value)
+            else:
+                out[field] = int(value)
 
     wind_chunks = accum[_WIND_DIR_CHANNEL]
     if wind_chunks:
