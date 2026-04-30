@@ -224,7 +224,7 @@ def compute_off_track_mask(
     triggers = np.zeros(n, dtype=bool)
 
     # Detector 1: sudden grip loss after a sustained high-grip window.
-    lat_g = np.abs(lap_df["AccelLat"].to_numpy()) / _GRAVITY_M_S2
+    lat_g = np.abs(lap_df["LatAccel"].to_numpy()) / _GRAVITY_M_S2
     history_samples = max(1, int(round(OFFTRACK_GRIP_HISTORY_MS * sample_rate_hz / 1000)))
     high_grip = lat_g >= 0.8 * bin_p95
     grip_loss = lat_g < OFFTRACK_GRIP_LOSS_RATIO * bin_p95

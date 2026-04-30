@@ -45,7 +45,7 @@ def _build_lap_samples(*, curb_bin: int | None, bump_bin: int | None) -> dict:
         "RFshockVel": np.full(n, 50.0, dtype=np.float64),
         "LRshockVel": np.full(n, 50.0, dtype=np.float64),
         "RRshockVel": np.full(n, 50.0, dtype=np.float64),
-        "AccelLat": accel_lat,
+        "LatAccel": accel_lat,
         "LFspeed": np.full(n, 60.0, dtype=np.float64),
         "RFspeed": np.full(n, 60.0, dtype=np.float64),
         "LRspeed": np.full(n, 60.0, dtype=np.float64),

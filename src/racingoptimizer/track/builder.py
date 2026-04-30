@@ -272,7 +272,7 @@ def _aggregate_one_session(
         "RFshockVel",
         "LRshockVel",
         "RRshockVel",
-        "AccelLat",
+        "LatAccel",
     ]
     sample_frames: list[pl.DataFrame] = []
     for lap_idx in lap_rows["lap_index"].to_list():
@@ -294,7 +294,7 @@ def _aggregate_one_session(
                 np.abs(df["RRshockVel"].to_numpy()),
             ]
         )
-        lat_g = np.abs(df["AccelLat"].to_numpy()) / _GRAVITY_M_S2
+        lat_g = np.abs(df["LatAccel"].to_numpy()) / _GRAVITY_M_S2
         sample_frames.append(
             pl.DataFrame(
                 {

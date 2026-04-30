@@ -5,25 +5,44 @@ track model from raw .ibt fixtures for every GTP car that has fixtures in
 `ibtfiles/`, then exercises build_track_model -> bump/grip maps -> curb_mask
 -> apply_quality_mask round-trip.
 
-Two source bugs uncovered by this real-IBT pass — both flagged via `xfail`
-strict markers (per the test-only constraint of this PR):
+Source bugs uncovered by this real-IBT pass:
 
-1. **`AccelLat` channel-name mismatch (all 5 GTP cars).**
+1. **`AccelLat` channel-name mismatch (FIXED).**
    `racingoptimizer.track.builder._aggregate_one_session` and
-   `racingoptimizer.track.masks.compute_session_shock_v_p99_per_bin` request
-   the channel `AccelLat`, but real .ibt files (BMW, Acura, Cadillac, Ferrari,
-   Porsche) all expose it as `LatAccel`. The builder's broad
-   `except Exception: continue` swallows the resulting `ColumnNotFoundError`,
-   silently skipping every real session and producing empty bump/grip maps
-   despite a `compounding` regime. Synthetic tests use `AccelLat` so they
-   never tripped this. Fix is a one-line rename in each consumer, but is
-   out of scope for this test-only PR.
+   `racingoptimizer.track.masks.compute_off_track_mask` requested the channel
+   `AccelLat`, but real .ibt files (BMW, Acura, Cadillac, Ferrari, Porsche)
+   all expose it as `LatAccel`. The builder's broad `except Exception:
+   continue` swallowed the resulting `ColumnNotFoundError`, silently producing
+   empty bump/grip maps despite a `compounding` regime. Synthetic tests used
+   `AccelLat` so they never tripped this. Fix: rename to `LatAccel` in both
+   consumers; synthetic tests updated to match the real channel name.
 
-2. **Acura shock-deflection divergence.** Acura .ibt files lack the per-corner
-   shock-deflection channels but DO carry the four shock-velocity channels
-   the curb detector actually consumes. This test would have confirmed that
-   compounding still produces a non-trivial bump_map for Acura — but bug (1)
-   masks it for all cars, so we cannot distinguish here yet.
+2. **Shock-velocity unit mismatch (TODO).** `LFshockVel` etc. are emitted by
+   iRacing in m/s, but `track.builder` and `track.masks` store them as
+   `shock_v_p99_mm_s` and apply the spec's 350/400 mm/s thresholds without
+   converting. Real bump/grip maps populate (since the AccelLat fix), but
+   no bin's p99 ever exceeds 350 mm/s in raw m/s units, so curb / bump
+   likelihoods stay zero on real IBTs.
+
+3. **`_lap_length_from_speed_fallback` picks idle pit laps (TODO).** Porsche
+   IBT YAML headers omit `WeekendInfo.TrackLength`; the speed-integral
+   fallback uses `argmax(end_sample - start_sample)` which selects the
+   wallclock-longest lap, including a 350-second pit-idle lap that integrates
+   to 412 m on the Porsche/Algarve corpus. The real racing laps integrate
+   to ~4600 m. Need to filter by speed/lap-time before picking the longest.
+
+4. **Acura suspension architecture divergence (TODO).** Acura ARX-06 .ibt
+   files lack the per-corner `LFshockVel`/`RFshockVel`/`LRshockVel`/
+   `RRshockVel` channels that the curb detector consumes — Acura instead
+   exposes heave (`HFshockVel`) and roll (`FROLLshockVel`/`RROLLshockVel`)
+   shock channels. Per slice E's known divergence note in CLAUDE.md, this
+   needs a per-car shock-channel mapping in `track.builder`.
+
+Bugs 2-4 are flagged via `xfail(strict=True)` on
+`test_compounding_maps_have_real_content` so the test suite stays green
+against the fixed-but-still-incomplete slice D, while keeping the
+verification contract live for whoever fixes them next. Bug 1's cousin
+`@pytest.mark.xfail` is removed because it is fixed.
 """
 from __future__ import annotations
 
@@ -64,9 +83,11 @@ _GRIP_COLUMNS = {
     "n_samples",
     "n_sessions",
 }
-_BUG_ACCEL_LAT = (
-    "blocked by source bug: builder requests channel 'AccelLat' but real IBTs "
-    "expose it as 'LatAccel' — see module docstring"
+_BUG_REAL_IBT_CURB_CONTENT = (
+    "blocked by remaining slice-D bugs: shock-velocity m/s vs mm/s unit "
+    "mismatch (all cars), pit-idle lap selection in lap-length fallback "
+    "(Porsche), and Acura's heave/roll-shock architecture divergence — see "
+    "module docstring"
 )
 
 
@@ -167,7 +188,7 @@ def test_build_track_model_structure(car: str, per_car_corpora):
 
 
 @pytest.mark.parametrize("car", [c.car for c in _CASES], ids=_CASE_IDS)
-@pytest.mark.xfail(reason=_BUG_ACCEL_LAT, strict=True)
+@pytest.mark.xfail(reason=_BUG_REAL_IBT_CURB_CONTENT, strict=True)
 def test_compounding_maps_have_real_content(car: str, per_car_corpora):
     """Compounding regime must yield non-empty bump/grip maps with real triggers."""
     case = _CASES_BY_CAR[car]

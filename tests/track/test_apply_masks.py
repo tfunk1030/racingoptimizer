@@ -14,7 +14,7 @@ def _synthetic_lap(n: int = 70) -> pl.DataFrame:
     return pl.DataFrame(
         {
             "lap_dist_pct": np.linspace(0.0, 1.0 - 1e-9, n),
-            "AccelLat": np.zeros(n),
+            "LatAccel": np.zeros(n),
             "LFshockVel": np.zeros(n),
             "RFshockVel": np.zeros(n),
             "LRshockVel": np.zeros(n),
