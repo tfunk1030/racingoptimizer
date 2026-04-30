@@ -1,0 +1,19 @@
+bmw @ Sebring International - setup comparison
+  setup A: baseline_session_a  total score = 8.124
+  setup B: candidate_session_b  total score = 8.391
+  delta (B - A) = +0.267
+
+Per-(corner, phase) deltas (top 10 by |delta|):
+  T1-braking: A=0.812  B=0.844  delta=+0.032
+    - rear_wing_angle_deg shifted +0.5 deg
+    - tyre_cold_pressure_kpa shifted -1.0 kPa
+  T3-trail_brake: A=0.685  B=0.712  delta=+0.027
+    - static_ride_height_rear_mm shifted +0.5 mm
+  T5-exit: A=0.902  B=0.881  delta=-0.021
+    - static_ride_height_front_mm shifted -0.5 mm
+  T7-straight: A=0.954  B=0.965  delta=+0.011
+    - rear_wing_angle_deg shifted +0.5 deg
+
+Notes:
+  - candidate session lapped 0.18s faster on average over 7 clean laps
+  - wind delta < 1 m/s vs baseline; air density within 0.5%

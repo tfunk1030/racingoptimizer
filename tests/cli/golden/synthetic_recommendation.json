@@ -1,0 +1,173 @@
+{
+  "car": "bmw",
+  "track": "sebring_international",
+  "track_display": "sebring_international",
+  "environment": {
+    "air_density_kg_m3": 1.184,
+    "track_temp_c": 32.5,
+    "wind_vel_ms": 2.4,
+    "wind_dir_deg": 215.0,
+    "wetness": 0.0
+  },
+  "confidence": {
+    "regime": "noisy",
+    "n_samples": 90,
+    "n_parameters": 4
+  },
+  "pinned": {},
+  "parameters": [
+    {
+      "parameter": "rear_wing_angle_deg",
+      "value": 12.5,
+      "unit": "deg",
+      "pinned": false,
+      "confidence": {
+        "regime": "confident",
+        "n_samples": 240,
+        "value": 12.5,
+        "lo": 12.0,
+        "hi": 13.0
+      },
+      "sensitivity_minus_1_click": -0.012,
+      "sensitivity_plus_1_click": 0.008,
+      "corners_helped": [
+        {
+          "corner_id": 1,
+          "phase": "mid_corner",
+          "score_delta": 0.045,
+          "note": "mid-corner score gain 0.045"
+        },
+        {
+          "corner_id": 5,
+          "phase": "exit",
+          "score_delta": 0.022,
+          "note": "exit score gain 0.022"
+        }
+      ],
+      "corners_hurt": [
+        {
+          "corner_id": 7,
+          "phase": "straight",
+          "score_delta": -0.018,
+          "note": "straight score cost 0.018"
+        }
+      ],
+      "telemetry_evidence": [
+        "confident confidence backed by 240 samples",
+        "value bracket [12.000, 13.000]"
+      ]
+    },
+    {
+      "parameter": "tyre_cold_pressure_kpa",
+      "value": 165.0,
+      "unit": "kPa",
+      "pinned": false,
+      "confidence": {
+        "regime": "dense",
+        "n_samples": 480,
+        "value": 165.0,
+        "lo": 163.5,
+        "hi": 166.5
+      },
+      "sensitivity_minus_1_click": -0.005,
+      "sensitivity_plus_1_click": -0.011,
+      "corners_helped": [
+        {
+          "corner_id": 1,
+          "phase": "braking",
+          "score_delta": 0.031,
+          "note": "braking score gain 0.031"
+        },
+        {
+          "corner_id": 3,
+          "phase": "trail_brake",
+          "score_delta": 0.019,
+          "note": "trail-brake score gain 0.019"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "dense confidence backed by 480 samples",
+        "value bracket [163.500, 166.500]"
+      ]
+    },
+    {
+      "parameter": "static_ride_height_front_mm",
+      "value": 55.0,
+      "unit": "mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "confident",
+        "n_samples": 120,
+        "value": 55.0,
+        "lo": 54.0,
+        "hi": 56.0
+      },
+      "sensitivity_minus_1_click": 0.003,
+      "sensitivity_plus_1_click": -0.006,
+      "corners_helped": [
+        {
+          "corner_id": 1,
+          "phase": "mid_corner",
+          "score_delta": 0.014,
+          "note": "mid-corner score gain 0.014"
+        }
+      ],
+      "corners_hurt": [
+        {
+          "corner_id": 5,
+          "phase": "exit",
+          "score_delta": -0.009,
+          "note": "exit score cost 0.009"
+        }
+      ],
+      "telemetry_evidence": [
+        "confident confidence backed by 120 samples",
+        "value bracket [54.000, 56.000]"
+      ]
+    },
+    {
+      "parameter": "static_ride_height_rear_mm",
+      "value": 70.0,
+      "unit": "mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 90,
+        "value": 70.0,
+        "lo": 68.5,
+        "hi": 71.5
+      },
+      "sensitivity_minus_1_click": -0.004,
+      "sensitivity_plus_1_click": 0.002,
+      "corners_helped": [
+        {
+          "corner_id": 3,
+          "phase": "trail_brake",
+          "score_delta": 0.011,
+          "note": "trail-brake score gain 0.011"
+        }
+      ],
+      "corners_hurt": [
+        {
+          "corner_id": 1,
+          "phase": "braking",
+          "score_delta": -0.007,
+          "note": "braking score cost 0.007"
+        }
+      ],
+      "telemetry_evidence": [
+        "noisy confidence backed by 90 samples",
+        "value bracket [68.500, 71.500]"
+      ]
+    }
+  ],
+  "untrained_parameters": [
+    "damper_lsc_fl",
+    "anti_roll_bar_front"
+  ],
+  "aero_correction_available": true,
+  "warnings": [
+    "untrained_parameters: damper_lsc_fl, anti_roll_bar_front"
+  ]
+}
