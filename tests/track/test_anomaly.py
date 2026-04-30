@@ -44,6 +44,9 @@ def _seed_three_session_cache(corpus_root: Path, track: str, sids: list[str]) ->
                 "shock_v_p99_mm_s": float(p99),
                 "lateral_g_p95": float(p95),
                 "lateral_g_median": float(med),
+                "speed_min_ms": 30.0,
+                "speed_median_ms": 50.0,
+                "speed_max_ms": 70.0,
             }
         )
     pl.DataFrame(rows, schema=_PER_SESSION_SCHEMA).write_parquet(cache, compression="zstd")
@@ -55,6 +58,9 @@ def _seed_three_session_cache(corpus_root: Path, track: str, sids: list[str]) ->
             "shock_v_p99_mm_s": np.array([_QUIET_P99_MM_S], dtype=np.float64),
             "lateral_g_p95": np.array([0.51], dtype=np.float64),
             "lateral_g_median": np.array([0.30], dtype=np.float64),
+            "speed_min_ms": np.array([30.0], dtype=np.float64),
+            "speed_median_ms": np.array([50.0], dtype=np.float64),
+            "speed_max_ms": np.array([70.0], dtype=np.float64),
             "n_samples": np.array([600], dtype=np.int64),
             "n_sessions": np.array([3], dtype=np.int64),
             "curb_likelihood": np.array([0.0], dtype=np.float64),

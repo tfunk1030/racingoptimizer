@@ -66,6 +66,9 @@ def _seed_cache(
                     "shock_v_p99_mm_s": float(p99),
                     "lateral_g_p95": float(session_grip[0]),
                     "lateral_g_median": float(session_grip[1]),
+                    "speed_min_ms": 30.0,
+                    "speed_median_ms": 50.0,
+                    "speed_max_ms": 70.0,
                 }
             )
     pl.DataFrame(rows, schema=_PER_SESSION_SCHEMA).write_parquet(cache, compression="zstd")
@@ -81,6 +84,9 @@ def _seed_cache(
             ),
             "lateral_g_p95": np.zeros(len(bins), dtype=np.float64),
             "lateral_g_median": np.zeros(len(bins), dtype=np.float64),
+            "speed_min_ms": np.full(len(bins), 30.0, dtype=np.float64),
+            "speed_median_ms": np.full(len(bins), 50.0, dtype=np.float64),
+            "speed_max_ms": np.full(len(bins), 70.0, dtype=np.float64),
             "n_samples": np.full(len(bins), 100, dtype=np.int64),
             "n_sessions": np.full(len(bins), len(session_ids), dtype=np.int64),
             "curb_likelihood": np.zeros(len(bins), dtype=np.float64),
@@ -146,6 +152,9 @@ def test_expected_bin_with_too_few_sessions_returns_none(tmp_corpus: Path):
             "shock_v_p99_mm_s": 400.0,
             "lateral_g_p95": 0.0,
             "lateral_g_median": 0.0,
+            "speed_min_ms": 30.0,
+            "speed_median_ms": 50.0,
+            "speed_max_ms": 70.0,
         }
         # Only 2 of 3 sessions cover bin 10 (track_pos_m = 50).
         for sid in sorted(sids)[:2]
@@ -158,6 +167,9 @@ def test_expected_bin_with_too_few_sessions_returns_none(tmp_corpus: Path):
             "shock_v_p99_mm_s": np.array([400.0], dtype=np.float64),
             "lateral_g_p95": np.array([0.0], dtype=np.float64),
             "lateral_g_median": np.array([0.0], dtype=np.float64),
+            "speed_min_ms": np.array([30.0], dtype=np.float64),
+            "speed_median_ms": np.array([50.0], dtype=np.float64),
+            "speed_max_ms": np.array([70.0], dtype=np.float64),
             "n_samples": np.array([200], dtype=np.int64),
             "n_sessions": np.array([2], dtype=np.int64),
             "curb_likelihood": np.array([0.0], dtype=np.float64),
