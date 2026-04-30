@@ -140,3 +140,55 @@ def test_detect_sample_rate_yaml_fallback() -> None:
 def test_dtypes_are_float32_for_telemetry(small_ibt: Path) -> None:
     result = parse_ibt(small_ibt)
     assert result.channels["Speed"].dtype == np.float32
+
+
+def test_weather_summary_covers_vision_section_10_channels(small_ibt: Path) -> None:
+    """VISION section 10 lists 12 weather/track channels. The summary must
+    surface every channel present in the IBT (S2.2 expanded the set from 5
+    to 12).
+
+    Real BMW Sebring fixtures carry the full set, so every key for which
+    the parser saw a channel must appear; the parser only emits a summary
+    key when its source channel is present, which keeps the contract
+    honest if iRacing ever drops a channel.
+    """
+    result = parse_ibt(small_ibt)
+    expected_keys = {
+        # Atmospheric:
+        "AirTemp_c_mean",
+        "AirDensity_kgm3_mean",
+        "AirPressure_mbar_mean",
+        "RelativeHumidity_mean",
+        "WindVel_ms_mean",
+        "WindDir_deg_mean",
+        "FogLevel_max",
+        # Track surface:
+        "TrackTempCrew_c_mean",
+        "TrackWetness_max",
+        # Discrete weather state:
+        "WeatherDeclaredWet_max",
+        "PrecipType_max",
+        "Skies_max",
+    }
+    raw_to_summary = {
+        "AirTemp": "AirTemp_c_mean",
+        "AirDensity": "AirDensity_kgm3_mean",
+        "AirPressure": "AirPressure_mbar_mean",
+        "RelativeHumidity": "RelativeHumidity_mean",
+        "WindVel": "WindVel_ms_mean",
+        "WindDir": "WindDir_deg_mean",
+        "FogLevel": "FogLevel_max",
+        "TrackTempCrew": "TrackTempCrew_c_mean",
+        "TrackWetness": "TrackWetness_max",
+        "WeatherDeclaredWet": "WeatherDeclaredWet_max",
+        "Precipitation": "PrecipType_max",
+        "Skies": "Skies_max",
+    }
+    for raw, summary_key in raw_to_summary.items():
+        if raw in result.channels:
+            assert summary_key in result.weather_summary, (
+                f"channel {raw!r} present in IBT but {summary_key!r} missing "
+                f"from weather_summary; got {sorted(result.weather_summary)}"
+            )
+    # Every emitted key must be in the expected set (no stray fields).
+    assert set(result.weather_summary).issubset(expected_keys)

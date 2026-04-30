@@ -213,18 +213,44 @@ def parse_ibt(path: Path | str) -> ParseResult:
 
 
 def _summarize_weather(channels: dict[str, np.ndarray]) -> dict:
-    """Reduce per-sample weather channels to a small JSON-friendly summary."""
+    """Reduce per-sample weather channels to a small JSON-friendly summary.
+
+    Covers the full VISION 10 12-channel set. Atmospherics summarise as
+    means; track-state and discrete weather flags summarise as max so a
+    transient wet/precip flag survives the reduction.
+    """
     summary: dict = {}
+    # Atmospheric floats: mean is the right reduction.
     if "AirTemp" in channels:
         summary["AirTemp_c_mean"] = float(channels["AirTemp"].mean())
-    if "TrackTempCrew" in channels:
-        summary["TrackTempCrew_c_mean"] = float(channels["TrackTempCrew"].mean())
     if "AirDensity" in channels:
         summary["AirDensity_kgm3_mean"] = float(channels["AirDensity"].mean())
+    if "AirPressure" in channels:
+        summary["AirPressure_mbar_mean"] = float(channels["AirPressure"].mean())
+    if "RelativeHumidity" in channels:
+        summary["RelativeHumidity_mean"] = float(channels["RelativeHumidity"].mean())
     if "WindVel" in channels:
         summary["WindVel_ms_mean"] = float(channels["WindVel"].mean())
+    if "WindDir" in channels:
+        summary["WindDir_deg_mean"] = float(channels["WindDir"].mean())
+    if "FogLevel" in channels:
+        summary["FogLevel_max"] = float(channels["FogLevel"].max())
+    # Track surface: temperature mean, wetness max (transient wet survives).
+    if "TrackTempCrew" in channels:
+        summary["TrackTempCrew_c_mean"] = float(channels["TrackTempCrew"].mean())
     if "TrackWetness" in channels:
         summary["TrackWetness_max"] = float(channels["TrackWetness"].max())
+    # Discrete weather flags: max captures any sample that flipped to wet.
+    if "WeatherDeclaredWet" in channels:
+        summary["WeatherDeclaredWet_max"] = float(channels["WeatherDeclaredWet"].max())
+    if "Precipitation" in channels:
+        # iRacing's per-sample channel is named `Precipitation` (the
+        # `PrecipType` label in VISION section 10 / docs is the spec
+        # alias). Keep the summary key as `PrecipType_max` so downstream
+        # consumers stay stable.
+        summary["PrecipType_max"] = float(channels["Precipitation"].max())
+    if "Skies" in channels:
+        summary["Skies_max"] = float(channels["Skies"].max())
     return summary
 
 

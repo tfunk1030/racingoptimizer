@@ -118,17 +118,27 @@ DEFAULT_CHANNELS: tuple[str, ...] = (
     "RFrideHeight",
     "LRrideHeight",
     "RRrideHeight",
-    # per-wheel speed (spec §6 traction utilisation)
+    # per-wheel speed (spec section 6 traction utilisation).
     "LFspeed",
     "RFspeed",
     "LRspeed",
     "RRspeed",
-    # environment quintet (spec §7 EnvironmentFrame contract)
+    # VISION section 10 12-channel environment set (spec section 7 EnvironmentFrame contract).
+    # Atmospheric floats:
+    "AirTemp",
     "AirDensity",
-    "TrackTempCrew",
+    "AirPressure",
+    "RelativeHumidity",
     "WindVel",
     "WindDir",
+    "FogLevel",
+    # Track surface floats:
+    "TrackTempCrew",
     "TrackWetness",
+    # Discrete weather state (bool/int channels):
+    "WeatherDeclaredWet",
+    "Precipitation",
+    "Skies",
 )
 
 
@@ -286,7 +296,11 @@ def _aggregate(
         "LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl",
         "LFrideHeight", "RFrideHeight", "LRrideHeight", "RRrideHeight",
         "LFspeed", "RFspeed", "LRspeed", "RRspeed",
-        "AirDensity", "TrackTempCrew", "WindVel", "WindDir", "TrackWetness",
+        # VISION section 10 12-channel env set.
+        "AirTemp", "AirDensity", "AirPressure", "RelativeHumidity",
+        "WindVel", "WindDir", "FogLevel",
+        "TrackTempCrew", "TrackWetness",
+        "WeatherDeclaredWet", "Precipitation", "Skies",
         "data_quality_mask",
     )}
 
@@ -406,7 +420,7 @@ def _aggregate(
         if has[src]:
             aggs.append(pl.col(src).mean().cast(pl.Float32).alias(alias))
 
-    # Spec §6: load-transfer asymmetry. Sign convention:
+    # Spec section 6: load-transfer asymmetry. Sign convention:
     #   positive = right-front + left-rear loaded.
     # Raw shockDefl is meters; convert to mm via * 1000.
     if has_shocks:
@@ -418,7 +432,7 @@ def _aggregate(
             asym_mm.mean().cast(pl.Float32).alias("load_transfer_asymmetry_mean")
         )
 
-    # Spec §6: traction utilisation.
+    # Spec section 6: traction utilisation.
     # (max(*Speed) - min(*Speed)) / max(Speed, eps), clipped to [0, 1].
     if has_wheel_speeds and has["Speed"]:
         wheels = (pl.col("LFspeed"), pl.col("RFspeed"), pl.col("LRspeed"), pl.col("RRspeed"))
@@ -430,7 +444,7 @@ def _aggregate(
             traction_util.mean().cast(pl.Float32).alias("traction_util_mean")
         )
 
-    # Spec §6: aero-platform front/rear ride-height means + pitch.
+    # Spec section 6: aero-platform front/rear ride-height means + pitch.
     # Raw rideHeight is meters; convert to mm via * 1000.
     # Sign convention: pitch_mm = rear_rh - front_rh (positive = nose-down rake).
     if has_ride_heights:
@@ -449,7 +463,7 @@ def _aggregate(
             .alias("aero_platform_pitch_mean_mm")
         )
 
-    # Spec §6: damper velocities.
+    # Spec section 6: damper velocities.
     # p99 = max p99 across the four corners; mean = mean of per-corner means.
     # Pre-computed `_v_*shockDefl` columns are already abs(mm/s).
     if has_shocks:
@@ -459,19 +473,44 @@ def _aggregate(
         aggs.append(max_p99.cast(pl.Float32).alias("damper_velocity_p99_mms"))
         aggs.append(mean_of_means.cast(pl.Float32).alias("damper_velocity_mean_mms"))
 
+    # VISION section 10 12-channel env set. Atmospheric floats aggregate as
+    # means; discrete weather state aggregates as max so a transient flag
+    # (e.g. a rain start mid-corner) survives the reduction.
+    if has["AirTemp"]:
+        aggs.append(pl.col("AirTemp").mean().cast(pl.Float32).alias("air_temp_c_mean"))
     if has["AirDensity"]:
         aggs.append(pl.col("AirDensity").mean().cast(pl.Float32).alias("air_density_mean"))
+    if has["AirPressure"]:
+        aggs.append(
+            pl.col("AirPressure").mean().cast(pl.Float32).alias("air_pressure_mbar_mean")
+        )
+    if has["RelativeHumidity"]:
+        aggs.append(
+            pl.col("RelativeHumidity").mean().cast(pl.Float32).alias("relative_humidity_mean")
+        )
+    if has["WindVel"]:
+        aggs.append(pl.col("WindVel").mean().cast(pl.Float32).alias("wind_vel_ms_mean"))
+    if has["FogLevel"]:
+        aggs.append(pl.col("FogLevel").mean().cast(pl.Float32).alias("fog_level_mean"))
+
     if has["TrackTempCrew"]:
         aggs.append(
             pl.col("TrackTempCrew").mean().cast(pl.Float32).alias("track_temp_c_mean")
         )
-    if has["WindVel"]:
-        aggs.append(pl.col("WindVel").mean().cast(pl.Float32).alias("wind_vel_ms_mean"))
-
     if has["TrackWetness"]:
         aggs.append(
             pl.col("TrackWetness").mean().cast(pl.Float32).alias("track_wetness_mean")
         )
+
+    # Discrete weather flags: max captures any sample that flipped to wet.
+    if has["WeatherDeclaredWet"]:
+        aggs.append(
+            pl.col("WeatherDeclaredWet").max().cast(pl.Boolean).alias("weather_declared_wet_max")
+        )
+    if has["Precipitation"]:
+        aggs.append(pl.col("Precipitation").max().cast(pl.Int32).alias("precip_type_max"))
+    if has["Skies"]:
+        aggs.append(pl.col("Skies").max().cast(pl.Int32).alias("skies_max"))
 
     if has["data_quality_mask"]:
         # Cast bool->float before averaging; the placeholder mask is all-True
@@ -590,11 +629,19 @@ def _output_columns(present: list[str]) -> list[str]:
         "aero_platform_pitch_mean_mm",
         "damper_velocity_p99_mms",
         "damper_velocity_mean_mms",
+        # VISION section 10 12-channel env aggregates.
+        "air_temp_c_mean",
         "air_density_mean",
-        "track_temp_c_mean",
+        "air_pressure_mbar_mean",
+        "relative_humidity_mean",
         "wind_vel_ms_mean",
         "wind_dir_deg_mean",
+        "fog_level_mean",
+        "track_temp_c_mean",
         "track_wetness_mean",
+        "weather_declared_wet_max",
+        "precip_type_max",
+        "skies_max",
         "data_quality_clean_frac",
     ]
     present_set = set(present)
@@ -644,7 +691,7 @@ def _empty_frame(has: dict[str, bool]) -> pl.DataFrame:
         if has[src]:
             schema[alias] = pl.Float32
 
-    # Spec §6 derived columns gated by the full four-corner channel quad.
+    # Spec section 6 derived columns gated by the full four-corner channel quad.
     has_shocks_e = all(
         has[c] for c in ("LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl")
     )
@@ -664,16 +711,30 @@ def _empty_frame(has: dict[str, bool]) -> pl.DataFrame:
         schema["aero_platform_front_rh_mean_mm"] = pl.Float32
         schema["aero_platform_rear_rh_mean_mm"] = pl.Float32
         schema["aero_platform_pitch_mean_mm"] = pl.Float32
+    if has["AirTemp"]:
+        schema["air_temp_c_mean"] = pl.Float32
     if has["AirDensity"]:
         schema["air_density_mean"] = pl.Float32
-    if has["TrackTempCrew"]:
-        schema["track_temp_c_mean"] = pl.Float32
+    if has["AirPressure"]:
+        schema["air_pressure_mbar_mean"] = pl.Float32
+    if has["RelativeHumidity"]:
+        schema["relative_humidity_mean"] = pl.Float32
     if has["WindVel"]:
         schema["wind_vel_ms_mean"] = pl.Float32
     if has["WindDir"]:
         schema["wind_dir_deg_mean"] = pl.Float32
+    if has["FogLevel"]:
+        schema["fog_level_mean"] = pl.Float32
+    if has["TrackTempCrew"]:
+        schema["track_temp_c_mean"] = pl.Float32
     if has["TrackWetness"]:
         schema["track_wetness_mean"] = pl.Float32
+    if has["WeatherDeclaredWet"]:
+        schema["weather_declared_wet_max"] = pl.Boolean
+    if has["Precipitation"]:
+        schema["precip_type_max"] = pl.Int32
+    if has["Skies"]:
+        schema["skies_max"] = pl.Int32
     if has["data_quality_mask"]:
         schema["data_quality_clean_frac"] = pl.Float32
 

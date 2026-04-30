@@ -154,3 +154,66 @@ def test_corner_phase_states_excludes_corner_id_minus_one(
     lap_idx = _best_valid_lap(sid, tmp_corpus)
     out = corner_phase_states(sid, lap_idx, corpus_root=tmp_corpus)
     assert (out["corner_id"] >= 0).all()
+
+
+def test_corner_phase_states_emits_vision_section_10_env_aggregates(
+    small_ibt: Path, tmp_corpus: Path
+) -> None:
+    """S2.2 expanded per-(corner, phase) env aggregation from 5 channels to 12.
+
+    The BMW Sebring fixture carries the full VISION section 10 set, so
+    every aggregate column must be present in the output. Each is
+    checked for a sane envelope where one is well-defined.
+    """
+    import polars as pl
+    sids = learn(small_ibt, corpus_root=tmp_corpus)
+    sid = sids[0]
+    lap_idx = _best_valid_lap(sid, tmp_corpus)
+
+    out = corner_phase_states(sid, lap_idx, corpus_root=tmp_corpus)
+    expected_env_columns = {
+        "air_temp_c_mean",
+        "air_density_mean",
+        "air_pressure_mbar_mean",
+        "relative_humidity_mean",
+        "wind_vel_ms_mean",
+        "wind_dir_deg_mean",
+        "fog_level_mean",
+        "track_temp_c_mean",
+        "track_wetness_mean",
+        "weather_declared_wet_max",
+        "precip_type_max",
+        "skies_max",
+    }
+    missing = expected_env_columns - set(out.columns)
+    assert not missing, (
+        f"BMW Sebring fixture must emit all 12 env aggregates; "
+        f"missing: {sorted(missing)}"
+    )
+
+    # Sanity envelopes for the channels with well-defined ranges.
+    if "air_temp_c_mean" in out.columns:
+        assert out["air_temp_c_mean"].min() > -30.0
+        assert out["air_temp_c_mean"].max() < 60.0
+    if "air_pressure_mbar_mean" in out.columns:
+        # iRacing's `AirPressure` channel is reported in Pa (~1e5), not
+        # mbar. The aggregate column name preserves the VISION section 10
+        # nominal unit (mbar) but the value is whatever iRacing wrote.
+        # Sanity: positive and within the iRacing atmospheric envelope
+        # (~80,000 Pa to ~110,000 Pa).
+        assert out["air_pressure_mbar_mean"].min() > 0.0
+        assert out["air_pressure_mbar_mean"].max() < 200000.0
+    if "relative_humidity_mean" in out.columns:
+        assert out["relative_humidity_mean"].min() >= 0.0
+        assert out["relative_humidity_mean"].max() <= 1.0
+    if "fog_level_mean" in out.columns:
+        assert out["fog_level_mean"].min() >= 0.0
+        assert out["fog_level_mean"].max() <= 1.0
+    if "weather_declared_wet_max" in out.columns:
+        assert out["weather_declared_wet_max"].dtype == pl.Boolean
+    if "precip_type_max" in out.columns:
+        assert out["precip_type_max"].dtype == pl.Int32
+        assert out["precip_type_max"].min() >= 0
+    if "skies_max" in out.columns:
+        assert out["skies_max"].dtype == pl.Int32
+        assert out["skies_max"].min() >= 0

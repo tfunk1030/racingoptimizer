@@ -76,6 +76,14 @@ class PhysicsModel:
     # None on PhysicsModels pickled before this field existed; read via
     # `resolved_baselines` for the cold-start fallback.
     car_baselines: CarBaselines | None = None
+    # Env-feature schema the per-quadruple fitters were trained against.
+    # v1 = 5-channel env (air_density, track_temp_c, wind_vel_ms,
+    # wind_dir_deg, track_wetness). v2 = VISION section 10 12-channel set.
+    # Pre-S2.2 pickles deserialise without this field — `__setstate__`
+    # backfills v1 so the slot is always initialised on revive. New models
+    # written by `fit` set this to the current version
+    # (`ENV_FEATURE_SCHEMA_VERSION` in fitter.py).
+    feature_schema_version: int = 2
 
     @property
     def resolved_baselines(self) -> CarBaselines:
@@ -89,6 +97,34 @@ class PhysicsModel:
         return DEFAULT_BASELINES.get(
             self.car, default_baselines_for(self.car),
         )
+
+    def __setstate__(self, state: object) -> None:
+        # Frozen+slots dataclasses pickle as a positional list ordered by
+        # `__slots__` (one value per slot). Older protocols may pass a
+        # ``(None, slots_dict)`` tuple or a bare slots dict — handle all
+        # three. Pre-S2.2 pickles lack `feature_schema_version` and pickles
+        # made before `car_baselines` existed lack that slot too; backfill
+        # both so every slot is initialised on revive.
+        slots_order = list(type(self).__slots__)
+        slot_values: dict[str, object] = {}
+        if isinstance(state, list):
+            # Positional list, indexed by `__slots__`. Older shorter lists
+            # leave any trailing slot unset; backfill below.
+            for name, value in zip(slots_order, state, strict=False):
+                slot_values[name] = value
+        elif isinstance(state, tuple) and len(state) == 2:
+            _instance_dict, slots = state
+            if isinstance(slots, dict):
+                slot_values.update(slots)
+            elif isinstance(slots, list):
+                for name, value in zip(slots_order, slots, strict=False):
+                    slot_values[name] = value
+        elif isinstance(state, dict):
+            slot_values.update(state)
+        slot_values.setdefault("feature_schema_version", 1)
+        slot_values.setdefault("car_baselines", None)
+        for name, value in slot_values.items():
+            object.__setattr__(self, name, value)
 
     def score_setup(
         self,
@@ -131,7 +167,15 @@ class PhysicsModel:
                 continue
             channels.setdefault(channel, []).append((param, record))
 
-        env_features = _env_to_array(env)
+        # Backward compat: v1 models were fit on a 5-feature env vector
+        # (air_density, track_temp_c, wind_vel_ms, wind_dir_deg,
+        # track_wetness) — a different set than the v2 12-feature prefix,
+        # so build the v1 vector explicitly. v2+ models get the full
+        # 12-feature vector matching `fitter._ENV_COLUMNS`.
+        if int(self.feature_schema_version) < 2:
+            env_features = _env_to_array_v1(env)
+        else:
+            env_features = _env_to_array(env)
         states: dict[str, Confidence] = {}
         untrained: list[str] = []
 
@@ -152,7 +196,13 @@ class PhysicsModel:
                 ).reshape(1, -1)
                 try:
                     mu, _sigma = record.fitter.predict(row)
-                except UntrainedError:
+                except (UntrainedError, ValueError):
+                    # ValueError covers feature-count mismatches (e.g. a
+                    # legacy v1 model whose underlying fitter expects 5
+                    # env columns but the dispatch fed 12). Treat as
+                    # "this fitter contributed nothing" rather than a
+                    # hard failure so the rest of the channels still
+                    # surface in the returned state.
                     continue
                 mean_sum += float(mu[0])
                 # Combine std via residual std (from CV) for the Confidence band;
@@ -192,8 +242,23 @@ class PhysicsModel:
         )
 
 
-def _env_to_array(env: EnvironmentFrame) -> np.ndarray:
-    return np.array(
+# Number of env features in the v1 schema (pre-S2.2). Mirrors
+# `racingoptimizer.physics.fitter.ENV_FEATURE_COUNT_V1`; duplicated here
+# to keep the import graph acyclic (fitter imports model, not the other
+# way around).
+_ENV_FEATURE_COUNT_V1: int = 5
+
+
+def _env_to_array_v1(env: EnvironmentFrame) -> np.ndarray:
+    """5-feature env vector matching the pre-S2.2 fitter._ENV_COLUMNS.
+
+    Order: air_density, track_temp_c, wind_vel_ms, wind_dir_deg, track_wetness.
+    Used by `PhysicsModel.predict` to reconstruct the input vector for
+    pickled v1 models so the per-fitter X-shape stays valid after revive.
+    NaN sentinels coerce to 0.0 (mirrors `_env_to_array` and the fit-side
+    `fill_null(0.0)`).
+    """
+    arr = np.array(
         [
             float(env.air_density),
             float(env.track_temp_c),
@@ -203,6 +268,46 @@ def _env_to_array(env: EnvironmentFrame) -> np.ndarray:
         ],
         dtype=np.float64,
     )
+    np.nan_to_num(arr, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+    return arr
+
+
+def _env_to_array(env: EnvironmentFrame) -> np.ndarray:
+    """12-feature env vector matching `racingoptimizer.physics.fitter._ENV_COLUMNS`.
+
+    Field order MUST stay aligned with `_ENV_COLUMNS` in fitter.py — the
+    fitter consumed columns in that order at training time, and predict
+    feeds X back to it in the same order.
+
+    NaN-valued floats (the `from_partial_row` sentinel for "missing
+    channel") are coerced to 0.0 here because sklearn's GP / RF reject
+    NaN inputs at predict time. The fit pipeline already does the same
+    with ``fill_null(0.0)`` so the convention is consistent across train
+    and infer. Bool / int channels are cast to float so the per-row
+    vector stays numeric; ``-1`` int sentinels pass through as just
+    another value the fitter can ignore.
+    """
+    raw = [
+        # Atmospheric floats:
+        float(env.air_temp_c),
+        float(env.air_density),
+        float(env.air_pressure_mbar),
+        float(env.relative_humidity),
+        float(env.wind_vel_ms),
+        float(env.wind_dir_deg),
+        float(env.fog_level),
+        # Track surface floats:
+        float(env.track_temp_c),
+        float(env.track_wetness),
+        # Discrete weather state, cast to float:
+        float(env.weather_declared_wet),
+        float(env.precip_type),
+        float(env.skies),
+    ]
+    arr = np.array(raw, dtype=np.float64)
+    # Substitute 0.0 for any NaN — matches the fit-side `fill_null(0.0)`.
+    np.nan_to_num(arr, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+    return arr
 
 
 __all__ = [

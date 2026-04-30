@@ -112,3 +112,103 @@ def test_fit_empty_session_list_raises() -> None:
     with pytest.raises(InsufficientDataError):
         # Track model is unused along the empty-list short-circuit.
         fit("bmw", [], None, k_folds=2)  # type: ignore[arg-type]
+
+
+def test_fit_emits_v2_feature_schema(
+    bmw_sebring_corpus: tuple[Path, list[str]],
+) -> None:
+    """S2.2 expanded the env feature vector from 5 to 12 channels.
+
+    Newly trained models must advertise schema version 2 so
+    `PhysicsModel.predict` knows to feed the full 12-feature env vector.
+    Older pickles deserialise as v1 (see backward-compat test below).
+    """
+    from racingoptimizer.physics.fitter import ENV_FEATURE_SCHEMA_VERSION
+    root, sids = bmw_sebring_corpus
+    sess_df = sessions(corpus_root=root)
+    car = sess_df.row(0, named=True)["car"]
+    track = sess_df.row(0, named=True)["track"]
+    tm = build_track_model(track, sids, corpus_root=root)
+    model = fit(car, sids, tm, corpus_root=root, k_folds=2, seed=0xC0FFEE)
+    assert model.feature_schema_version == ENV_FEATURE_SCHEMA_VERSION
+    assert model.feature_schema_version == 2
+
+
+def test_fit_per_quadruple_x_has_thirteen_features(
+    bmw_sebring_corpus: tuple[Path, list[str]],
+) -> None:
+    """Each fitter trains on (1 param + 12 env) = 13 features under v2.
+
+    Re-running the fitter on a single quadruple is the cheapest way to
+    assert the per-row width — we just look at the trained estimator's
+    `n_features_in_`. GP wraps it in `_gp`, RF wraps it in `_rf`.
+    """
+    root, sids = bmw_sebring_corpus
+    sess_df = sessions(corpus_root=root)
+    car = sess_df.row(0, named=True)["car"]
+    track = sess_df.row(0, named=True)["track"]
+    tm = build_track_model(track, sids, corpus_root=root)
+    model = fit(car, sids, tm, corpus_root=root, k_folds=2, seed=0xC0FFEE)
+    for record in model.fitters.values():
+        if not record.fitter.is_trained:
+            continue
+        est = (
+            getattr(record.fitter, "_gp", None)
+            or getattr(record.fitter, "_rf", None)
+        )
+        if est is None:
+            continue
+        assert est.n_features_in_ == 13, (
+            f"expected 1 param + 12 env = 13 features, got {est.n_features_in_}"
+        )
+        return
+    pytest.skip("no trained fitter to inspect")
+
+
+def test_v1_pickle_revives_with_default_schema_version() -> None:
+    """Pre-S2.2 pickles lacked `feature_schema_version`; revive must backfill v1.
+
+    Frozen+slots dataclasses pickle as a positional list ordered by
+    `__slots__`. A pre-S2.2 pickle is shorter by one element (no
+    `feature_schema_version` slot at the tail), and `__setstate__` must
+    backfill v1 rather than leaving the slot uninitialised.
+    """
+    from racingoptimizer.physics.model import PhysicsModel
+
+    # Pre-S2.2 slot list: 10 elements (no feature_schema_version).
+    legacy_state = [
+        "bmw",                       # car
+        ("legacy_sid",),             # session_ids
+        {"legacy_sid": "sebring"},   # track_models_used
+        {},                          # fitters
+        {},                          # ontology
+        None,                        # constraints
+        (),                          # untrained_parameters
+        False,                       # aero_correction_available
+        {},                          # baseline_setup
+        0xC0FFEE,                    # seed
+    ]
+    instance = PhysicsModel.__new__(PhysicsModel)
+    instance.__setstate__(legacy_state)
+    assert instance.feature_schema_version == 1, (
+        "v1 pickle (no feature_schema_version slot) must backfill to 1"
+    )
+    assert instance.car == "bmw"
+
+
+def test_pickle_round_trip_preserves_v2_schema() -> None:
+    """Round-trip through pickle preserves `feature_schema_version=2` for new models.
+
+    Catches regressions in `__setstate__` — the slot must be populated
+    from the positional list pickle emits.
+    """
+    import pickle as _pickle
+
+    from racingoptimizer.physics.model import PhysicsModel
+
+    m = PhysicsModel(car="bmw", session_ids=("s1",))
+    revived = _pickle.loads(  # noqa: S301 — controlled fixture
+        _pickle.dumps(m, protocol=_pickle.HIGHEST_PROTOCOL)
+    )
+    assert revived.car == "bmw"
+    assert revived.feature_schema_version == 2
