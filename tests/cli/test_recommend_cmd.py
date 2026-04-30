@@ -20,7 +20,11 @@ def test_unknown_car_exits_2(tmp_corpus: Path) -> None:
     assert "unknown car" in result.output.lower()
 
 
-def test_unknown_track_exits_2(multi_lap_ibt: Path, tmp_corpus: Path) -> None:
+def test_unknown_track_extrapolates_from_donor(multi_lap_ibt: Path, tmp_corpus: Path) -> None:
+    """After S2.6 (gap #21), an unknown track no longer exits 2 — it extrapolates
+    from the most-similar trained track and renders with a warning. Exit 2 is
+    reserved for cases where the car has zero training data on ANY track.
+    """
     runner = CliRunner()
     runner.invoke(main, ["learn", str(multi_lap_ibt), "--corpus-root", str(tmp_corpus)])
     result = runner.invoke(
@@ -28,8 +32,9 @@ def test_unknown_track_exits_2(multi_lap_ibt: Path, tmp_corpus: Path) -> None:
         ["recommend", "bmw", "monza_unknown", "--corpus-root", str(tmp_corpus)],
         catch_exceptions=False,
     )
-    assert result.exit_code == 2
-    assert "monza_unknown" in result.output
+    assert result.exit_code == 0, result.output
+    # Warning must mention the unknown track + the donor track.
+    assert "monza_unknown" in result.output or "untrained" in result.output.lower()
 
 
 def test_recommend_sebring_succeeds(multi_lap_ibt: Path, tmp_corpus: Path) -> None:
