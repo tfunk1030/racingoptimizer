@@ -72,6 +72,11 @@ DEFAULT_CHANNELS: tuple[str, ...] = (
     "RFrideHeight",
     "LRrideHeight",
     "RRrideHeight",
+    # per-wheel speed (spec §6 traction utilisation)
+    "LFspeed",
+    "RFspeed",
+    "LRspeed",
+    "RRspeed",
     # environment quintet (spec §7 EnvironmentFrame contract)
     "AirDensity",
     "TrackTempCrew",
@@ -230,14 +235,40 @@ def _aggregate(
         "SteeringWheelAngle", "YawRate", "Roll", "RollRate",
         "LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl",
         "LFrideHeight", "RFrideHeight", "LRrideHeight", "RRrideHeight",
+        "LFspeed", "RFspeed", "LRspeed", "RRspeed",
         "AirDensity", "TrackTempCrew", "WindVel", "WindDir", "TrackWetness",
         "data_quality_mask",
     )}
+
+    # Spec §6 derived-column gates. Each conditional block below assumes the
+    # whole quad is present — Acura ARX-06 telemetry drops the *shockDefl set
+    # entirely so these columns are simply omitted for that car.
+    has_shocks = all(
+        has[c] for c in ("LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl")
+    )
+    has_ride_heights = all(
+        has[c] for c in ("LFrideHeight", "RFrideHeight", "LRrideHeight", "RRrideHeight")
+    )
+    has_wheel_speeds = all(
+        has[c] for c in ("LFspeed", "RFspeed", "LRspeed", "RRspeed")
+    )
 
     # Drop out-of-corner samples up front; defaults exclude them per spec.
     inner = df.filter(pl.col("corner_id") != -1)
     if inner.height == 0:
         return _empty_frame(has)
+
+    # Materialise per-sample damper velocity (mm/s) before group_by so the
+    # diff stays within the lap. Raw shockDefl is in METERS; * 1000 -> mm/s.
+    # The leading sample's diff is null; Polars aggregates ignore nulls.
+    if has_shocks:
+        dt = pl.col("t_s").diff()
+        inner = inner.with_columns(
+            [
+                ((pl.col(src).diff() / dt).abs() * 1000.0).alias(f"_v_{src}")
+                for src in ("LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl")
+            ]
+        )
 
     aggs: list[pl.Expr] = [
         pl.len().cast(pl.UInt32).alias("n_samples"),
@@ -297,6 +328,9 @@ def _aggregate(
         aggs.append(
             pl.col("Roll").abs().max().cast(pl.Float32).alias("roll_max_rad")
         )
+        aggs.append(
+            pl.col("Roll").mean().cast(pl.Float32).alias("roll_angle_mean_rad")
+        )
     if has["RollRate"]:
         aggs.append(
             pl.col("RollRate").abs().max().cast(pl.Float32).alias("roll_rate_max_rad_s")
@@ -322,6 +356,59 @@ def _aggregate(
         if has[src]:
             aggs.append(pl.col(src).mean().cast(pl.Float32).alias(alias))
 
+    # Spec §6: load-transfer asymmetry. Sign convention:
+    #   positive = right-front + left-rear loaded.
+    # Raw shockDefl is meters; convert to mm via * 1000.
+    if has_shocks:
+        asym_mm = (
+            (pl.col("LFshockDefl") + pl.col("RRshockDefl"))
+            - (pl.col("RFshockDefl") + pl.col("LRshockDefl"))
+        ) * 1000.0
+        aggs.append(
+            asym_mm.mean().cast(pl.Float32).alias("load_transfer_asymmetry_mean")
+        )
+
+    # Spec §6: traction utilisation.
+    # (max(*Speed) - min(*Speed)) / max(Speed, eps), clipped to [0, 1].
+    if has_wheel_speeds and has["Speed"]:
+        wheels = (pl.col("LFspeed"), pl.col("RFspeed"), pl.col("LRspeed"), pl.col("RRspeed"))
+        wheel_max = pl.max_horizontal(*wheels)
+        wheel_min = pl.min_horizontal(*wheels)
+        speed_floor = pl.max_horizontal(pl.col("Speed"), pl.lit(1e-6))
+        traction_util = ((wheel_max - wheel_min) / speed_floor).clip(0.0, 1.0)
+        aggs.append(
+            traction_util.mean().cast(pl.Float32).alias("traction_util_mean")
+        )
+
+    # Spec §6: aero-platform front/rear ride-height means + pitch.
+    # Raw rideHeight is meters; convert to mm via * 1000.
+    # Sign convention: pitch_mm = rear_rh - front_rh (positive = nose-down rake).
+    if has_ride_heights:
+        front_rh_mm = ((pl.col("LFrideHeight") + pl.col("RFrideHeight")) / 2.0) * 1000.0
+        rear_rh_mm = ((pl.col("LRrideHeight") + pl.col("RRrideHeight")) / 2.0) * 1000.0
+        aggs.append(
+            front_rh_mm.mean().cast(pl.Float32).alias("aero_platform_front_rh_mean_mm")
+        )
+        aggs.append(
+            rear_rh_mm.mean().cast(pl.Float32).alias("aero_platform_rear_rh_mean_mm")
+        )
+        aggs.append(
+            (rear_rh_mm - front_rh_mm)
+            .mean()
+            .cast(pl.Float32)
+            .alias("aero_platform_pitch_mean_mm")
+        )
+
+    # Spec §6: damper velocities.
+    # p99 = max p99 across the four corners; mean = mean of per-corner means.
+    # Pre-computed `_v_*shockDefl` columns are already abs(mm/s).
+    if has_shocks:
+        v_cols = ("_v_LFshockDefl", "_v_RFshockDefl", "_v_LRshockDefl", "_v_RRshockDefl")
+        max_p99 = pl.max_horizontal(*[pl.col(c).quantile(0.99) for c in v_cols])
+        mean_of_means = pl.mean_horizontal(*[pl.col(c).mean() for c in v_cols])
+        aggs.append(max_p99.cast(pl.Float32).alias("damper_velocity_p99_mms"))
+        aggs.append(mean_of_means.cast(pl.Float32).alias("damper_velocity_mean_mms"))
+
     if has["AirDensity"]:
         aggs.append(pl.col("AirDensity").mean().cast(pl.Float32).alias("air_density_mean"))
     if has["TrackTempCrew"]:
@@ -338,11 +425,15 @@ def _aggregate(
 
     if has["data_quality_mask"]:
         # Cast bool->float before averaging; the placeholder mask is all-True
-        # today and slice D wires the real per-sample mask in later.
+        # today and slice D wires the real per-sample mask in later. Spec §6
+        # column name is `data_quality_clean_frac` (0..1 fraction of clean
+        # samples in the phase) — NOT a 0..100 percentage.
         aggs.append(
-            (pl.col("data_quality_mask").cast(pl.Float32).mean() * 100.0)
+            pl.col("data_quality_mask")
             .cast(pl.Float32)
-            .alias("data_quality_pct")
+            .mean()
+            .cast(pl.Float32)
+            .alias("data_quality_clean_frac")
         )
 
     grouped = inner.group_by(["corner_id", "phase"]).agg(aggs)
@@ -431,8 +522,11 @@ def _output_columns(present: list[str]) -> list[str]:
         "steering_mean_rad",
         "yaw_rate_max_rad_s",
         "roll_max_rad",
+        "roll_angle_mean_rad",
         "roll_rate_max_rad_s",
         "understeer_angle_mean_rad",
+        "load_transfer_asymmetry_mean",
+        "traction_util_mean",
         "lf_shock_defl_p99_mm",
         "rf_shock_defl_p99_mm",
         "lr_shock_defl_p99_mm",
@@ -441,12 +535,17 @@ def _output_columns(present: list[str]) -> list[str]:
         "rf_ride_height_mean_mm",
         "lr_ride_height_mean_mm",
         "rr_ride_height_mean_mm",
+        "aero_platform_front_rh_mean_mm",
+        "aero_platform_rear_rh_mean_mm",
+        "aero_platform_pitch_mean_mm",
+        "damper_velocity_p99_mms",
+        "damper_velocity_mean_mms",
         "air_density_mean",
         "track_temp_c_mean",
         "wind_vel_ms_mean",
         "wind_dir_deg_mean",
         "track_wetness_mean",
-        "data_quality_pct",
+        "data_quality_clean_frac",
     ]
     present_set = set(present)
     return [c for c in canonical if c in present_set]
@@ -488,11 +587,33 @@ def _empty_frame(has: dict[str, bool]) -> pl.DataFrame:
         schema["yaw_rate_max_rad_s"] = pl.Float32
     if has["Roll"]:
         schema["roll_max_rad"] = pl.Float32
+        schema["roll_angle_mean_rad"] = pl.Float32
     if has["RollRate"]:
         schema["roll_rate_max_rad_s"] = pl.Float32
     for src, alias in _SHOCK_DEFL_P99_COLUMNS + _RIDE_HEIGHT_MEAN_COLUMNS:
         if has[src]:
             schema[alias] = pl.Float32
+
+    # Spec §6 derived columns gated by the full four-corner channel quad.
+    has_shocks_e = all(
+        has[c] for c in ("LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl")
+    )
+    has_ride_heights_e = all(
+        has[c] for c in ("LFrideHeight", "RFrideHeight", "LRrideHeight", "RRrideHeight")
+    )
+    has_wheel_speeds_e = all(
+        has[c] for c in ("LFspeed", "RFspeed", "LRspeed", "RRspeed")
+    )
+    if has_shocks_e:
+        schema["load_transfer_asymmetry_mean"] = pl.Float32
+        schema["damper_velocity_p99_mms"] = pl.Float32
+        schema["damper_velocity_mean_mms"] = pl.Float32
+    if has_wheel_speeds_e and has["Speed"]:
+        schema["traction_util_mean"] = pl.Float32
+    if has_ride_heights_e:
+        schema["aero_platform_front_rh_mean_mm"] = pl.Float32
+        schema["aero_platform_rear_rh_mean_mm"] = pl.Float32
+        schema["aero_platform_pitch_mean_mm"] = pl.Float32
     if has["AirDensity"]:
         schema["air_density_mean"] = pl.Float32
     if has["TrackTempCrew"]:
@@ -504,7 +625,7 @@ def _empty_frame(has: dict[str, bool]) -> pl.DataFrame:
     if has["TrackWetness"]:
         schema["track_wetness_mean"] = pl.Float32
     if has["data_quality_mask"]:
-        schema["data_quality_pct"] = pl.Float32
+        schema["data_quality_clean_frac"] = pl.Float32
 
     ordered = _output_columns(list(schema.keys()))
     return pl.DataFrame(schema={k: schema[k] for k in ordered})

@@ -50,3 +50,51 @@ def test_corner_phase_states_runs_for_each_canonical_car(
     out = corner_phase_states(sid, int(valid["lap_index"][0]), corpus_root=tmp_corpus)
     assert out.height > 0, f"no corners detected for {car_key} fixture {fixture.name}"
     assert (out["corner_id"] >= 0).all()
+
+    # The S2.1 rename is universal: data_quality_pct must NOT appear, and
+    # data_quality_clean_frac (0..1 fraction) MUST appear for every car.
+    assert "data_quality_pct" not in out.columns, (
+        f"{car_key}: data_quality_pct renamed to data_quality_clean_frac in S2.1"
+    )
+    assert "data_quality_clean_frac" in out.columns
+    dq = out["data_quality_clean_frac"]
+    assert dq.min() >= 0.0
+    assert dq.max() <= 1.0
+
+    # Channel-conditional spec §6 columns. Acura ARX-06 telemetry drops the
+    # *shockDefl set entirely (per CLAUDE.md "Acura is a known divergence"),
+    # so the shock-gated columns are absent for Acura but present for every
+    # other car. Drive presence off the actual schema.
+    has_shock_cols = "lf_shock_defl_p99_mm" in out.columns
+    has_rh_cols = "lf_ride_height_mean_mm" in out.columns
+    has_wheel_speeds = car_key != "acura"  # all 4 non-Acura cars expose them
+
+    if has_shock_cols:
+        assert "load_transfer_asymmetry_mean" in out.columns
+        assert "damper_velocity_p99_mms" in out.columns
+        assert "damper_velocity_mean_mms" in out.columns
+        assert (out["damper_velocity_p99_mms"] >= 0.0).all()
+        assert (out["damper_velocity_mean_mms"] >= 0.0).all()
+        # mean <= p99 by construction.
+        diffs = out["damper_velocity_p99_mms"] - out["damper_velocity_mean_mms"]
+        assert (diffs >= -1e-3).all()
+    else:
+        # Acura — gated columns are correctly omitted.
+        assert "load_transfer_asymmetry_mean" not in out.columns
+        assert "damper_velocity_p99_mms" not in out.columns
+        assert "damper_velocity_mean_mms" not in out.columns
+
+    if has_rh_cols:
+        assert "aero_platform_front_rh_mean_mm" in out.columns
+        assert "aero_platform_rear_rh_mean_mm" in out.columns
+        assert "aero_platform_pitch_mean_mm" in out.columns
+
+    if has_wheel_speeds:
+        assert "traction_util_mean" in out.columns
+        tu = out["traction_util_mean"]
+        assert tu.min() >= 0.0
+        assert tu.max() <= 1.0
+
+    if "Roll" in out.columns or "roll_angle_mean_rad" in out.columns:
+        # Roll channel is present on every fixture so the signed mean lands.
+        assert "roll_angle_mean_rad" in out.columns
