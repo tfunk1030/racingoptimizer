@@ -111,6 +111,15 @@ def test_corner_phase_states_against_real_bmw_lap(
     assert dvm.max() < 5000.0
     # mean must be <= p99 by construction.
     assert (dvm <= dvp + 1e-3).all()
+    # Empirical understeer signal (S2.10) — the textbook `Speed^2` denominator
+    # is gone. Per-phase mean of `SteeringWheelAngle - k_bmw * AccelLat` is
+    # bounded by |max steering wheel angle| + k * |max AccelLat| (roughly
+    # 2 rad + 0.06 * 25 m/s² ≈ 3.5 rad upper envelope).
+    us = out["understeer_angle_mean_rad"]
+    assert us.is_finite().all(), "understeer must be finite under the new formula"
+    assert us.abs().max() < 3.0, (
+        f"understeer signal exploded: max abs = {us.abs().max()} rad"
+    )
 
     # Sort order: rows ordered by (corner_id, phase_order).
     phase_order = {

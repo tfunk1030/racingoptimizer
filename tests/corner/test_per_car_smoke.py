@@ -98,3 +98,16 @@ def test_corner_phase_states_runs_for_each_canonical_car(
     if "Roll" in out.columns or "roll_angle_mean_rad" in out.columns:
         # Roll channel is present on every fixture so the signed mean lands.
         assert "roll_angle_mean_rad" in out.columns
+    # S2.10: empirical understeer signal must be present + finite + sane for
+    # every car. The textbook `Speed^2` denominator is gone; the per-car
+    # coefficient table guarantees a non-zero, distinguishable signal. The
+    # envelope tracks max(SteeringWheelAngle) + k * max(AccelLat) — for GTP
+    # cars that's ~2 rad + 0.07 * 25 m/s² ≈ 3.5 rad upper bound.
+    assert "understeer_angle_mean_rad" in out.columns
+    us = out["understeer_angle_mean_rad"]
+    assert us.is_finite().all(), (
+        f"{car_key}: understeer must be finite under the new formula"
+    )
+    assert us.abs().max() < 3.0, (
+        f"{car_key}: understeer signal exploded: max abs = {us.abs().max()} rad"
+    )

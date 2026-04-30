@@ -37,11 +37,57 @@ from racingoptimizer.corner.detect import detect_corners
 from racingoptimizer.corner.phase import Phase
 from racingoptimizer.ingest import catalog as cat
 from racingoptimizer.ingest.api import lap_data
+from racingoptimizer.ingest.detect import UnknownCarError, normalize_car_key
 from racingoptimizer.ingest.paths import (
     catalog_path,
     parquet_path,
     resolve_corpus_root,
 )
+
+# Stage-2 empirical understeer-signal coefficients (rad / m·s⁻²).
+#
+# VISION §3 forbids the textbook bicycle-model `Speed^2` denominator that
+# slice B used as a placeholder. Replace it with a per-car linear yaw-deficiency
+# proxy: `understeer_signal = SteeringWheelAngle - k(car) * AccelLat`.
+#
+# The seeded coefficients below are stepping-stones — they are an order-of-
+# magnitude calibration anchored to typical GTP steering racks (~0.06 rad of
+# wheel angle per m/s² of lateral demand). Stage 3 will refine `k_car`
+# empirically per session out of the physics fitter; until then these constants
+# keep the column finite and per-car-distinguishable.
+STEERING_GEOMETRY_COEFFICIENT: dict[str, float] = {
+    "bmw":      0.06,
+    "acura":    0.07,
+    "cadillac": 0.06,
+    "ferrari":  0.065,
+    "porsche":  0.065,
+}
+DEFAULT_STEERING_GEOMETRY_COEFFICIENT: float = 0.065
+
+
+def steering_geometry_for(car: str | None) -> float:
+    """Return the per-car understeer-signal coefficient (rad / m·s⁻²).
+
+    Accepts either a canonical car key (``"bmw"``) — which is what the catalog
+    persists on :class:`~racingoptimizer.ingest.catalog.SessionRow.car` — or a
+    raw iRacing identifier (``"bmwlmdh"``, ``"acuraarx06gtp"``) which is then
+    normalised via :func:`~racingoptimizer.ingest.detect.normalize_car_key`.
+    Lookups are case-insensitive.
+
+    Falls back to :data:`DEFAULT_STEERING_GEOMETRY_COEFFICIENT` when ``car``
+    is ``None``, empty, or does not resolve to a known canonical car key.
+    """
+    if not car:
+        return DEFAULT_STEERING_GEOMETRY_COEFFICIENT
+    key = car.strip().lower()
+    if key in STEERING_GEOMETRY_COEFFICIENT:
+        return STEERING_GEOMETRY_COEFFICIENT[key]
+    try:
+        key = normalize_car_key(key)
+    except UnknownCarError:
+        return DEFAULT_STEERING_GEOMETRY_COEFFICIENT
+    return STEERING_GEOMETRY_COEFFICIENT.get(key, DEFAULT_STEERING_GEOMETRY_COEFFICIENT)
+
 
 # Curated default channel pull for `corner_phase_states`. The names match
 # slice A's parquet column names (raw IBT channel names + the snake-cased
@@ -185,11 +231,16 @@ def corner_phase_states(
             "lap_index=-1 is the pre-grid sentinel; pass a real lap_index"
         )
 
+    # The session lookup gives us both `car` (for the steering-geom coefficient)
+    # and the parquet path used by the schema-only column intersect below.
+    sess = _get_session(session_id, corpus_root)
     if channels is None:
         # Some IBT recordings (e.g. Acura ARX-06 telemetry) drop the shock
         # deflection set entirely. Filter the curated default against the
         # parquet's actual schema so optional channels stay optional.
-        available = _parquet_columns(session_id, corpus_root)
+        root = resolve_corpus_root(Path(corpus_root) if corpus_root else None)
+        pq = parquet_path(root, car=sess.car, track=sess.track, session_id=session_id)
+        available = set(pl.scan_parquet(pq).collect_schema().names())
         pull = [c for c in DEFAULT_CHANNELS if c in available]
     else:
         pull = list(channels)
@@ -207,25 +258,24 @@ def corner_phase_states(
     th = DEFAULT_THRESHOLDS if thresholds is None else thresholds
     labeled = segment_lap(df, thresholds=th)
 
-    return _aggregate(labeled, session_id=session_id, lap_index=lap_index)
+    return _aggregate(labeled, session_id=session_id, lap_index=lap_index, car=sess.car)
 
 
-def _parquet_columns(session_id: str, corpus_root: Path | str | None) -> set[str]:
-    """Cheap schema-only lookup of the columns persisted for ``session_id``."""
+def _get_session(session_id: str, corpus_root: Path | str | None) -> cat.SessionRow:
+    """Look up the catalog row for ``session_id``, raising on unknown ids."""
     root = resolve_corpus_root(Path(corpus_root) if corpus_root else None)
     with cat.open_catalog(catalog_path(root)) as conn:
         sess = cat.get_session(conn, session_id)
-        if sess is None:
-            raise KeyError(f"unknown session_id: {session_id}")
-    pq = parquet_path(root, car=sess.car, track=sess.track, session_id=session_id)
-    return set(pl.scan_parquet(pq).collect_schema().names())
+    if sess is None:
+        raise KeyError(f"unknown session_id: {session_id}")
+    return sess
 
 
 # ---- internal aggregation ------------------------------------------------
 
 
 def _aggregate(
-    df: pl.DataFrame, *, session_id: str, lap_index: int
+    df: pl.DataFrame, *, session_id: str, lap_index: int, car: str | None = None
 ) -> pl.DataFrame:
     """Collapse a labeled lap into one row per ``(corner_id, phase)``."""
     cols = set(df.columns)
@@ -336,14 +386,14 @@ def _aggregate(
             pl.col("RollRate").abs().max().cast(pl.Float32).alias("roll_rate_max_rad_s")
         )
 
-    # Understeer angle: SteeringWheelAngle - 1.0 * AccelLat / max(Speed^2, 1.0)
-    # `1.0` is the steering_geom placeholder spec §6 / open-question 4 calls out;
-    # slice E will fit the per-car coefficient.
-    if has["Speed"]:
-        denom = pl.max_horizontal(pl.col("Speed").pow(2), pl.lit(1.0))
-        understeer_expr = pl.col("SteeringWheelAngle") - 1.0 * pl.col("AccelLat") / denom
-    else:
-        understeer_expr = pl.col("SteeringWheelAngle") - 1.0 * pl.col("AccelLat")
+    # Empirical yaw-deficiency signal (S2.10 — gap #10 in the VISION-completion
+    # plan). VISION §3 forbids the textbook bicycle-model `Speed^2` denominator
+    # the placeholder used. Stage 2 replaces it with the per-car linear proxy
+    #     understeer_signal = SteeringWheelAngle - k(car) * AccelLat
+    # where k(car) is seeded in `STEERING_GEOMETRY_COEFFICIENT`. Stage 3 will
+    # refine `k_car` empirically per session inside the physics fitter.
+    k_car = steering_geometry_for(car)
+    understeer_expr = pl.col("SteeringWheelAngle") - k_car * pl.col("AccelLat")
     aggs.append(understeer_expr.mean().cast(pl.Float32).alias("understeer_angle_mean_rad"))
 
     for src, alias in _SHOCK_DEFL_P99_COLUMNS:
@@ -631,4 +681,11 @@ def _empty_frame(has: dict[str, bool]) -> pl.DataFrame:
     return pl.DataFrame(schema={k: schema[k] for k in ordered})
 
 
-__all__ = ["DEFAULT_CHANNELS", "corner_phase_states", "segment_lap"]
+__all__ = [
+    "DEFAULT_CHANNELS",
+    "DEFAULT_STEERING_GEOMETRY_COEFFICIENT",
+    "STEERING_GEOMETRY_COEFFICIENT",
+    "corner_phase_states",
+    "segment_lap",
+    "steering_geometry_for",
+]

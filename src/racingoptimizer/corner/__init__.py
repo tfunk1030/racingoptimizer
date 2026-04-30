@@ -23,19 +23,25 @@ from racingoptimizer.corner.detect import detect_corners
 from racingoptimizer.corner.phase import CornerPhaseKey, Phase
 from racingoptimizer.corner.states import (
     DEFAULT_CHANNELS,
+    DEFAULT_STEERING_GEOMETRY_COEFFICIENT,
+    STEERING_GEOMETRY_COEFFICIENT,
     corner_phase_states,
     segment_lap,
+    steering_geometry_for,
 )
 
 __all__ = [
     "DEFAULT_CHANNELS",
+    "DEFAULT_STEERING_GEOMETRY_COEFFICIENT",
     "DEFAULT_THRESHOLDS",
     "CornerPhaseKey",
     "Phase",
     "PhaseThresholds",
+    "STEERING_GEOMETRY_COEFFICIENT",
     "assign_phases",
     "corner_phase_states",
     "detect_corners",
     "segment_lap",
+    "steering_geometry_for",
     "thresholds_for",
 ]
