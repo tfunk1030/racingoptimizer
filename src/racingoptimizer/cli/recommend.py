@@ -101,16 +101,9 @@ def recommend_cmd(
     car_key = _resolve_car_or_exit(car)
     root = resolve_corpus_root(corpus_root)
     catalog_sessions = _safe_sessions(car_key, corpus_root=root)
-    track_slug = _resolve_track_or_exit(track, catalog_sessions)
-
-    sessions_for_track = catalog_sessions.filter(pl.col("track") == track_slug)
-    if sessions_for_track.height == 0:
-        click.echo(
-            f"model has no data on ({car_key}, {track_slug}); "
-            f"run `optimize learn <ibt>` first",
-            err=True,
-        )
-        sys.exit(2)
+    track_slug, donor_track = _resolve_track_or_extrapolate(
+        track, catalog_sessions, car_key,
+    )
 
     pinned_overrides = _parse_pins(pins, wing=wing)
     constraints_table = load_constraints()
@@ -118,19 +111,30 @@ def recommend_cmd(
         constraints_table, car_key, pinned_overrides,
     )
 
-    session_ids = sorted(sessions_for_track["session_id"].to_list())
+    fit_track = donor_track or track_slug
+    sessions_for_fit = catalog_sessions.filter(pl.col("track") == fit_track)
+    session_ids = sorted(sessions_for_fit["session_id"].to_list())
     model = _build_or_load_model(
-        car_key, track_slug, session_ids, root, no_cache=no_cache,
+        car_key, fit_track, session_ids, root, no_cache=no_cache,
     )
 
     env = _env_from_overrides(
-        model=model, sessions=sessions_for_track,
+        model=model, sessions=sessions_for_fit,
         air_temp=air_temp, track_temp=track_temp,
         wind=wind, wetness=wetness,
     )
 
-    rec = model.recommend(track_slug, env, pinned_constraints)
+    rec = model.recommend(fit_track, env, pinned_constraints)
     rec, clamp_warnings, top_warnings = _post_clamp(rec, model, constraints_table)
+
+    if donor_track is not None:
+        rec = _force_sparse_regime(rec, track_slug)
+        top_warnings.insert(
+            0,
+            f"untrained track {track_slug}; extrapolated from {donor_track} "
+            f"({len(session_ids)} sessions). Treat all values as starting "
+            f"points; verify on track.",
+        )
 
     justifications = build_justifications(
         rec, model,
@@ -340,26 +344,62 @@ def _safe_sessions(car: str, *, corpus_root: Path) -> pl.DataFrame:
         sys.exit(4)
 
 
-def _resolve_track_or_exit(track: str, sessions: pl.DataFrame) -> str:
+def _resolve_track_or_extrapolate(
+    track: str, sessions: pl.DataFrame, car_key: str,
+) -> tuple[str, str | None]:
+    """Return (target_slug, donor_slug).
+
+    `donor_slug` is None when `track` matches a slug the car has been driven
+    on. When the car has never seen `track` but has data on at least one
+    other track, `target_slug` is the (normalised) requested slug and
+    `donor_slug` is the trained track with the most sessions — the model
+    will be fit there and recommendations extrapolated. When the car has no
+    other tracks ingested, exit 2 with the standard untrained message.
+    """
     needle = track.strip().lower()
     available = sorted(set(sessions["track"].to_list()))
     if needle in available:
-        return needle
+        return needle, None
     matches = [slug for slug in available if needle in slug]
-    if not matches:
-        click.echo(
-            f"unknown track {track!r}; available tracks for this car: "
-            f"{', '.join(available) if available else '(none)'}",
-            err=True,
-        )
-        sys.exit(2)
+    if len(matches) == 1:
+        return matches[0], None
     if len(matches) > 1:
         click.echo(
             f"ambiguous track {track!r}; candidates: {', '.join(matches)}",
             err=True,
         )
         sys.exit(2)
-    return matches[0]
+    if not available:
+        click.echo(
+            f"model has no data on ({car_key}, {needle}); "
+            f"run `optimize learn <ibt>` first",
+            err=True,
+        )
+        sys.exit(2)
+    counts = (
+        sessions.group_by("track")
+        .agg(pl.len().alias("n"))
+        .sort(["n", "track"], descending=[True, False])
+    )
+    return needle, str(counts["track"][0])
+
+
+def _force_sparse_regime(rec, target_track: str):
+    """Override every parameter's confidence regime to 'sparse' and retag track.
+
+    Used in the untrained-track extrapolation flow: the donor model produced
+    `rec`, but the user asked for a different track, so every confidence
+    must reflect the extrapolation gap.
+    """
+    new_params = {
+        name: (
+            value,
+            confidence if confidence.regime == "sparse"
+            else replace(confidence, regime="sparse"),
+        )
+        for name, (value, confidence) in rec.parameters.items()
+    }
+    return replace(rec, track=target_track, parameters=new_params)
 
 
 def _parse_pins(pins: tuple[str, ...], *, wing: float | None) -> dict[str, float]:
