@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import pickle
 import sys
 from dataclasses import replace
 from pathlib import Path
 
 import click
+import numpy as np
 import polars as pl
 
 from racingoptimizer.confidence import Confidence
@@ -127,6 +129,7 @@ def recommend_cmd(
         model=model, sessions=sessions_for_track,
         air_temp=air_temp, track_temp=track_temp,
         wind=wind, wetness=wetness,
+        corpus_root=root,
     )
 
     rec = model.recommend(track_slug, env, pinned_constraints)
@@ -220,7 +223,7 @@ def compare_cmd(
     setup_a_full = _hydrate_setup(model, setup_a)
     setup_b_full = _hydrate_setup(model, setup_b)
 
-    env = _env_from_overrides(model=model, sessions=catalog_sessions)
+    env = _env_from_overrides(model=model, sessions=catalog_sessions, corpus_root=root)
     score_a = float(model.score_setup(setup_a_full, track, env))
     score_b = float(model.score_setup(setup_b_full, track, env))
 
@@ -469,12 +472,13 @@ def _env_from_overrides(
     *,
     model,
     sessions: pl.DataFrame,
+    corpus_root: Path,
     air_temp: float | None = None,
     track_temp: float | None = None,
     wind: float | None = None,
     wetness: float | None = None,
 ) -> EnvironmentFrame:
-    medians = _median_environment(model, sessions)
+    medians = _environment_from_corpus(sessions, corpus_root=corpus_root)
     return EnvironmentFrame(
         air_density=medians["air_density"],
         track_temp_c=track_temp if track_temp is not None else medians["track_temp_c"],
@@ -484,38 +488,122 @@ def _env_from_overrides(
     )
 
 
-def _median_environment(model, sessions: pl.DataFrame) -> dict[str, float]:
-    """Median per-channel environment from the catalog `weather_summary` JSON.
+# Per-sample env channel name in IBT/parquet -> EnvironmentFrame field key.
+# Wind direction is handled separately because circular medians cannot be
+# pooled with arithmetic medians.
+_ENV_CHANNELS: dict[str, str] = {
+    "AirDensity": "air_density",
+    "TrackTempCrew": "track_temp_c",
+    "WindVel": "wind_vel_ms",
+    "TrackWetness": "track_wetness",
+}
+_WIND_DIR_CHANNEL = "WindDir"
 
-    Falls back to standard atmospheric defaults when telemetry omits weather.
+# VISION §10 standard-atmosphere fallback when no clean samples exist.
+_ENV_DEFAULTS: dict[str, float] = {
+    "air_density": 1.225,
+    "track_temp_c": 25.0,
+    "wind_vel_ms": 0.0,
+    "wind_dir_deg": 0.0,
+    "track_wetness": 0.0,
+}
+
+
+def _environment_from_corpus(
+    sessions: pl.DataFrame, *, corpus_root: Path,
+) -> dict[str, float]:
+    """Per-channel median across every clean sample in the (car, track) corpus.
+
+    VISION §10 + master-plan rule: every data point carries env context, and
+    "do not collapse to session averages." So we walk valid laps and pull the
+    per-sample weather time-series from each lap's parquet slice, filter to
+    `data_quality_mask == True`, then take per-channel medians (circular
+    median for `WindDir`). Falls back to standard-atmosphere defaults when
+    zero clean samples are available.
     """
-    defaults = {
-        "air_density": 1.225,
-        "track_temp_c": 25.0,
-        "wind_vel_ms": 0.0,
-        "wind_dir_deg": 0.0,
-        "track_wetness": 0.0,
-    }
-    parsed: list[dict] = []
-    for raw in sessions["weather_summary"].to_list():
-        if not raw:
-            continue
+    if sessions.height == 0:
+        return dict(_ENV_DEFAULTS)
+
+    columns = list(_ENV_CHANNELS) + [_WIND_DIR_CHANNEL, "data_quality_mask"]
+    accum: dict[str, list[np.ndarray]] = {c: [] for c in columns if c != "data_quality_mask"}
+
+    for sid in sessions["session_id"].to_list():
         try:
-            blob = json.loads(raw)
-        except json.JSONDecodeError:
+            valid_laps = ingest_api.laps(
+                session_id=sid, valid_only=True, corpus_root=corpus_root,
+            )
+        except Exception:
             continue
-        if isinstance(blob, dict):
-            parsed.append(blob)
-    if not parsed:
-        return defaults
-    out: dict[str, float] = {}
-    for key, default in defaults.items():
-        values = [
-            float(b[key]) for b in parsed
-            if isinstance(b.get(key), (int, float))
-        ]
-        out[key] = float(sorted(values)[len(values) // 2]) if values else default
+        for lap_idx in valid_laps["lap_index"].to_list():
+            df = _safe_lap_data(sid, int(lap_idx), columns, corpus_root)
+            if df is None or df.height == 0:
+                continue
+            if "data_quality_mask" in df.columns:
+                df = df.filter(pl.col("data_quality_mask"))
+            if df.height == 0:
+                continue
+            for channel in accum:
+                if channel in df.columns:
+                    accum[channel].append(df[channel].to_numpy())
+
+    out: dict[str, float] = dict(_ENV_DEFAULTS)
+    for channel, field in _ENV_CHANNELS.items():
+        chunks = accum[channel]
+        if not chunks:
+            continue
+        stacked = np.concatenate(chunks)
+        if stacked.size:
+            out[field] = float(np.median(stacked))
+
+    wind_chunks = accum[_WIND_DIR_CHANNEL]
+    if wind_chunks:
+        stacked_dir = np.concatenate(wind_chunks)
+        if stacked_dir.size:
+            out["wind_dir_deg"] = _circular_median_deg(stacked_dir)
     return out
+
+
+def _safe_lap_data(
+    session_id: str, lap_index: int, channels: list[str], corpus_root: Path,
+) -> pl.DataFrame | None:
+    """Read lap_data, gracefully skipping channels missing from a parquet.
+
+    Per-car channel coverage is uneven (e.g. Acura lacks shock-deflection
+    columns). We retry with the intersection of requested channels and the
+    parquet's actual schema rather than letting a single missing column
+    poison every lap.
+    """
+    try:
+        return ingest_api.lap_data(
+            session_id, lap_index, channels=channels, corpus_root=corpus_root,
+        )
+    except pl.exceptions.ColumnNotFoundError:
+        pass
+    except Exception:
+        return None
+    try:
+        full = ingest_api.lap_data(
+            session_id, lap_index, channels=None, corpus_root=corpus_root,
+        )
+    except Exception:
+        return None
+    keep = [c for c in channels if c in full.columns]
+    return full.select(keep) if keep else None
+
+
+def _circular_median_deg(angles_deg: np.ndarray) -> float:
+    """Circular (directional) median of compass-bearing samples in degrees.
+
+    Wind direction is an angle on the unit circle, so the arithmetic median
+    of e.g. [350, 10] is 180 — the wrong direction. Convert to unit vectors,
+    take the componentwise median, and project back to a 0..360 bearing.
+    """
+    radians = np.deg2rad(angles_deg.astype(np.float64))
+    x = float(np.median(np.cos(radians)))
+    y = float(np.median(np.sin(radians)))
+    if x == 0.0 and y == 0.0:
+        return 0.0
+    return float(math.degrees(math.atan2(y, x)) % 360.0)
 
 
 def _post_clamp(rec, model, constraints_table: ConstraintsTable):
