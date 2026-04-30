@@ -382,8 +382,19 @@ def _aero_surface_or_none(model: PhysicsModel) -> AeroSurface | None:
 
 
 def _corner_phase_keys(model: PhysicsModel) -> list[tuple[int, str]]:
+    """Distinct (corner_id, phase) tuples this model has any fitter for.
+
+    Stage-3 keys are 3-tuples (corner_id, phase, channel); legacy keys are
+    4-tuples (param, corner_id, phase, channel). This helper handles both.
+    """
     seen: set[tuple[int, str]] = set()
-    for (_param, corner_id, phase, _channel) in model.fitters:
+    for key in model.fitters:
+        if len(key) == 3:
+            corner_id, phase, _channel = key
+        elif len(key) == 4:
+            _param, corner_id, phase, _channel = key
+        else:
+            continue
         seen.add((int(corner_id), str(phase)))
     return sorted(seen)
 

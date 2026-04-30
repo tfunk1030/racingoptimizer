@@ -157,9 +157,16 @@ def _cached_weights(model: PhysicsModel, track: str) -> dict[int, float]:
     try:
         weights = weight_corners(track, model)
     except Exception:  # pragma: no cover — corpus-shape dependent
-        corners = sorted({int(c) for (_p, c, _ph, _ch) in model.fitters})
+        corners: set[int] = set()
+        for key in model.fitters:
+            if len(key) == 3:
+                corners.add(int(key[0]))
+            elif len(key) == 4:
+                corners.add(int(key[1]))
+        sorted_corners = sorted(corners)
         weights = (
-            {c: 1.0 / len(corners) for c in corners} if corners else {}
+            {c: 1.0 / len(sorted_corners) for c in sorted_corners}
+            if sorted_corners else {}
         )
     _WEIGHTS_CACHE[key] = weights
     return weights
@@ -175,9 +182,16 @@ _TRUST_FRACTION: dict[str, float] = {"sparse": 0.30, "noisy": 0.50}
 
 
 def _median_regime(model: PhysicsModel, parameter: str) -> str:
+    """Median regime across every fitter that depends on `parameter`.
+
+    Stage 3: each fitter is keyed by ``(corner_id, phase, channel)`` and
+    consumes the full setup vector via `record.feature_names`. We treat a
+    fitter as depending on `parameter` iff its `feature_names` mentions
+    the parameter. Pre-Stage-3 keys carry the parameter in slot 0.
+    """
     ranks: list[int] = []
-    for (param, _c, _ph, _ch), record in model.fitters.items():
-        if param != parameter:
+    for key, record in model.fitters.items():
+        if not _record_depends_on(key, record, parameter):
             continue
         conf = Confidence.derive(
             value=0.0,
@@ -189,6 +203,17 @@ def _median_regime(model: PhysicsModel, parameter: str) -> str:
     if not ranks:
         return "sparse"
     return _RANK_TO_REGIME[int(median(ranks))]
+
+
+def _record_depends_on(key: tuple, record, parameter: str) -> bool:
+    """Stage-3-aware: does this FitRecord's input vector include `parameter`?"""
+    feature_names = getattr(record, "feature_names", ())
+    if feature_names:
+        return parameter in feature_names
+    # Legacy v1/v2 keys: (param, corner, phase, channel).
+    if len(key) == 4:
+        return key[0] == parameter
+    return False
 
 
 def _trust_bounds(
@@ -231,8 +256,8 @@ def _parameter_confidence(model: PhysicsModel, parameter: str) -> Confidence:
     n_samples_vals: list[int] = []
     cv_vals: list[float] = []
     signal_vals: list[float] = []
-    for (param, _c, _ph, _ch), record in model.fitters.items():
-        if param != parameter:
+    for key, record in model.fitters.items():
+        if not _record_depends_on(key, record, parameter):
             continue
         n_samples_vals.append(int(record.n_samples))
         cv_vals.append(float(record.cv_residual_std))

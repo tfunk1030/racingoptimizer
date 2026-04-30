@@ -181,14 +181,16 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
     # Iterate every trained fitter and check (a) the per-fitter prediction
     # falls within signal_std × 0.3 of the observed channel value, and (b)
     # the Confidence.derive(...) bracket from this fitter contains the
-    # observation. The bracket width follows the spec §3 derivation —
-    # value ± 1.96 × cv_residual_std with the regime tag derived from
-    # n_samples and noise_ratio. Calibration at this grain is what spec
-    # §13's "≥ 90% of held-out predictions" promise refers to (each fitter
-    # predicts ONE channel; the aggregate sum-of-fitters is a separate
-    # design choice that the score-side test exercises).
-    for (param, corner_id, phase_str, channel), record in model.fitters.items():
+    # observation. Stage-3 fitters consume the joint setup vector + 12 env
+    # channels; rebuild the row in the trained order via `feature_names`.
+    for key, record in model.fitters.items():
         if not record.fitter.is_trained:
+            continue
+        if len(key) == 3:
+            corner_id, phase_str, channel = key
+        elif len(key) == 4:
+            _legacy_param, corner_id, phase_str, channel = key
+        else:
             continue
         obs_row = observed_by_cp.get((int(corner_id), phase_str))
         if obs_row is None:
@@ -204,18 +206,26 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
             continue
         if math.isnan(obs_f):
             continue
-        param_value = setup.get(param)
-        if param_value is None:
-            param_value = model.baseline_setup.get(param)
-        if param_value is None or (
-            isinstance(param_value, float) and math.isnan(param_value)
-        ):
-            continue
 
         env_features = _env_vector_from_row(obs_row)
-        x = np.concatenate(
-            [np.array([float(param_value)], dtype=np.float64), env_features]
-        ).reshape(1, -1)
+        # Stage-3: assemble the full feature row in the fitter's trained
+        # order. Legacy v2: just `[param, env...]`.
+        if record.feature_names:
+            from racingoptimizer.physics.model import _assemble_feature_row
+            x = _assemble_feature_row(
+                record.feature_names, setup, model.baseline_setup, env_features,
+            ).reshape(1, -1)
+        else:
+            param_value = setup.get(_legacy_param)  # type: ignore[name-defined]
+            if param_value is None:
+                param_value = model.baseline_setup.get(_legacy_param)  # type: ignore[name-defined]
+            if param_value is None or (
+                isinstance(param_value, float) and math.isnan(param_value)
+            ):
+                continue
+            x = np.concatenate(
+                [np.array([float(param_value)], dtype=np.float64), env_features]
+            ).reshape(1, -1)
         try:
             mu, _sigma = record.fitter.predict(x)
         except (ValueError, np.linalg.LinAlgError):

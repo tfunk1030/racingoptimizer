@@ -282,7 +282,10 @@ def status_cmd(car: str, as_json: bool, corpus_root: Path | None) -> None:
             click.echo(render_status_text(empty))
         return
 
+    from racingoptimizer.physics.io_log import load_latest_fit_quality
+
     coverage: list[TrackCoverage] = []
+    fit_quality_trends: list[str] = []
     for track_slug in sorted(set(sessions["track"].to_list())):
         sub = sessions.filter(pl.col("track") == track_slug)
         sids = sorted(sub["session_id"].to_list())
@@ -291,19 +294,38 @@ def status_cmd(car: str, as_json: bool, corpus_root: Path | None) -> None:
         )
         n_clean = _approximate_clean_corner_phases(sids, root)
         regime = _coverage_regime(len(sids), valid_laps.height)
+
+        snapshot = load_latest_fit_quality(
+            corpus_root=root, car=car_key, track=track_slug,
+        )
+        fit_quality_value: float | None = (
+            float(snapshot.fit_quality) if snapshot is not None else None
+        )
+        if snapshot is not None and snapshot.prior_fit_quality is not None:
+            delta = snapshot.fit_quality - snapshot.prior_fit_quality
+            fit_quality_trends.append(
+                f"{track_slug} fit_quality: "
+                f"{snapshot.fit_quality:.3f} ({delta:+.3f} vs prior fit)"
+            )
+        elif snapshot is not None:
+            fit_quality_trends.append(
+                f"{track_slug} fit_quality: {snapshot.fit_quality:.3f} (first fit)"
+            )
+
         coverage.append(
             TrackCoverage(
                 track=track_slug,
                 n_sessions=len(sids),
                 n_valid_laps=int(valid_laps.height),
                 n_clean_corner_phases=int(n_clean),
-                fit_quality=None,
+                fit_quality=fit_quality_value,
                 regime=regime,
             )
         )
 
     overall = _overall_regime(coverage)
     notes = _status_notes()
+    notes.extend(fit_quality_trends)
 
     status = ModelStatus(
         car=car_key,
