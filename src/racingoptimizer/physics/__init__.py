@@ -14,6 +14,12 @@ Public API:
 """
 from __future__ import annotations
 
+from racingoptimizer.physics.baselines import (
+    DEFAULT_BASELINES,
+    CarBaselines,
+    baselines_for,
+    derive_baselines,
+)
 from racingoptimizer.physics.exceptions import InsufficientDataError, UntrainedError
 from racingoptimizer.physics.fitter import fit
 from racingoptimizer.physics.model import (
@@ -34,6 +40,8 @@ from racingoptimizer.physics.score import score_setup
 from racingoptimizer.physics.weights import weight_corners
 
 __all__ = [
+    "DEFAULT_BASELINES",
+    "CarBaselines",
     "CornerPhaseStateWithConfidence",
     "FitRecord",
     "InsufficientDataError",
@@ -43,6 +51,8 @@ __all__ = [
     "SUB_UTILIZATIONS",
     "SetupRecommendation",
     "UntrainedError",
+    "baselines_for",
+    "derive_baselines",
     "fit",
     "fittable_parameters",
     "ontology_for",

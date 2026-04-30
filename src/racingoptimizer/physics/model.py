@@ -15,6 +15,11 @@ from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import ConstraintsTable
 from racingoptimizer.context import EnvironmentFrame
 from racingoptimizer.corner import CornerPhaseKey, Phase
+from racingoptimizer.physics.baselines import (
+    DEFAULT_BASELINES,
+    CarBaselines,
+    default_baselines_for,
+)
 from racingoptimizer.physics.exceptions import UntrainedError
 from racingoptimizer.physics.fitters import FitterBase
 from racingoptimizer.physics.ontology import ParameterSpec
@@ -68,6 +73,22 @@ class PhysicsModel:
     aero_correction_available: bool = False
     baseline_setup: dict[str, float] = field(default_factory=dict)
     seed: int = 0xC0FFEE
+    # None on PhysicsModels pickled before this field existed; read via
+    # `resolved_baselines` for the cold-start fallback.
+    car_baselines: CarBaselines | None = None
+
+    @property
+    def resolved_baselines(self) -> CarBaselines:
+        """Return `car_baselines` if set, else the per-car cold-start default.
+
+        Backward-compat shim for pickles produced before the
+        `car_baselines` field existed.
+        """
+        if self.car_baselines is not None:
+            return self.car_baselines
+        return DEFAULT_BASELINES.get(
+            self.car, default_baselines_for(self.car),
+        )
 
     def score_setup(
         self,

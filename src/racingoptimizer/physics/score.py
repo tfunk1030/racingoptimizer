@@ -18,11 +18,17 @@ from racingoptimizer.confidence.confidence import Regime
 from racingoptimizer.constraints import clamp
 from racingoptimizer.context import EnvironmentFrame
 from racingoptimizer.corner import CornerPhaseKey, Phase
+from racingoptimizer.physics.baselines import CarBaselines
 from racingoptimizer.physics.model import CornerPhaseStateWithConfidence, PhysicsModel
 from racingoptimizer.physics.phase_weights import PHASE_WEIGHTS, SUB_UTILIZATIONS
 
 _SubFn = Callable[
-    [CornerPhaseStateWithConfidence, EnvironmentFrame, AeroSurface | None],
+    [
+        CornerPhaseStateWithConfidence,
+        EnvironmentFrame,
+        AeroSurface | None,
+        CarBaselines,
+    ],
     tuple[float, Confidence],
 ]
 
@@ -62,12 +68,13 @@ def grip(
     state: CornerPhaseStateWithConfidence,
     env: EnvironmentFrame,
     aero: AeroSurface | None,
+    baselines: CarBaselines,
 ) -> tuple[float, Confidence]:
     lat_g, conf = _channel_confidence(state, "accel_lat_g_max")
     if lat_g is None:
         return 0.5, _sparse_conf(0.5)
 
-    baseline = 1.5
+    baseline = float(baselines.aero_grip_baseline_g)
     if aero is None:
         max_g = baseline
     else:
@@ -84,11 +91,12 @@ def balance(
     state: CornerPhaseStateWithConfidence,
     env: EnvironmentFrame,
     aero: AeroSurface | None,
+    baselines: CarBaselines,
 ) -> tuple[float, Confidence]:
     us, conf = _channel_confidence(state, "understeer_angle_mean_rad")
     if us is None:
         return 0.5, _sparse_conf(0.5)
-    util = 1.0 - _clip01(abs(us) / 0.1)
+    util = 1.0 - _clip01(abs(us) / baselines.understeer_scale_rad)
     assert conf is not None
     return util, _confidence_with_value(conf, util)
 
@@ -97,10 +105,11 @@ def stability(
     state: CornerPhaseStateWithConfidence,
     env: EnvironmentFrame,
     aero: AeroSurface | None,
+    baselines: CarBaselines,
 ) -> tuple[float, Confidence]:
     yaw, yaw_conf = _channel_confidence(state, "yaw_rate_max_rad_s")
     if yaw is not None:
-        util = 1.0 - _clip01(yaw / 2.0)
+        util = 1.0 - _clip01(yaw / baselines.yaw_rate_scale_rad_s)
         assert yaw_conf is not None
         return util, _confidence_with_value(yaw_conf, util)
 
@@ -118,12 +127,13 @@ def traction(
     state: CornerPhaseStateWithConfidence,
     env: EnvironmentFrame,
     aero: AeroSurface | None,
+    baselines: CarBaselines,
 ) -> tuple[float, Confidence]:
     diff, conf = _channel_confidence(state, "wheel_speed_max_diff_ms")
     if diff is None:
         return 0.5, _sparse_conf(0.5)
     diff = max(diff, 0.0)
-    util = 1.0 - _clip01(diff / 5.0)
+    util = 1.0 - _clip01(diff / baselines.wheelspin_scale_ms)
     assert conf is not None
     return util, _confidence_with_value(conf, util)
 
@@ -132,6 +142,7 @@ def aero_eff(
     state: CornerPhaseStateWithConfidence,
     env: EnvironmentFrame,
     aero: AeroSurface | None,
+    baselines: CarBaselines,
 ) -> tuple[float, Confidence]:
     if aero is None:
         return 0.5, _sparse_conf(0.5)
@@ -153,6 +164,7 @@ def platform(
     state: CornerPhaseStateWithConfidence,
     env: EnvironmentFrame,
     aero: AeroSurface | None,
+    baselines: CarBaselines,
 ) -> tuple[float, Confidence]:
     rh_channels = (
         "lf_ride_height_mean_mm",
@@ -172,7 +184,7 @@ def platform(
         return 0.5, _sparse_conf(0.5)
     mean_rh = sum(rh_vals) / len(rh_vals)
     variance = sum((v - mean_rh) ** 2 for v in rh_vals) / len(rh_vals)
-    rh_penalty = _clip01(variance / 5.0)
+    rh_penalty = _clip01(variance / baselines.ride_height_variance_scale_mm)
 
     shock_channels = (
         "lf_shock_defl_p99_mm",
@@ -190,7 +202,7 @@ def platform(
         shock_confs.append(c)
 
     if shock_vals:
-        shock_penalty = _clip01(max(shock_vals) / 25.0)
+        shock_penalty = _clip01(max(shock_vals) / baselines.shock_defl_scale_mm)
         penalty = max(rh_penalty, shock_penalty)
         contribs = rh_confs + shock_confs
     else:
@@ -216,6 +228,7 @@ def aggregate_utilization(
     phase: Phase,
     env: EnvironmentFrame,
     aero: AeroSurface | None,
+    baselines: CarBaselines,
 ) -> tuple[float, Confidence]:
     weights = PHASE_WEIGHTS[phase]
     total = 0.0
@@ -227,7 +240,7 @@ def aggregate_utilization(
         w = weights[sub]
         if w == 0.0:
             continue
-        value, conf = _SUB_FUNCS[sub](state, env, aero)
+        value, conf = _SUB_FUNCS[sub](state, env, aero, baselines)
         total += w * value
         contribs.append((w, conf))
         rank = _REGIME_RANK[conf.regime]
@@ -280,7 +293,8 @@ def score_setup(
         weights = _resolve_weights(model, track)
     aero = _aero_surface_or_none(model)
     keys = _corner_phase_keys(model)
-    breakdown = _score_breakdown(model, setup, env, aero, keys, weights)
+    baselines = model.resolved_baselines
+    breakdown = _score_breakdown(model, setup, env, aero, keys, weights, baselines)
     return float(sum(breakdown.values()))
 
 
@@ -298,7 +312,8 @@ def score_breakdown(
         weights = _resolve_weights(model, track)
     aero = _aero_surface_or_none(model)
     keys = _corner_phase_keys(model)
-    return _score_breakdown(model, setup, env, aero, keys, weights)
+    baselines = model.resolved_baselines
+    return _score_breakdown(model, setup, env, aero, keys, weights, baselines)
 
 
 # ---- internals -----------------------------------------------------------
@@ -414,6 +429,7 @@ def _score_breakdown(
     aero: AeroSurface | None,
     keys: list[tuple[int, str]],
     weights: dict[int, float],
+    baselines: CarBaselines,
 ) -> dict[CornerPhaseKey, float]:
     out: dict[CornerPhaseKey, float] = {}
     for corner_id, phase_str in keys:
@@ -428,7 +444,7 @@ def _score_breakdown(
         if not state.states:
             out[cpkey] = 0.0
             continue
-        util, _conf = aggregate_utilization(state, phase, env, aero)
+        util, _conf = aggregate_utilization(state, phase, env, aero, baselines)
         w = weights.get(int(corner_id), 0.0)
         out[cpkey] = float(util * w)
     return out
