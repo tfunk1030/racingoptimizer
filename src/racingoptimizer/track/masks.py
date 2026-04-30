@@ -8,6 +8,14 @@ lap_data() time. See `docs/superpowers/specs/2026-04-28-track-model-design.md`
 Thresholds default to the spec §5 values; callers can override for unit tests
 or future tuning. Mutual exclusivity (curb suppresses bump_likelihood) is
 enforced at aggregate time, not at sample time.
+
+Per-car shock-velocity channels: the four-corner standard
+(`LFshockVel`/`RFshockVel`/`LRshockVel`/`RRshockVel`) is what BMW, Cadillac,
+Ferrari, and Porsche expose. Acura ARX-06 IBT files instead expose two heave
+channels (`HFshockVel`, `TRshockVel`) and two roll channels (`FROLLshockVel`,
+`RROLLshockVel`) — its suspension geometry has no per-corner shock channels.
+`shock_vel_channels(car)` resolves the right names; `_max_abs_shock_vel`
+takes their elementwise maximum just like the four-corner case.
 """
 from __future__ import annotations
 
@@ -15,6 +23,41 @@ import numpy as np
 import polars as pl
 
 from racingoptimizer.track.bins import DEFAULT_BIN_SIZE_M, bin_index, track_pos_m_from_pct
+
+DEFAULT_SHOCK_VEL_CHANNELS: tuple[str, ...] = (
+    "LFshockVel",
+    "RFshockVel",
+    "LRshockVel",
+    "RRshockVel",
+)
+
+# Per-car overrides: cars whose IBT exports diverge from the four-corner standard.
+# Verified 2026-04-29 against `ibtfiles/acuraarx06gtp_*.ibt`.
+_PER_CAR_SHOCK_VEL_CHANNELS: dict[str, tuple[str, ...]] = {
+    "acura": ("HFshockVel", "TRshockVel", "FROLLshockVel", "RROLLshockVel"),
+}
+
+
+def shock_vel_channels(car: str | None) -> tuple[str, ...]:
+    """Return the IBT shock-velocity channel names for `car` (lowercase key).
+
+    Falls back to the four-corner default for unknown cars and for `None` —
+    the latter happens in synthetic tests that don't carry car metadata.
+    """
+    if car is None:
+        return DEFAULT_SHOCK_VEL_CHANNELS
+    return _PER_CAR_SHOCK_VEL_CHANNELS.get(car.lower(), DEFAULT_SHOCK_VEL_CHANNELS)
+
+
+def _max_abs_shock_vel(df: pl.DataFrame, channels: tuple[str, ...]) -> np.ndarray:
+    """Elementwise max(|channel|) across the given shock-velocity columns.
+
+    iRacing emits ``*shockVel`` channels in m/s. Slice D's threshold constants
+    (``T_CURB_*_MM_S``, ``BUMP_RANGE_*_MM_S``) and persisted ``shock_v_p99_mm_s``
+    column are in mm/s — convert at the read site so every downstream
+    aggregation and comparison stays in mm/s units.
+    """
+    return np.maximum.reduce([np.abs(df[c].to_numpy()) * 1000.0 for c in channels])
 
 T_CURB_SESSION_MM_S: float = 350.0
 T_CURB_AGGREGATE_MM_S: float = 400.0
@@ -61,6 +104,7 @@ def compute_session_shock_v_p99_per_bin(
     *,
     lap_length_m: float,
     bin_size_m: float = DEFAULT_BIN_SIZE_M,
+    car: str | None = None,
 ) -> pl.DataFrame:
     if lap_df.height == 0:
         return pl.DataFrame(schema=_PER_SESSION_P99_SCHEMA)
@@ -75,14 +119,7 @@ def compute_session_shock_v_p99_per_bin(
 
     track_pos = track_pos_m_from_pct(df["lap_dist_pct"].to_numpy(), lap_length_m)
     idx = bin_index(track_pos, bin_size_m=bin_size_m)
-    shock = np.maximum.reduce(
-        [
-            np.abs(df["LFshockVel"].to_numpy()),
-            np.abs(df["RFshockVel"].to_numpy()),
-            np.abs(df["LRshockVel"].to_numpy()),
-            np.abs(df["RRshockVel"].to_numpy()),
-        ]
-    )
+    shock = _max_abs_shock_vel(df, shock_vel_channels(car))
     samples = pl.DataFrame(
         {
             "bin_index": idx.astype(np.int32),
