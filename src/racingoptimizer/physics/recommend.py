@@ -89,6 +89,7 @@ def recommend(
 
     aero = _aero_surface_or_none(model)
     keys = _corner_phase_keys(model)
+    baselines = model.resolved_baselines
 
     def objective(x: np.ndarray) -> float:
         candidate = dict(full_baseline)
@@ -96,7 +97,7 @@ def recommend(
             candidate[name] = float(value)
         clamped = _clamped_or_raise(model, candidate, strict=False)
         breakdown_inner = _score_breakdown(
-            model, clamped, env, aero, keys, weights,
+            model, clamped, env, aero, keys, weights, baselines,
         )
         return -float(sum(breakdown_inner.values()))
 

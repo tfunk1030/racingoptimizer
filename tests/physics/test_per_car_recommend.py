@@ -16,7 +16,6 @@ from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import load_constraints
 from racingoptimizer.context import EnvironmentFrame
 from racingoptimizer.physics import SetupRecommendation
-
 from tests.physics.conftest import PER_CAR_CASE_IDS, PER_CAR_CASES
 
 pytestmark = pytest.mark.slow

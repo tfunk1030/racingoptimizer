@@ -26,6 +26,7 @@ from racingoptimizer.corner import corner_phase_states
 from racingoptimizer.ingest import api as ingest_api
 from racingoptimizer.ingest import catalog as cat
 from racingoptimizer.ingest.paths import catalog_path, resolve_corpus_root
+from racingoptimizer.physics.baselines import derive_baselines
 from racingoptimizer.physics.exceptions import InsufficientDataError
 from racingoptimizer.physics.fitters import FitterBase, ForestFitter, GPFitter
 from racingoptimizer.physics.model import FitRecord, PhysicsModel
@@ -204,6 +205,8 @@ def fit(
         if any(setup_snapshots[sid].get(name) is not None for sid in sorted_ids)
     }
 
+    car_baselines = derive_baselines(car_key, training)
+
     return PhysicsModel(
         car=car_key,
         session_ids=tuple(sorted_ids),
@@ -215,6 +218,7 @@ def fit(
         aero_correction_available=aero_available,
         baseline_setup=baseline,
         seed=int(seed),
+        car_baselines=car_baselines,
     )
 
 
