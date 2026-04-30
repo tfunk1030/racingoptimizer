@@ -96,3 +96,104 @@ def test_predict_untrained_error_path() -> None:
     fitter = GPFitter()
     with pytest.raises(UntrainedError):
         fitter.predict([[0.0]])
+
+
+def test_predict_works_with_v2_full_environment_frame(bmw_model) -> None:
+    """v2 model + 12-channel EnvironmentFrame: predict consumes the full vector."""
+    model, baseline = bmw_model
+    assert model.feature_schema_version == 2
+    env = EnvironmentFrame(
+        air_temp_c=22.5,
+        air_density=1.18,
+        air_pressure_mbar=1013.0,
+        relative_humidity=0.5,
+        wind_vel_ms=2.5,
+        wind_dir_deg=120.0,
+        fog_level=0.0,
+        track_temp_c=24.0,
+        track_wetness=0.0,
+        weather_declared_wet=False,
+        precip_type=0,
+        skies=1,
+    )
+    keys = sorted(model.fitters.keys())
+    assert keys
+    _, corner_id, phase_str, _ = keys[0]
+    cpkey = CornerPhaseKey(
+        session_id=model.session_ids[0],
+        lap_index=1,
+        corner_id=corner_id,
+        phase=Phase(phase_str),
+    )
+    out = model.predict(baseline, env, cpkey)
+    assert len(out.states) >= 1
+
+
+def test_predict_env_dispatch_picks_right_vector_for_schema_version() -> None:
+    """v1 schema -> 5-feature env vector; v2 schema -> 12-feature env vector.
+
+    Direct unit test on the dispatch helpers. The integration test against
+    a real v1 model is impractical (we don't ship a pre-S2.2 pickle), but
+    the dispatch is the single byte of logic that wires the right vector
+    to the per-fitter `predict` call.
+    """
+    from racingoptimizer.physics.model import _env_to_array, _env_to_array_v1
+
+    env = EnvironmentFrame(
+        air_temp_c=22.5,
+        air_density=1.18,
+        air_pressure_mbar=1013.0,
+        relative_humidity=0.5,
+        wind_vel_ms=2.5,
+        wind_dir_deg=120.0,
+        fog_level=0.0,
+        track_temp_c=24.0,
+        track_wetness=0.0,
+        weather_declared_wet=False,
+        precip_type=0,
+        skies=1,
+    )
+    v1 = _env_to_array_v1(env)
+    v2 = _env_to_array(env)
+    assert v1.shape == (5,)
+    assert v2.shape == (12,)
+    # v1 prefix: (air_density, track_temp_c, wind_vel_ms, wind_dir_deg,
+    # track_wetness) — NOT a slice of v2 because v2 reorders to put air_temp
+    # and pressure first (matching VISION section 10 ordering). This is
+    # why predict builds the v1 vector explicitly rather than slicing v2.
+    assert v1[0] == 1.18    # air_density
+    assert v1[1] == 24.0    # track_temp_c
+    assert v1[2] == 2.5     # wind_vel_ms
+    assert v1[3] == 120.0   # wind_dir_deg
+    assert v1[4] == 0.0     # track_wetness
+
+
+def test_predict_with_partial_env_frame_returns_state(bmw_model) -> None:
+    """A partial env frame (missing -> sentinels) is a valid construction.
+
+    Strictness lives in `EnvironmentFrame.from_row`, not in `predict`.
+    Slice F's CLI synthesises env frames from session medians and may end
+    up with NaN/-1 sentinels for IBT versions that omit a channel; predict
+    must accept the frame as input without raising at the dispatch level.
+    Underlying sklearn fitters MAY raise if they reject NaN — that's
+    swallowed via the existing UntrainedError / ValueError handling.
+    """
+    model, baseline = bmw_model
+    env = EnvironmentFrame.from_partial_row({
+        "AirDensity": 1.18, "TrackTempCrew": 24.0, "WindVel": 2.5,
+        "WindDir": 120.0, "TrackWetness": 0.0,
+    })
+    keys = sorted(model.fitters.keys())
+    assert keys
+    _, corner_id, phase_str, _ = keys[0]
+    cpkey = CornerPhaseKey(
+        session_id=model.session_ids[0],
+        lap_index=1,
+        corner_id=corner_id,
+        phase=Phase(phase_str),
+    )
+    # Five known floats + sentinels for the rest. The dispatch picks
+    # _env_to_array (12 floats) and feeds it to the v2 fitters; some may
+    # raise on NaN inside, but the dispatch level must not raise.
+    out = model.predict(baseline, env, cpkey)
+    assert isinstance(out.states, dict)

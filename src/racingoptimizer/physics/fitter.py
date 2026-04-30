@@ -68,16 +68,35 @@ _GP_FAMILIES: frozenset[Family] = frozenset(
      "front_wing", "rear_wing", "ride_height", "arb"}
 )
 
-# Per-phase columns the env feature vector pulls. Same five fields as
-# `EnvironmentFrame`, in the same order — `_env_to_array` in model.py
-# mirrors this.
+# Per-phase columns the env feature vector pulls. Same 12 fields as
+# `EnvironmentFrame` (VISION section 10), in the same order — `_env_to_array`
+# in model.py mirrors this. Schema version 2 spans all 12 channels;
+# version-1 models (pre-S2.2) only carried the first five env channels
+# (air_density, track_temp_c, wind_vel_ms, wind_dir_deg, track_wetness)
+# and `PhysicsModel.predict` truncates to that prefix when revived.
 _ENV_COLUMNS: tuple[str, ...] = (
+    # Atmospheric floats:
+    "air_temp_c_mean",
     "air_density_mean",
-    "track_temp_c_mean",
+    "air_pressure_mbar_mean",
+    "relative_humidity_mean",
     "wind_vel_ms_mean",
     "wind_dir_deg_mean",
+    "fog_level_mean",
+    # Track surface floats:
+    "track_temp_c_mean",
     "track_wetness_mean",
+    # Discrete weather state (cast to numeric for the feature vector):
+    "weather_declared_wet_max",
+    "precip_type_max",
+    "skies_max",
 )
+
+# Number of env features in the v1 schema (pre-S2.2). `PhysicsModel.predict`
+# rebuilds the v1 vector explicitly when loading an old pickle.
+ENV_FEATURE_COUNT_V1: int = 5
+# Current env schema version emitted by `fit`.
+ENV_FEATURE_SCHEMA_VERSION: int = 2
 
 
 def fit(
@@ -219,6 +238,7 @@ def fit(
         baseline_setup=baseline,
         seed=int(seed),
         car_baselines=car_baselines,
+        feature_schema_version=ENV_FEATURE_SCHEMA_VERSION,
     )
 
 
@@ -281,11 +301,17 @@ def _fit_one_quadruple(
     env_cols = [
         c for c in _ENV_COLUMNS if c in cleaned.columns
     ]
+    # Cast to Float64 covers the bool / Int32 weather columns at the tail
+    # of `_ENV_COLUMNS` (weather_declared_wet_max -> 0.0/1.0; precip_type_max,
+    # skies_max -> numeric). fill_null(0.0) handles columns the corner-phase
+    # aggregator omitted because the IBT lacked the source channel.
     env_block = (
-        cleaned.select(env_cols).fill_null(0.0).cast(pl.Float64).to_numpy()
+        cleaned.select(env_cols).cast(pl.Float64).fill_null(0.0).to_numpy()
         if env_cols else np.zeros((cleaned.height, 0), dtype=np.float64)
     )
-    # Pad missing env columns with zeros to keep a fixed 5-feature env vector.
+    # Pad missing env columns with zeros to keep a fixed 12-feature env vector
+    # (VISION section 10). Older corpora may only carry the v1 prefix (5 cols)
+    # — the padding keeps the X-shape stable across cars / IBT versions.
     if env_block.shape[1] < len(_ENV_COLUMNS):
         n_missing = len(_ENV_COLUMNS) - env_block.shape[1]
         pad = np.zeros((env_block.shape[0], n_missing), dtype=np.float64)
