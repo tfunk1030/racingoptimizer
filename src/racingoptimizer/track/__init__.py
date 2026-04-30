@@ -8,6 +8,11 @@ from racingoptimizer.track.bins import (
 from racingoptimizer.track.builder import TrackModel, build_track_model
 from racingoptimizer.track.corner_loading import classify_corner_loading
 from racingoptimizer.track.corners import compute_corner_landmarks
+from racingoptimizer.track.geometry import (
+    GEOMETRY_SCHEMA,
+    compute_track_geometry,
+    empty_geometry_frame,
+)
 from racingoptimizer.track.masks import (
     BUMP_RANGE_MAX_MM_S,
     BUMP_RANGE_MIN_MM_S,
@@ -51,6 +56,7 @@ __all__ = [
     "T_CURB_SESSION_MM_S",
     "ApplyMaskResult",
     "Expected",
+    "GEOMETRY_SCHEMA",
     "PREDICTABLE_CHANNELS",
     "TrackModel",
     "aggregate_curb_likelihood",
@@ -64,6 +70,8 @@ __all__ = [
     "compute_curb_mask",
     "compute_off_track_mask",
     "compute_session_shock_v_p99_per_bin",
+    "compute_track_geometry",
+    "empty_geometry_frame",
     "expected_from_cache",
     "flag_anomalies_from_cache",
     "latest_pointer_path",

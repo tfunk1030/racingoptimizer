@@ -125,6 +125,41 @@ class TrackModel:
     speed_envelope: pl.DataFrame
     cache_path: Path
     summary_path: Path
+    corpus_root: Path | None = None
+
+    @property
+    def geometry(self) -> pl.DataFrame:
+        """Per-bin elevation gradient + camber ratio proxies (S4.4, VISION §9).
+
+        Lazily computed on first access — walks every session's clean
+        laps, fits the corpus-wide ``LongAccel ~ Speed`` and
+        ``|LatAccel|/g ~ |SteeringWheelAngle|`` baselines, and returns a
+        per-bin median frame. Cached on the instance for subsequent
+        accesses. Cold-start returns an empty frame.
+
+        Schema: ``(bin_index, track_pos_m, elevation_gradient_proxy,
+        camber_ratio_proxy, n_samples, n_sessions)``.
+        """
+        from racingoptimizer.track.geometry import (
+            compute_track_geometry,
+            empty_geometry_frame,
+        )
+
+        cached = self.__dict__.get("_geometry_cache")
+        if cached is not None:
+            return cached
+        if self.regime == "cold_start":
+            value = empty_geometry_frame()
+        else:
+            value = compute_track_geometry(
+                self.track,
+                list(self.session_ids),
+                bin_size_m=self.bin_size_m,
+                corpus_root=self.corpus_root,
+            )
+        # Frozen dataclass blocks setattr; reach into __dict__ directly.
+        object.__setattr__(self, "_geometry_cache", value)
+        return value
 
     @property
     def lap_length_m(self) -> float | None:
@@ -290,6 +325,7 @@ def build_track_model(
             speed_envelope=speed_envelope,
             cache_path=cache,
             summary_path=summary,
+            corpus_root=root,
         )
 
     if regime == "cold_start":
@@ -318,6 +354,7 @@ def build_track_model(
         speed_envelope=speed_envelope,
         cache_path=cache,
         summary_path=summary,
+        corpus_root=root,
     )
 
 
