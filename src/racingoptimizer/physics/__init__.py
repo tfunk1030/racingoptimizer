@@ -38,6 +38,12 @@ from racingoptimizer.physics.recommend import recommend
 from racingoptimizer.physics.recommendation import SetupRecommendation
 from racingoptimizer.physics.score import score_setup
 from racingoptimizer.physics.weights import weight_corners
+from racingoptimizer.physics.wet_mode import (
+    WetRegime,
+    classify_conditions,
+    wet_baselines,
+    wet_phase_weights,
+)
 from racingoptimizer.physics.wind import aero_wind_modifier, decompose_wind
 
 __all__ = [
@@ -52,8 +58,10 @@ __all__ = [
     "SUB_UTILIZATIONS",
     "SetupRecommendation",
     "UntrainedError",
+    "WetRegime",
     "aero_wind_modifier",
     "baselines_for",
+    "classify_conditions",
     "decompose_wind",
     "derive_baselines",
     "fit",
@@ -63,4 +71,6 @@ __all__ = [
     "score_setup",
     "setup_value",
     "weight_corners",
+    "wet_baselines",
+    "wet_phase_weights",
 ]
