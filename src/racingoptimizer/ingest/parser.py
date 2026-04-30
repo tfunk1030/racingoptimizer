@@ -2,6 +2,14 @@
 
 Reads each scalar telemetry channel into a float32 numpy array and parses the
 embedded YAML session info to extract car / track / setup / weather context.
+
+VISION §1 ("use everything, lose nothing"):
+- Every channel we drop is recorded in `ParseResult.dropped_channels` with a
+  human-readable reason. Silent drops were forbidden because they made it
+  impossible to audit what telemetry the optimizer was actually seeing.
+- Sample rate is auto-detected (see `_detect_sample_rate`); the old hardcoded
+  60 Hz divisor would silently corrupt `t_s`/`duration_s`/`lap_time_s` for any
+  IBT recorded at iRacing's higher tick rates (e.g. 360 Hz via app.ini).
 """
 from __future__ import annotations
 
@@ -14,7 +22,6 @@ import numpy as np
 
 from racingoptimizer.ingest.segment import LapSpan, detect_lap_boundaries
 
-
 # Substring patterns that, when present in a channel name, cause us to drop
 # that channel from the corpus. Multi-driver arrays (`CarIdx*`) and per-tyre
 # per-spot temperature/pressure spreads are the worst offenders for disk/IO.
@@ -25,16 +32,23 @@ EXCLUDED_CHANNEL_PATTERNS: tuple[str, ...] = (
     "TempCR",
 )
 
+# Fallback when neither the IBT header nor the YAML SessionInfo expose a tick
+# rate. iRacing's default IBT recording rate is 60 Hz; app.ini can raise it
+# to 360 Hz, but a 60 Hz default matches the historical assumption.
+DEFAULT_SAMPLE_RATE_HZ: float = 60.0
+
 
 class ParseResult(NamedTuple):
     yaml_car: str
     yaml_track: str
     recorded_at: str | None    # ISO timestamp from YAML header if present
     duration_s: float
+    sample_rate_hz: float                # detected from header / YAML / fallback
     channels: dict[str, np.ndarray]      # name -> float32 1-D array, all same length
     setup: dict                          # nested garage setup as parsed from YAML
     weather_summary: dict                # JSON-friendly summary of weather channels
     lap_spans: list[LapSpan]
+    dropped_channels: dict[str, str]     # name -> reason (VISION §1 audit trail)
 
 
 def _excluded(name: str) -> bool:
@@ -86,6 +100,54 @@ def _player_car_path(info: dict) -> str:
     return ""
 
 
+def _detect_sample_rate(ibt, info: dict) -> float:
+    """Detect the IBT recording rate in Hz.
+
+    Fallback chain (first hit wins):
+      1. `ibt._header.tick_rate` — pyirsdk's parsed value from the IBT header.
+         This is the canonical recording rate iRacing wrote to disk.
+      2. `disk_header.session_record_count / (session_end_time - session_start_time)`
+         — back-computed from the disk subheader. Matches `tick_rate` in
+         practice (within float-rounding) and is the safety net if the header
+         field is ever zero or missing.
+      3. `SessionInfo.SessionTickRate` from the YAML blob — covers any IBT
+         version that exposes the rate only in YAML.
+      4. `DEFAULT_SAMPLE_RATE_HZ` (60.0) — historical default.
+
+    The result is always > 0; non-positive intermediates are skipped so a
+    corrupt header field cannot poison the time axis.
+    """
+    header = getattr(ibt, "_header", None)
+    if header is not None:
+        rate = getattr(header, "tick_rate", None)
+        if rate is not None and rate > 0:
+            return float(rate)
+
+    disk_header = getattr(ibt, "_disk_header", None)
+    if disk_header is not None:
+        count = getattr(disk_header, "session_record_count", None)
+        start = getattr(disk_header, "session_start_time", None)
+        end = getattr(disk_header, "session_end_time", None)
+        if count and start is not None and end is not None and end > start:
+            rate = float(count) / float(end - start)
+            if rate > 0:
+                return rate
+
+    # YAML fallback: SessionInfo.SessionTickRate is the rate iRacing's session
+    # config asked for, even if the header value is missing.
+    si = info.get("SessionInfo", {}) or {}
+    yaml_rate = si.get("SessionTickRate")
+    if yaml_rate is not None:
+        try:
+            rate = float(yaml_rate)
+        except (TypeError, ValueError):
+            rate = 0.0
+        if rate > 0:
+            return rate
+
+    return DEFAULT_SAMPLE_RATE_HZ
+
+
 def parse_ibt(path: Path | str) -> ParseResult:
     """Parse one .ibt file via pyirsdk and return a ParseResult."""
     try:
@@ -103,17 +165,23 @@ def parse_ibt(path: Path | str) -> ParseResult:
         recorded_at = weekend.get("WeekendOptions", {}).get("Date") or None
 
         setup = info.get("CarSetup", {}) or {}
+        sample_rate_hz = _detect_sample_rate(ibt, info)
 
         channels: dict[str, np.ndarray] = {}
+        dropped: dict[str, str] = {}
         for header in ibt._var_headers:
             name = header.name
             if _excluded(name):
+                dropped[name] = "excluded by EXCLUDED_CHANNEL_PATTERNS"
                 continue
             if header.count and header.count > 1:
-                # Multi-element array channel — skip; we only want scalars.
+                # Multi-element array channel. We only consume scalars today;
+                # record the drop so it shows up in the catalog audit trail.
+                dropped[name] = f"multi-element array (count={header.count})"
                 continue
             arr = np.asarray(ibt.get_all(name), dtype=np.float32)
             if arr.ndim != 1:
+                dropped[name] = f"unexpected ndim={arr.ndim} after get_all"
                 continue
             channels[name] = arr
 
@@ -122,8 +190,7 @@ def parse_ibt(path: Path | str) -> ParseResult:
                 raise ValueError(f"required channel {required!r} missing from IBT")
 
         sample_count = channels["LapDistPct"].shape[0]
-        # Sample rate is 60 Hz nominal; duration is samples / 60.
-        duration_s = float(sample_count) / 60.0
+        duration_s = float(sample_count) / sample_rate_hz
 
         lap_spans = detect_lap_boundaries(channels["LapDistPct"], channels["Lap"])
 
@@ -134,10 +201,12 @@ def parse_ibt(path: Path | str) -> ParseResult:
             yaml_track=str(yaml_track),
             recorded_at=str(recorded_at) if recorded_at else None,
             duration_s=duration_s,
+            sample_rate_hz=sample_rate_hz,
             channels=channels,
             setup=setup,
             weather_summary=weather_summary,
             lap_spans=lap_spans,
+            dropped_channels=dropped,
         )
     finally:
         ibt.close()

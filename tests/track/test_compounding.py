@@ -83,6 +83,8 @@ def _seed_session(
                 parquet_path=str(pq.relative_to(corpus_root).as_posix()),
                 status="ok",
                 error=None,
+                dropped_channels=json.dumps({}),
+                sample_rate_hz=60.0,
             ),
         )
         insert_laps(

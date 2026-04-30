@@ -1,8 +1,9 @@
 """SQLite catalog: sessions and lap rows.
 
-Schema lives in `SCHEMA_SQL`. The catalog is rebuildable from raw IBTs (see
-`learn`), so there is no migration system — drop the file and re-ingest if the
-schema ever changes.
+Schema lives in `SCHEMA_SQL`. New columns are added in-place by `init_schema`
+via `_ADDITIVE_SESSION_COLUMNS` so existing corpora keep working without a
+destructive rebuild. Breaking changes (renames, type changes, drops) still
+require dropping the file and re-ingesting via `learn`.
 """
 from __future__ import annotations
 
@@ -12,22 +13,23 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import NamedTuple
 
-
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS sessions (
-  session_id      TEXT PRIMARY KEY,
-  car             TEXT NOT NULL,
-  track           TEXT NOT NULL,
-  recorded_at     TEXT,
-  duration_s      REAL,
-  lap_count       INTEGER,
-  weather_summary TEXT,
-  setup           TEXT,
-  source_path     TEXT,
-  ingested_at     TEXT NOT NULL,
-  parquet_path    TEXT,
-  status          TEXT NOT NULL CHECK(status IN ('ok','partial','failed')),
-  error           TEXT
+  session_id        TEXT PRIMARY KEY,
+  car               TEXT NOT NULL,
+  track             TEXT NOT NULL,
+  recorded_at       TEXT,
+  duration_s        REAL,
+  lap_count         INTEGER,
+  weather_summary   TEXT,
+  setup             TEXT,
+  source_path       TEXT,
+  ingested_at       TEXT NOT NULL,
+  parquet_path      TEXT,
+  status            TEXT NOT NULL CHECK(status IN ('ok','partial','failed')),
+  error             TEXT,
+  dropped_channels  TEXT,                 -- JSON: {channel_name: reason}; VISION §1 audit trail
+  sample_rate_hz    REAL                  -- IBT recording rate (typically 60.0; can be 360.0)
 );
 
 CREATE TABLE IF NOT EXISTS laps (
@@ -61,6 +63,8 @@ class SessionRow(NamedTuple):
     parquet_path: str | None
     status: str                  # 'ok' | 'partial' | 'failed'
     error: str | None
+    dropped_channels: str | None # JSON: {channel_name: reason}; VISION §1 audit trail
+    sample_rate_hz: float | None # IBT recording rate (typically 60.0; can be 360.0)
 
 
 class LapRow(NamedTuple):
@@ -73,8 +77,22 @@ class LapRow(NamedTuple):
     best: int    # 0/1
 
 
+# Columns that may be missing on a sessions table written by an earlier
+# schema. `init_schema` adds them in place so existing corpora keep working
+# without a destructive rebuild. Pure additive — order in SessionRow must
+# match the canonical column list emitted by SCHEMA_SQL above.
+_ADDITIVE_SESSION_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("dropped_channels", "TEXT"),
+    ("sample_rate_hz", "REAL"),
+)
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA_SQL)
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()}
+    for col, sql_type in _ADDITIVE_SESSION_COLUMNS:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} {sql_type}")
     conn.commit()
 
 
@@ -98,8 +116,8 @@ def upsert_session(conn: sqlite3.Connection, row: SessionRow) -> None:
         INSERT INTO sessions (
             session_id, car, track, recorded_at, duration_s, lap_count,
             weather_summary, setup, source_path, ingested_at, parquet_path,
-            status, error
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            status, error, dropped_channels, sample_rate_hz
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(session_id) DO UPDATE SET
             car=excluded.car,
             track=excluded.track,
@@ -112,7 +130,9 @@ def upsert_session(conn: sqlite3.Connection, row: SessionRow) -> None:
             ingested_at=excluded.ingested_at,
             parquet_path=excluded.parquet_path,
             status=excluded.status,
-            error=excluded.error
+            error=excluded.error,
+            dropped_channels=excluded.dropped_channels,
+            sample_rate_hz=excluded.sample_rate_hz
         """,
         tuple(row),
     )
@@ -146,6 +166,15 @@ def insert_laps(conn: sqlite3.Connection, laps: Iterable[LapRow]) -> None:
     conn.commit()
 
 
+# Explicit column list keeps SELECT order independent of `SELECT *` whims.
+# Order MUST match SessionRow field order.
+_SESSION_SELECT_COLS = (
+    "session_id, car, track, recorded_at, duration_s, lap_count, "
+    "weather_summary, setup, source_path, ingested_at, parquet_path, "
+    "status, error, dropped_channels, sample_rate_hz"
+)
+
+
 def query_sessions(
     conn: sqlite3.Connection,
     *,
@@ -153,7 +182,7 @@ def query_sessions(
     track: str | None = None,
     valid_only: bool = True,
 ) -> list[SessionRow]:
-    sql = "SELECT * FROM sessions"
+    sql = f"SELECT {_SESSION_SELECT_COLS} FROM sessions"
     where: list[str] = []
     params: list[object] = []
     if car is not None:
@@ -172,7 +201,10 @@ def query_sessions(
 
 
 def get_session(conn: sqlite3.Connection, session_id: str) -> SessionRow | None:
-    row = conn.execute("SELECT * FROM sessions WHERE session_id=?", (session_id,)).fetchone()
+    row = conn.execute(
+        f"SELECT {_SESSION_SELECT_COLS} FROM sessions WHERE session_id=?",
+        (session_id,),
+    ).fetchone()
     return SessionRow(*row) if row else None
 
 
