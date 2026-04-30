@@ -90,12 +90,6 @@ _GRIP_COLUMNS = {
     "n_samples",
     "n_sessions",
 }
-_BUG_REAL_IBT_CURB_CONTENT_PORSCHE = (
-    "porsche-only: pit-idle lap selection in lap-length fallback yields "
-    "~412 m instead of ~4600 m for Algarve, collapsing curb_mask onto the "
-    "wrong physical positions. Tracked separately in S1.2 (PR #25); will "
-    "flip green once that PR lands."
-)
 _BUG_REAL_IBT_ACURA_AGREEMENT = (
     "acura-only: with S1.3's per-car heave/roll-shock channel mapping, "
     "Acura sessions DO produce non-zero curb_likelihood values, but the "
@@ -210,10 +204,6 @@ def test_compounding_maps_have_real_content(car: str, per_car_corpora, request):
         pytest.skip(f"no .ibt fixtures for car={car}")
     if case.expected_regime != "compounding":
         pytest.skip(f"car={car} only has cold-start fixtures")
-    if car == "porsche":
-        request.node.add_marker(
-            pytest.mark.xfail(reason=_BUG_REAL_IBT_CURB_CONTENT_PORSCHE, strict=True)
-        )
     if car == "acura":
         request.node.add_marker(
             pytest.mark.xfail(reason=_BUG_REAL_IBT_ACURA_AGREEMENT, strict=True)
