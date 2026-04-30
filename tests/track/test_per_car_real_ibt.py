@@ -24,12 +24,13 @@ Source bugs uncovered by this real-IBT pass:
    no bin's p99 ever exceeds 350 mm/s in raw m/s units, so curb / bump
    likelihoods stay zero on real IBTs.
 
-3. **`_lap_length_from_speed_fallback` picks idle pit laps (TODO).** Porsche
-   IBT YAML headers omit `WeekendInfo.TrackLength`; the speed-integral
-   fallback uses `argmax(end_sample - start_sample)` which selects the
-   wallclock-longest lap, including a 350-second pit-idle lap that integrates
-   to 412 m on the Porsche/Algarve corpus. The real racing laps integrate
-   to ~4600 m. Need to filter by speed/lap-time before picking the longest.
+3. **`_lap_length_from_speed_fallback` picks idle pit laps (FIXED).** Porsche
+   IBT YAML headers omit `WeekendInfo.TrackLength`; the old speed-integral
+   fallback used `argmax(end_sample - start_sample)` which selected the
+   wallclock-longest lap, including a 350-second pit-idle lap that integrated
+   to 412 m on the Porsche/Algarve corpus instead of the real ~4600 m. Fix:
+   filter out non-racing laps by minimum mean Speed (>= 30 m/s for GTP
+   cars), then pick the candidate with the highest mean Speed.
 
 4. **Acura suspension architecture divergence (TODO).** Acura ARX-06 .ibt
    files lack the per-corner `LFshockVel`/`RFshockVel`/`LRshockVel`/
@@ -85,9 +86,8 @@ _GRIP_COLUMNS = {
 }
 _BUG_REAL_IBT_CURB_CONTENT = (
     "blocked by remaining slice-D bugs: shock-velocity m/s vs mm/s unit "
-    "mismatch (all cars), pit-idle lap selection in lap-length fallback "
-    "(Porsche), and Acura's heave/roll-shock architecture divergence — see "
-    "module docstring"
+    "mismatch (all cars), and Acura's heave/roll-shock architecture "
+    "divergence — see module docstring"
 )
 
 

@@ -412,26 +412,50 @@ def _parse_track_length(raw: object) -> float | None:
     return value * 1000.0 if unit == "km" else value
 
 
+_RACING_LAP_MIN_MEAN_SPEED_M_S = 30.0
+
+
 def _lap_length_from_speed_fallback(
     session_id: str, *, corpus_root: Path
 ) -> float | None:
+    """Estimate lap length by integrating Speed × dt over a clean racing lap.
+
+    Earlier versions picked the wallclock-longest lap by `argmax(end_sample -
+    start_sample)`, which on Porsche/Algarve corpora selected a 350 s pit-out
+    lap whose mean Speed was ~1 m/s and integrated to ~412 m instead of the
+    real ~4600 m. The wrong `lap_length_m` then poisoned every downstream
+    `track_pos_m_from_pct` call.
+
+    Fix: filter out non-racing laps by minimum mean Speed (GTP cars average
+    well above 30 m/s on a real lap), then pick the candidate with the
+    highest mean Speed — most likely a clean timed lap. Returns None when
+    no lap clears the threshold so the caller can skip the session.
+    """
     lap_rows = ingest_api.laps(
         session_id=session_id, valid_only=True, corpus_root=corpus_root
     )
     if lap_rows.height == 0:
         return None
-    durations = (
-        lap_rows["end_sample"].to_numpy() - lap_rows["start_sample"].to_numpy()
-    )
-    longest = int(lap_rows["lap_index"].to_numpy()[int(np.argmax(durations))])
-    try:
-        df = ingest_api.lap_data(
-            session_id, longest, channels=["Speed"], corpus_root=corpus_root
-        )
-    except Exception:
-        return None
-    if df.height == 0:
-        return None
-    return float(np.sum(df["Speed"].to_numpy()) / 60.0)
+
+    best_mean_speed = -1.0
+    best_lap_length: float | None = None
+    for lap_idx in lap_rows["lap_index"].to_list():
+        try:
+            df = ingest_api.lap_data(
+                session_id, int(lap_idx), channels=["Speed"], corpus_root=corpus_root
+            )
+        except Exception:
+            continue
+        if df.height == 0:
+            continue
+        speed = df["Speed"].to_numpy()
+        mean_speed = float(np.mean(speed))
+        if mean_speed < _RACING_LAP_MIN_MEAN_SPEED_M_S:
+            continue
+        if mean_speed > best_mean_speed:
+            best_mean_speed = mean_speed
+            best_lap_length = float(np.sum(speed) / 60.0)
+
+    return best_lap_length
 
 
