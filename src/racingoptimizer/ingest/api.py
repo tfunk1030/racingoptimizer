@@ -59,6 +59,8 @@ def sessions(
             "status": [r.status for r in rows],
             "error": [r.error for r in rows],
             "parquet_path": [r.parquet_path for r in rows],
+            "dropped_channels": [r.dropped_channels for r in rows],
+            "sample_rate_hz": [r.sample_rate_hz for r in rows],
         }
     )
 
@@ -168,6 +170,8 @@ def _process_one(conn: sqlite3.Connection, root: Path, ibt_path: Path) -> str:
                 parquet_path=None,
                 status="failed",
                 error=f"{type(exc).__name__}: {exc}",
+                dropped_channels=None,
+                sample_rate_hz=None,
             ),
         )
     return sid

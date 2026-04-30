@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+import pytest
 
 from racingoptimizer.ingest.catalog import get_laps, init_schema, query_sessions
 from racingoptimizer.ingest.parser import ParseResult
@@ -13,21 +14,36 @@ from racingoptimizer.ingest.segment import LapSpan
 from racingoptimizer.ingest.writer import session_id_from_bytes, write_session
 
 
-def _fake_parse_result(n_samples: int = 600) -> ParseResult:
-    pct = np.tile(np.linspace(0.0, 1.0, 200, endpoint=False), n_samples // 200).astype(np.float32)
-    lap = np.repeat(np.arange(n_samples // 200), 200).astype(np.float32)
+def _fake_parse_result(
+    n_samples: int = 600,
+    *,
+    samples_per_lap: int = 200,
+    sample_rate_hz: float = 60.0,
+    dropped_channels: dict[str, str] | None = None,
+) -> ParseResult:
+    n_laps = n_samples // samples_per_lap
+    assert n_laps * samples_per_lap == n_samples, "n_samples must be a multiple of samples_per_lap"
+    pct = np.tile(
+        np.linspace(0.0, 1.0, samples_per_lap, endpoint=False), n_laps
+    ).astype(np.float32)
+    lap = np.repeat(np.arange(n_laps), samples_per_lap).astype(np.float32)
     speed = np.linspace(0, 80.0, n_samples).astype(np.float32)
     brake = np.zeros(n_samples, dtype=np.float32)
     throttle = np.ones(n_samples, dtype=np.float32)
+    spans = [
+        LapSpan(i, i * samples_per_lap, (i + 1) * samples_per_lap, 1) for i in range(n_laps)
+    ]
     return ParseResult(
         yaml_car="bmwlmdh",
         yaml_track="Sebring International",
         recorded_at="2026-03-22T14:47:42",
-        duration_s=n_samples / 60.0,
+        duration_s=n_samples / sample_rate_hz,
+        sample_rate_hz=sample_rate_hz,
         channels={"LapDistPct": pct, "Lap": lap, "Speed": speed, "Brake": brake, "Throttle": throttle},
         setup={"chassis": {"front": {"wing": 16.0}}},
         weather_summary={"AirTemp_c_mean": 22.0},
-        lap_spans=[LapSpan(0, 0, 200, 1), LapSpan(1, 200, 400, 1), LapSpan(2, 400, 600, 1)],
+        lap_spans=spans,
+        dropped_channels=dropped_channels or {},
     )
 
 
@@ -109,6 +125,77 @@ def test_write_session_is_idempotent_on_same_id(tmp_corpus: Path) -> None:
     assert rows[0] == 1
     assert laps[0] == 3
     assert parquet_p.exists()
+    conn.close()
+
+
+def test_dropped_channels_persisted(tmp_corpus: Path) -> None:
+    """VISION §1: ParseResult.dropped_channels must round-trip through the
+    catalog as queryable JSON, so the audit trail survives ingestion."""
+    db = tmp_corpus / "catalog.sqlite"
+    conn = sqlite3.connect(db)
+    init_schema(conn)
+
+    drops = {
+        "CarIdxPosition": "excluded by EXCLUDED_CHANNEL_PATTERNS",
+        "TyreLayerTempCM": "multi-element array (count=4)",
+    }
+    pr = _fake_parse_result(dropped_channels=drops)
+    sid = "0011223344556677"
+    write_session(
+        conn=conn, corpus_root=tmp_corpus, session_id=sid, source_path="X:/x.ibt", parse=pr,
+    )
+
+    raw = conn.execute(
+        "SELECT dropped_channels, sample_rate_hz FROM sessions WHERE session_id=?",
+        (sid,),
+    ).fetchone()
+    assert raw is not None
+    persisted_drops = json.loads(raw[0])
+    assert persisted_drops == drops
+    assert raw[1] == pytest.approx(60.0)
+
+    # The polars-shaped public API should also expose them.
+    sess = query_sessions(conn)
+    assert sess[0].dropped_channels == json.dumps(drops)
+    assert sess[0].sample_rate_hz == pytest.approx(60.0)
+    conn.close()
+
+
+def test_non_60hz_sample_rate_propagates_to_time_axis(tmp_corpus: Path) -> None:
+    """VISION §1 / Gap #9: a non-60 Hz IBT must produce a t_s column scaled by
+    the detected rate, not the legacy 60 Hz constant."""
+    db = tmp_corpus / "catalog.sqlite"
+    conn = sqlite3.connect(db)
+    init_schema(conn)
+
+    # 360 Hz is iRacing's app.ini-tunable max; pick it as a stress case.
+    # 720 samples = 2 "laps" of 360 samples each at 360 Hz = 2 seconds total.
+    n_samples = 720
+    samples_per_lap = 360
+    rate = 360.0
+    pr = _fake_parse_result(
+        n_samples=n_samples, samples_per_lap=samples_per_lap, sample_rate_hz=rate
+    )
+    sid = "abcdef0011223344"
+    parquet_p = write_session(
+        conn=conn, corpus_root=tmp_corpus, session_id=sid, source_path="X:/x.ibt", parse=pr
+    )
+
+    df = pl.read_parquet(parquet_p)
+    assert df.height == n_samples
+    assert df["t_s"][0] == pytest.approx(0.0)
+    assert df["t_s"][-1] == pytest.approx((n_samples - 1) / rate, abs=1e-9)
+
+    # Lap timing must use the detected rate too.
+    sess_row = query_sessions(conn)[0]
+    assert sess_row.duration_s == pytest.approx(n_samples / rate)
+    assert sess_row.sample_rate_hz == pytest.approx(rate)
+
+    # Each lap is samples_per_lap samples long → 1.0 s at 360 Hz.
+    lap_rows = get_laps(conn, sid)
+    assert lap_rows
+    for lr in lap_rows:
+        assert lr.lap_time_s == pytest.approx(samples_per_lap / rate)
     conn.close()
 
 

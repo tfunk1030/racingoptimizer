@@ -31,7 +31,9 @@ def _now_iso() -> str:
 
 def _build_dataframe(pr: ParseResult) -> pl.DataFrame:
     n = pr.channels["LapDistPct"].shape[0]
-    t_s = (np.arange(n, dtype=np.float64) / 60.0).astype(np.float64)
+    # Use the per-IBT detected sample rate so non-60 Hz IBTs (e.g. 360 Hz via
+    # iRacing's app.ini) get the right time axis. VISION §1: lose nothing.
+    t_s = (np.arange(n, dtype=np.float64) / float(pr.sample_rate_hz)).astype(np.float64)
 
     # lap_index: -1 outside any lap_span, else the span's lap_index.
     lap_index = np.full(n, -1, dtype=np.int32)
@@ -60,8 +62,9 @@ def _build_dataframe(pr: ParseResult) -> pl.DataFrame:
 def _lap_rows(session_id: str, pr: ParseResult) -> list[LapRow]:
     rows: list[LapRow] = []
     valid_durations: list[tuple[int, float]] = []
+    rate = float(pr.sample_rate_hz)
     for span in pr.lap_spans:
-        duration = (span.end_sample - span.start_sample) / 60.0
+        duration = (span.end_sample - span.start_sample) / rate
         lap_time = duration if span.valid else None
         if span.valid and lap_time is not None:
             valid_durations.append((span.lap_index, lap_time))
@@ -117,6 +120,10 @@ def write_session(
         parquet_path=str(pq.relative_to(corpus_root).as_posix()),
         status="ok",
         error=None,
+        # VISION §1 audit trail: every channel we silently dropped before now
+        # round-trips into the catalog as a queryable JSON column.
+        dropped_channels=json.dumps(parse.dropped_channels),
+        sample_rate_hz=parse.sample_rate_hz,
     )
     upsert_session(conn, session)
     insert_laps(conn, laps)

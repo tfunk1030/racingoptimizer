@@ -45,6 +45,8 @@ def _make_session(**overrides) -> SessionRow:
         parquet_path="sessions/porsche/laguna_seca/abc1234567890def.parquet",
         status="ok",
         error=None,
+        dropped_channels=json.dumps({}),
+        sample_rate_hz=60.0,
     )
     return base._replace(**overrides) if overrides else base
 
