@@ -6,6 +6,7 @@ from racingoptimizer.track.bins import (
     track_pos_m_from_pct,
 )
 from racingoptimizer.track.builder import TrackModel, build_track_model
+from racingoptimizer.track.corner_loading import classify_corner_loading
 from racingoptimizer.track.masks import (
     BUMP_RANGE_MAX_MM_S,
     BUMP_RANGE_MIN_MM_S,
@@ -57,6 +58,7 @@ __all__ = [
     "bin_index",
     "build_track_model",
     "cache_path",
+    "classify_corner_loading",
     "compute_curb_mask",
     "compute_off_track_mask",
     "compute_session_shock_v_p99_per_bin",

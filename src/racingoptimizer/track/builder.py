@@ -214,6 +214,25 @@ class TrackModel:
             z_threshold=z_threshold,
         )
 
+    # ---- S4.5: per-corner loading classification (VISION §9) ----
+
+    @property
+    def corner_loading(self) -> pl.DataFrame:
+        """Per-corner classification (front/rear/traction/aero/mixed).
+
+        Lazy: walks every session in this model and stacks each session's
+        valid laps' `corner_phase_states`, then runs the heuristic
+        classifier in `racingoptimizer.track.corner_loading`. Returns an
+        empty (schema-only) frame when no observations are available
+        (cold-start regime, or no laps survived the channel-presence
+        filters).
+
+        See :func:`classify_corner_loading` for the full heuristic.
+        """
+        from racingoptimizer.track.corner_loading import classify_corner_loading
+
+        return classify_corner_loading(self.track, list(self.session_ids))
+
 
 def build_track_model(
     track: str,
