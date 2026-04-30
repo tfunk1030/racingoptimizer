@@ -143,6 +143,56 @@ class TrackModel:
             return float(np.sum(lap_df["Speed"].to_numpy()) / 60.0)
         return 1.0
 
+    # ---- S4.1: predict expected & flag anomalies (VISION §9) ----
+
+    def expected(self, track_pos_m: float, channel: str):
+        """Return `(mean, p99)` of `channel` across sessions for the bin at `track_pos_m`.
+
+        Channels: ``shock_v_p99_mm_s``, ``lateral_g_p95``, ``lateral_g_median``.
+        Returns ``None`` on cold-start (< 3 sessions for the bin) — the model
+        does not yet know what "expected" looks like there.
+
+        See `racingoptimizer.track.predict` for the data source (per-session
+        cache parquet) and threshold rationale.
+        """
+        from racingoptimizer.track.predict import expected_from_cache
+
+        if self.regime == "cold_start" or not self.cache_path.exists():
+            return None
+        cache_df = pl.read_parquet(self.cache_path)
+        return expected_from_cache(
+            cache_df,
+            track_pos_m=track_pos_m,
+            channel=channel,
+            bin_size_m=self.bin_size_m,
+        )
+
+    def flag_anomalies(
+        self, lap_df: pl.DataFrame, *, car: str | None = None, z_threshold: float = 3.0
+    ) -> pl.DataFrame:
+        """Flag samples in `lap_df` whose channels deviate far from this model's expectation.
+
+        Returns a polars DataFrame with columns
+        ``(sample_idx, channel, observed, expected, z_score, label)``.
+        Empty frame on cold-start, on missing source channels, or when no
+        sample crosses ``|z_score| > z_threshold``. See
+        `racingoptimizer.track.anomaly` for the heuristic label rules.
+        """
+        from racingoptimizer.track.anomaly import _empty_anomaly_frame, flag_anomalies_from_cache
+
+        if self.regime == "cold_start" or not self.cache_path.exists():
+            return _empty_anomaly_frame()
+        cache_df = pl.read_parquet(self.cache_path)
+        lap_length = self._resolve_lap_length(lap_df)
+        return flag_anomalies_from_cache(
+            lap_df,
+            cache_df,
+            lap_length_m=lap_length,
+            bin_size_m=self.bin_size_m,
+            car=car,
+            z_threshold=z_threshold,
+        )
+
 
 def build_track_model(
     track: str,
