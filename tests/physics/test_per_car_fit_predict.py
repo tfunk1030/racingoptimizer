@@ -64,7 +64,13 @@ def test_predict_per_car(
     model, _ = per_car_model_factory(car, track, fixtures)
     keys = sorted(model.fitters.keys())
     assert keys, f"car={car}: model has no fitter keys"
-    _param, corner_id, phase_str, _channel = keys[0]
+    # Stage-3 keys are (corner_id, phase, channel); legacy 4-tuple support
+    # kept for revived old pickles.
+    first_key = keys[0]
+    if len(first_key) == 3:
+        corner_id, phase_str, _channel = first_key
+    else:
+        _param, corner_id, phase_str, _channel = first_key
     cpkey = CornerPhaseKey(
         session_id=model.session_ids[0],
         lap_index=1,
@@ -125,7 +131,13 @@ def test_acura_shock_channels_marked_untrained_not_crashed(
         "lr_shock_defl_p99_mm",
         "rr_shock_defl_p99_mm",
     }
-    fitted_channels = {channel for (_p, _c, _ph, channel) in model.fitters}
+    # Stage-3 keys are (corner_id, phase, channel); legacy 4-tuple keys
+    # carried (param, corner, phase, channel). Pull channel from the
+    # right slot for both shapes.
+    def _channel_of(key: tuple) -> str:
+        return str(key[2]) if len(key) == 3 else str(key[3])
+
+    fitted_channels = {_channel_of(k) for k in model.fitters}
     assert not (fitted_channels & shock_channels), (
         "Acura should not have shock-deflection fitters (channels missing in IBT); "
         f"got fitters for {fitted_channels & shock_channels}"

@@ -90,11 +90,21 @@ def test_predict_aero_unavailable_downgrades_one_tier(
     )
     keys = sorted(model.fitters.keys())
     assert keys
-    # Pick a key whose channel is aero-dependent if one exists in this fixture.
-    aero_keys = [k for k in keys if k[3] in AERO_DEPENDENT_CHANNELS]
+    # Stage-3 keys are (corner_id, phase, channel); legacy keys (param,
+    # corner, phase, channel) live behind the same predict path. Pick a
+    # key whose channel is aero-dependent regardless of shape.
+    def _channel_of(k: tuple) -> str:
+        return str(k[2]) if len(k) == 3 else str(k[3])
+
+    def _corner_phase_of(k: tuple) -> tuple[int, str]:
+        if len(k) == 3:
+            return int(k[0]), str(k[1])
+        return int(k[1]), str(k[2])
+
+    aero_keys = [k for k in keys if _channel_of(k) in AERO_DEPENDENT_CHANNELS]
     if not aero_keys:
         pytest.skip("fixture produced no aero-dependent channel fitters")
-    _, corner_id, phase_str, _ = aero_keys[0]
+    corner_id, phase_str = _corner_phase_of(aero_keys[0])
     cpkey = CornerPhaseKey(
         session_id=model.session_ids[0], lap_index=1,
         corner_id=corner_id, phase=Phase(phase_str),

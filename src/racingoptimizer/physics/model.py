@@ -1,9 +1,16 @@
 """`PhysicsModel` + `predict` (training-side; score/recommend deferred to U10).
 
-Stores one fitter per (parameter, corner_id, phase, output_channel) plus
-ontology, constraints, and aero-availability flag. `predict` linearly combines
-the per-parameter contributions (Gaussian sum-of-vars) and wraps the result
-in `Confidence.derive(...)`.
+Stage-3 architecture (`feature_schema_version >= 3`): one multi-input fitter
+per (corner_id, phase, output_channel). Its feature space is the full bounded
+setup vector + 12 env channels. `predict` queries each fitter once with the
+joint feature row, so changing any single setup parameter propagates through
+every output channel via the trained joint mapping ("chase the chain", VISION
+§3 / §5).
+
+Backward compat: pre-Stage-3 models persisted one fitter per
+(parameter, corner_id, phase, output_channel) with feature vector
+`[single_param, env...]`. `predict` dispatches to the legacy
+sum-of-per-parameter path when `feature_schema_version <= 2`.
 """
 from __future__ import annotations
 
@@ -26,8 +33,7 @@ from racingoptimizer.physics.ontology import ParameterSpec
 
 # Spec §9: when slice C is unavailable, regimes for high-speed channels
 # degrade one tier. These output channels are downforce-derived per spec §6
-# (grip / aero_eff / platform). U9 currently fits the same set of state
-# columns regardless; the downgrade applies during prediction.
+# (grip / aero_eff / platform).
 AERO_DEPENDENT_CHANNELS: frozenset[str] = frozenset(
     {
         "lf_ride_height_mean_mm",
@@ -58,6 +64,36 @@ class FitRecord:
     n_samples: int
     cv_residual_std: float
     signal_std: float
+    # Stage 3: ordered names of every input feature the fitter consumes.
+    # The first ``len(feature_names) - len(env_columns)`` entries are the
+    # bounded setup parameters; the trailing entries are env channels in
+    # `racingoptimizer.physics.fitter._ENV_COLUMNS` order. Pre-Stage-3
+    # records (revived from legacy pickles) have ``feature_names == ()``
+    # and `predict` dispatches to the legacy single-parameter path.
+    feature_names: tuple[str, ...] = ()
+
+    def __setstate__(self, state: object) -> None:
+        # Legacy v1/v2 pickles serialised FitRecord with only the first
+        # 4 slots (no `feature_names`). Backfill the new slot to its
+        # default `()` so revive doesn't fail with AttributeError, and
+        # `_predict_legacy` keeps the old per-parameter behaviour.
+        slots_order = list(type(self).__slots__)
+        slot_values: dict[str, object] = {}
+        if isinstance(state, list):
+            for name, value in zip(slots_order, state, strict=False):
+                slot_values[name] = value
+        elif isinstance(state, tuple) and len(state) == 2:
+            _instance_dict, slots = state
+            if isinstance(slots, dict):
+                slot_values.update(slots)
+            elif isinstance(slots, list):
+                for name, value in zip(slots_order, slots, strict=False):
+                    slot_values[name] = value
+        elif isinstance(state, dict):
+            slot_values.update(state)
+        slot_values.setdefault("feature_names", ())
+        for name, value in slot_values.items():
+            object.__setattr__(self, name, value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,25 +101,23 @@ class PhysicsModel:
     car: str
     session_ids: tuple[str, ...]
     track_models_used: dict[str, str] = field(default_factory=dict)
-    # Key: (parameter, corner_id, phase, output_channel). Value: FitRecord.
-    fitters: dict[tuple[str, int, str, str], FitRecord] = field(default_factory=dict)
+    # Stage 3 keying: (corner_id, phase, output_channel). Pre-Stage-3 keys
+    # were (parameter, corner_id, phase, output_channel) — `predict`
+    # decides which shape the dict carries via `feature_schema_version`.
+    fitters: dict[tuple, FitRecord] = field(default_factory=dict)
     ontology: dict[str, ParameterSpec] = field(default_factory=dict)
     constraints: ConstraintsTable | None = None
     untrained_parameters: tuple[str, ...] = ()
     aero_correction_available: bool = False
     baseline_setup: dict[str, float] = field(default_factory=dict)
     seed: int = 0xC0FFEE
-    # None on PhysicsModels pickled before this field existed; read via
-    # `resolved_baselines` for the cold-start fallback.
+    # None on PhysicsModels pickled before this field existed.
     car_baselines: CarBaselines | None = None
     # Env-feature schema the per-quadruple fitters were trained against.
-    # v1 = 5-channel env (air_density, track_temp_c, wind_vel_ms,
-    # wind_dir_deg, track_wetness). v2 = VISION section 10 12-channel set.
-    # Pre-S2.2 pickles deserialise without this field — `__setstate__`
-    # backfills v1 so the slot is always initialised on revive. New models
-    # written by `fit` set this to the current version
-    # (`ENV_FEATURE_SCHEMA_VERSION` in fitter.py).
-    feature_schema_version: int = 2
+    # v1 = 5-channel env, per-parameter linear sum (pre-S2.2).
+    # v2 = 12-channel env, per-parameter linear sum.
+    # v3 = 12-channel env, joint multi-input model (Stage 3).
+    feature_schema_version: int = 3
 
     @property
     def resolved_baselines(self) -> CarBaselines:
@@ -100,16 +134,11 @@ class PhysicsModel:
 
     def __setstate__(self, state: object) -> None:
         # Frozen+slots dataclasses pickle as a positional list ordered by
-        # `__slots__` (one value per slot). Older protocols may pass a
-        # ``(None, slots_dict)`` tuple or a bare slots dict — handle all
-        # three. Pre-S2.2 pickles lack `feature_schema_version` and pickles
-        # made before `car_baselines` existed lack that slot too; backfill
-        # both so every slot is initialised on revive.
+        # `__slots__`. Older pickles may be shorter — backfill defaults so
+        # every slot is populated on revive.
         slots_order = list(type(self).__slots__)
         slot_values: dict[str, object] = {}
         if isinstance(state, list):
-            # Positional list, indexed by `__slots__`. Older shorter lists
-            # leave any trailing slot unset; backfill below.
             for name, value in zip(slots_order, state, strict=False):
                 slot_values[name] = value
         elif isinstance(state, tuple) and len(state) == 2:
@@ -121,6 +150,8 @@ class PhysicsModel:
                     slot_values[name] = value
         elif isinstance(state, dict):
             slot_values.update(state)
+        # Pre-S2.2 pickles lack `feature_schema_version` (default v1);
+        # v2 pickles set it to 2. Stage-3 pickles set it to 3.
         slot_values.setdefault("feature_schema_version", 1)
         slot_values.setdefault("car_baselines", None)
         for name, value in slot_values.items():
@@ -151,6 +182,18 @@ class PhysicsModel:
         env: EnvironmentFrame,
         corner_phase_key: CornerPhaseKey,
     ) -> CornerPhaseStateWithConfidence:
+        if int(self.feature_schema_version) >= 3:
+            return self._predict_v3(setup, env, corner_phase_key)
+        return self._predict_legacy(setup, env, corner_phase_key)
+
+    # ---- Stage 3 joint prediction ---------------------------------------
+
+    def _predict_v3(
+        self,
+        setup: dict[str, float],
+        env: EnvironmentFrame,
+        corner_phase_key: CornerPhaseKey,
+    ) -> CornerPhaseStateWithConfidence:
         corner_id = corner_phase_key.corner_id
         phase = (
             corner_phase_key.phase.value
@@ -158,29 +201,98 @@ class PhysicsModel:
             else str(corner_phase_key.phase)
         )
 
-        # Identify the channels with at least one trained fitter at this (corner, phase).
+        # Stage-3 fitter keys are (corner_id, phase, output_channel).
+        channels: dict[str, FitRecord] = {}
+        for key, record in self.fitters.items():
+            if len(key) != 3:
+                # Defensive: a v1/v2 record slipped through. Skip rather
+                # than misinterpret its position.
+                continue
+            c_id, ph, channel = key
+            if c_id != corner_id or ph != phase:
+                continue
+            if not record.fitter.is_trained:
+                continue
+            channels[channel] = record
+
+        env_features = _env_to_array(env)
+        states: dict[str, Confidence] = {}
+        untrained: list[str] = []
+
+        for channel in sorted(channels.keys()):
+            record = channels[channel]
+            x_row = _assemble_feature_row(
+                record.feature_names, setup, self.baseline_setup, env_features,
+            )
+            try:
+                mu, sigma = record.fitter.predict(x_row.reshape(1, -1))
+            except (UntrainedError, ValueError):
+                untrained.append(channel)
+                continue
+            mean_value = float(mu[0])
+            posterior_std = float(sigma[0]) if sigma.size else 0.0
+
+            # Use the larger of CV-residual std and the per-row posterior
+            # std so the bracket reflects both training-grain noise (CV)
+            # and per-prediction extrapolation widening (GP posterior /
+            # RF tree-spread). Spec §3 / §7 calibration target.
+            bracket_std = max(float(record.cv_residual_std), posterior_std)
+            confidence = Confidence.derive(
+                value=mean_value,
+                n_samples=int(record.n_samples),
+                cv_residual_std=bracket_std,
+                signal_std=float(max(record.signal_std, 1e-12)),
+            )
+            confidence = _maybe_downgrade_aero(
+                confidence, channel, self.aero_correction_available,
+            )
+            states[channel] = confidence
+
+        return CornerPhaseStateWithConfidence(
+            corner_phase_key=corner_phase_key,
+            states=states,
+            untrained_channels=tuple(sorted(untrained)),
+        )
+
+    # ---- Legacy v1 / v2 per-parameter prediction ------------------------
+
+    def _predict_legacy(
+        self,
+        setup: dict[str, float],
+        env: EnvironmentFrame,
+        corner_phase_key: CornerPhaseKey,
+    ) -> CornerPhaseStateWithConfidence:
+        corner_id = corner_phase_key.corner_id
+        phase = (
+            corner_phase_key.phase.value
+            if isinstance(corner_phase_key.phase, Phase)
+            else str(corner_phase_key.phase)
+        )
+
+        # Legacy keys are (param, corner, phase, channel).
         channels: dict[str, list[tuple[str, FitRecord]]] = {}
-        for (param, c_id, ph, channel), record in self.fitters.items():
+        for key, record in self.fitters.items():
+            if len(key) != 4:
+                continue
+            param, c_id, ph, channel = key
             if c_id != corner_id or ph != phase:
                 continue
             if not record.fitter.is_trained:
                 continue
             channels.setdefault(channel, []).append((param, record))
 
-        # Backward compat: v1 models were fit on a 5-feature env vector
-        # (air_density, track_temp_c, wind_vel_ms, wind_dir_deg,
-        # track_wetness) — a different set than the v2 12-feature prefix,
-        # so build the v1 vector explicitly. v2+ models get the full
-        # 12-feature vector matching `fitter._ENV_COLUMNS`.
+        # v1 models were fit on a 5-feature env vector; v2 on the
+        # 12-feature vector (matching `fitter._ENV_COLUMNS`).
         if int(self.feature_schema_version) < 2:
             env_features = _env_to_array_v1(env)
         else:
             env_features = _env_to_array(env)
+
         states: dict[str, Confidence] = {}
         untrained: list[str] = []
 
         for channel in sorted(channels.keys()):
-            contribs = sorted(channels[channel])  # deterministic per-param order
+            contribs = sorted(channels[channel])
             mean_sum = 0.0
             var_sum = 0.0
             min_n = None
@@ -197,23 +309,16 @@ class PhysicsModel:
                 try:
                     mu, _sigma = record.fitter.predict(row)
                 except (UntrainedError, ValueError):
-                    # ValueError covers feature-count mismatches (e.g. a
-                    # legacy v1 model whose underlying fitter expects 5
-                    # env columns but the dispatch fed 12). Treat as
-                    # "this fitter contributed nothing" rather than a
-                    # hard failure so the rest of the channels still
-                    # surface in the returned state.
                     continue
                 mean_sum += float(mu[0])
-                # Combine std via residual std (from CV) for the Confidence band;
-                # sum-of-vars on the per-fitter `cv_residual_std` keeps the
-                # bracket comparable across families.
                 var_sum += float(record.cv_residual_std) ** 2
                 signal_std = max(signal_std, float(record.signal_std))
-                min_n = record.n_samples if min_n is None else min(min_n, record.n_samples)
+                min_n = (
+                    record.n_samples if min_n is None
+                    else min(min_n, record.n_samples)
+                )
 
             if min_n is None:
-                # No fittable parameter contributed (all setup values missing).
                 untrained.append(channel)
                 continue
 
@@ -223,16 +328,9 @@ class PhysicsModel:
                 cv_residual_std=float(np.sqrt(var_sum)),
                 signal_std=float(signal_std),
             )
-            if not self.aero_correction_available and channel in AERO_DEPENDENT_CHANNELS:
-                downgraded = _REGIME_DOWNGRADE[confidence.regime]
-                if downgraded != confidence.regime:
-                    confidence = Confidence(
-                        value=confidence.value,
-                        lo=confidence.lo,
-                        hi=confidence.hi,
-                        n_samples=confidence.n_samples,
-                        regime=downgraded,  # type: ignore[arg-type]
-                    )
+            confidence = _maybe_downgrade_aero(
+                confidence, channel, self.aero_correction_available,
+            )
             states[channel] = confidence
 
         return CornerPhaseStateWithConfidence(
@@ -242,10 +340,7 @@ class PhysicsModel:
         )
 
 
-# Number of env features in the v1 schema (pre-S2.2). Mirrors
-# `racingoptimizer.physics.fitter.ENV_FEATURE_COUNT_V1`; duplicated here
-# to keep the import graph acyclic (fitter imports model, not the other
-# way around).
+# Number of env features in the v1 schema (pre-S2.2).
 _ENV_FEATURE_COUNT_V1: int = 5
 
 
@@ -253,10 +348,8 @@ def _env_to_array_v1(env: EnvironmentFrame) -> np.ndarray:
     """5-feature env vector matching the pre-S2.2 fitter._ENV_COLUMNS.
 
     Order: air_density, track_temp_c, wind_vel_ms, wind_dir_deg, track_wetness.
-    Used by `PhysicsModel.predict` to reconstruct the input vector for
-    pickled v1 models so the per-fitter X-shape stays valid after revive.
-    NaN sentinels coerce to 0.0 (mirrors `_env_to_array` and the fit-side
-    `fill_null(0.0)`).
+    Used by `_predict_legacy` to reconstruct the input vector for pickled
+    v1 models so the per-fitter X-shape stays valid after revive.
     """
     arr = np.array(
         [
@@ -279,13 +372,9 @@ def _env_to_array(env: EnvironmentFrame) -> np.ndarray:
     fitter consumed columns in that order at training time, and predict
     feeds X back to it in the same order.
 
-    NaN-valued floats (the `from_partial_row` sentinel for "missing
-    channel") are coerced to 0.0 here because sklearn's GP / RF reject
-    NaN inputs at predict time. The fit pipeline already does the same
-    with ``fill_null(0.0)`` so the convention is consistent across train
-    and infer. Bool / int channels are cast to float so the per-row
-    vector stays numeric; ``-1`` int sentinels pass through as just
-    another value the fitter can ignore.
+    NaN-valued floats are coerced to 0.0 here because sklearn's GP / RF
+    reject NaN inputs at predict time. Bool / int channels are cast to
+    float; -1 int sentinels pass through as just another value.
     """
     raw = [
         # Atmospheric floats:
@@ -305,9 +394,57 @@ def _env_to_array(env: EnvironmentFrame) -> np.ndarray:
         float(env.skies),
     ]
     arr = np.array(raw, dtype=np.float64)
-    # Substitute 0.0 for any NaN — matches the fit-side `fill_null(0.0)`.
     np.nan_to_num(arr, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
     return arr
+
+
+def _maybe_downgrade_aero(
+    confidence: Confidence, channel: str, aero_available: bool,
+) -> Confidence:
+    """Spec §9: aero-derived channels lose one regime tier without aero maps."""
+    if aero_available or channel not in AERO_DEPENDENT_CHANNELS:
+        return confidence
+    downgraded = _REGIME_DOWNGRADE[confidence.regime]
+    if downgraded == confidence.regime:
+        return confidence
+    return Confidence(
+        value=confidence.value,
+        lo=confidence.lo,
+        hi=confidence.hi,
+        n_samples=confidence.n_samples,
+        regime=downgraded,  # type: ignore[arg-type]
+    )
+
+
+def _assemble_feature_row(
+    feature_names: tuple[str, ...],
+    setup: dict[str, float],
+    baseline: dict[str, float],
+    env_features: np.ndarray,
+) -> np.ndarray:
+    """Build the joint feature row in the fitter's trained order.
+
+    Setup-parameter slots fall through to the model baseline when the
+    caller's setup omits a value (pinned-to-baseline parameter); env slots
+    are pulled from the pre-built env vector by name. Unknown env channels
+    fall back to 0.0 — matches the fit-side ``fill_null(0.0)`` convention.
+    """
+    from racingoptimizer.physics.fitter import _ENV_COLUMNS
+
+    env_index = {name: idx for idx, name in enumerate(_ENV_COLUMNS)}
+    row = np.empty(len(feature_names), dtype=np.float64)
+    for i, name in enumerate(feature_names):
+        if name in env_index:
+            row[i] = float(env_features[env_index[name]])
+            continue
+        if name in setup and setup[name] is not None:
+            row[i] = float(setup[name])
+            continue
+        if name in baseline and baseline[name] is not None:
+            row[i] = float(baseline[name])
+            continue
+        row[i] = 0.0
+    return row
 
 
 __all__ = [

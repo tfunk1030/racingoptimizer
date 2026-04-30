@@ -41,7 +41,13 @@ def test_predict_returns_typed_state(bmw_model) -> None:
     # Find any (corner, phase) that has trained fitters.
     keys = sorted(model.fitters.keys())
     assert keys, "model must have at least one trained fitter"
-    _, corner_id, phase_str, _ = keys[0]
+    # Stage-3 keys are (corner_id, phase, channel); legacy keys are
+    # (param, corner_id, phase, channel).
+    first = keys[0]
+    if len(first) == 3:
+        corner_id, phase_str, _ = first
+    else:
+        _, corner_id, phase_str, _ = first
     cpkey = CornerPhaseKey(
         session_id=model.session_ids[0],
         lap_index=1,
@@ -99,9 +105,13 @@ def test_predict_untrained_error_path() -> None:
 
 
 def test_predict_works_with_v2_full_environment_frame(bmw_model) -> None:
-    """v2 model + 12-channel EnvironmentFrame: predict consumes the full vector."""
+    """v3 model + 12-channel EnvironmentFrame: predict consumes the full vector.
+
+    Stage-3 fits emit `feature_schema_version=3`; the joint multi-input
+    fitter still consumes the same 12-channel env vector under the hood.
+    """
     model, baseline = bmw_model
-    assert model.feature_schema_version == 2
+    assert model.feature_schema_version == 3
     env = EnvironmentFrame(
         air_temp_c=22.5,
         air_density=1.18,
@@ -118,7 +128,11 @@ def test_predict_works_with_v2_full_environment_frame(bmw_model) -> None:
     )
     keys = sorted(model.fitters.keys())
     assert keys
-    _, corner_id, phase_str, _ = keys[0]
+    first = keys[0]
+    if len(first) == 3:
+        corner_id, phase_str, _ = first
+    else:
+        _, corner_id, phase_str, _ = first
     cpkey = CornerPhaseKey(
         session_id=model.session_ids[0],
         lap_index=1,
@@ -185,7 +199,11 @@ def test_predict_with_partial_env_frame_returns_state(bmw_model) -> None:
     })
     keys = sorted(model.fitters.keys())
     assert keys
-    _, corner_id, phase_str, _ = keys[0]
+    first = keys[0]
+    if len(first) == 3:
+        corner_id, phase_str, _ = first
+    else:
+        _, corner_id, phase_str, _ = first
     cpkey = CornerPhaseKey(
         session_id=model.session_ids[0],
         lap_index=1,
@@ -193,7 +211,7 @@ def test_predict_with_partial_env_frame_returns_state(bmw_model) -> None:
         phase=Phase(phase_str),
     )
     # Five known floats + sentinels for the rest. The dispatch picks
-    # _env_to_array (12 floats) and feeds it to the v2 fitters; some may
-    # raise on NaN inside, but the dispatch level must not raise.
+    # _env_to_array (12 floats) and feeds it to the v2/v3 fitters; some
+    # may raise on NaN inside, but the dispatch level must not raise.
     out = model.predict(baseline, env, cpkey)
     assert isinstance(out.states, dict)

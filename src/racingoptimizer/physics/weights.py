@@ -157,10 +157,21 @@ def _split_sensitivity(sub: pl.DataFrame) -> float:
 
 
 def _uniform(model: PhysicsModel) -> dict[int, float]:
-    corners = sorted({int(c) for (_p, c, _ph, _ch) in model.fitters})
+    """Uniform per-corner weights when the corpus is too thin to derive any.
+
+    Stage-3 keys are 3-tuples (corner_id, phase, channel); legacy v1/v2
+    keys were 4-tuples (param, corner_id, phase, channel). Handle both.
+    """
+    corners: set[int] = set()
+    for key in model.fitters:
+        if len(key) == 3:
+            corners.add(int(key[0]))
+        elif len(key) == 4:
+            corners.add(int(key[1]))
     if not corners:
         return {}
-    return {c: 1.0 / len(corners) for c in corners}
+    sorted_corners = sorted(corners)
+    return {c: 1.0 / len(sorted_corners) for c in sorted_corners}
 
 
 __all__ = ["weight_corners"]
