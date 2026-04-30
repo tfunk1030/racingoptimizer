@@ -8,6 +8,13 @@ from pathlib import Path
 import polars as pl
 
 from racingoptimizer.ingest import catalog as cat
+from racingoptimizer.ingest.detect import (
+    UnknownCarError,
+    detect_car,
+    detect_car_from_filename,
+    detect_track_from_filename,
+    slugify_track,
+)
 from racingoptimizer.ingest.parser import parse_ibt
 from racingoptimizer.ingest.paths import (
     catalog_path,
@@ -138,40 +145,127 @@ def _iter_ibt_paths(p: Path) -> Iterable[Path]:
         yield from sorted(p.rglob("*.ibt"))
 
 
+def _record_failure(
+    conn: sqlite3.Connection, *, sid: str, source_path: str, exc: BaseException
+) -> None:
+    """Stamp a `status='failed'` row when no salvage is possible."""
+    cat.upsert_session(
+        conn,
+        cat.SessionRow(
+            session_id=sid,
+            car="unknown",
+            track="unknown",
+            recorded_at=None,
+            duration_s=None,
+            lap_count=None,
+            weather_summary=None,
+            setup=None,
+            source_path=source_path,
+            ingested_at=_now_iso(),
+            parquet_path=None,
+            status="failed",
+            error=f"{type(exc).__name__}: {exc}",
+            dropped_channels=None,
+            sample_rate_hz=None,
+        ),
+    )
+
+
 def _process_one(conn: sqlite3.Connection, root: Path, ibt_path: Path) -> str:
-    raw = ibt_path.read_bytes()
+    """Ingest one IBT, recording an outcome row no matter what.
+
+    Status semantics (VISION §1 "use everything, lose nothing"):
+
+    * ``"ok"`` — YAML, channels, lap segmentation, and car/track detection all
+      succeeded. Parquet written, catalog row complete.
+    * ``"partial"`` — channels parsed and were persisted, but at least one of
+      the following is true: lap segmentation produced no spans (the corpus
+      keeps the bulk channels but with ``lap_count=0`` and no `laps` rows);
+      car detection failed (``car="unknown"``); or track detection failed
+      (``track="unknown"``). The parquet exists and is queryable.
+    * ``"failed"`` — nothing salvageable. Either the file could not be read
+      from disk (OSError), the IBT/YAML failed to parse so we have no
+      channels at all, or the parquet writer itself errored mid-stream.
+      No parquet is left behind on a failed read or parse; one may be left
+      behind on a writer mid-stream failure (next re-ingest will overwrite).
+
+    Re-ingesting a previously ``"partial"`` or ``"failed"`` session retries it;
+    only ``"ok"`` short-circuits.
+    """
+    # Stage 0: read bytes off disk. A filesystem error here means we have
+    # literally nothing to work with — not even a session_id (which we hash
+    # from the bytes), so we synthesize one from the path and bail.
+    try:
+        raw = ibt_path.read_bytes()
+    except OSError as exc:
+        sid = session_id_from_bytes(str(ibt_path).encode("utf-8"))
+        _record_failure(conn, sid=sid, source_path=str(ibt_path), exc=exc)
+        return sid
+
     sid = session_id_from_bytes(raw)
     existing = cat.get_session(conn, sid)
     if existing is not None and existing.status == "ok":
         return sid
+
+    # Stage 1: parse YAML header + channels. If this raises we have no
+    # channels to keep — record `failed` and return.
     try:
         parse = parse_ibt(ibt_path)
+    except Exception as exc:  # noqa: BLE001 — every parse failure must register
+        _record_failure(conn, sid=sid, source_path=str(ibt_path), exc=exc)
+        return sid
+
+    # Stage 2: detect car + track. Either failure is salvageable (we still
+    # have channels), so accept "unknown" and downgrade status to "partial".
+    car = "unknown"
+    try:
+        car = detect_car(
+            yaml_car=parse.yaml_car,
+            filename_car=detect_car_from_filename(ibt_path.name),
+        )
+    except UnknownCarError:
+        car = "unknown"
+
+    # slugify_track("") returns "" — collapse to "unknown" so neither field
+    # sneaks an empty string into the catalog.
+    raw_track = parse.yaml_track or detect_track_from_filename(ibt_path.name) or ""
+    track = slugify_track(raw_track) or "unknown"
+
+    # Decide on status. lap_spans empty → no per-lap rows but channels exist.
+    # car/track unknown → channels exist but indexing is degraded. Either is
+    # "partial". All three healthy → "ok".
+    status = "ok"
+    error: str | None = None
+    if not parse.lap_spans:
+        status = "partial"
+        error = "no laps detected during segmentation"
+    if car == "unknown" or track == "unknown":
+        status = "partial"
+        # Compose error reason; preserve any prior reason.
+        unknown_bits = []
+        if car == "unknown":
+            unknown_bits.append("car")
+        if track == "unknown":
+            unknown_bits.append("track")
+        unknown_msg = "unknown " + " and ".join(unknown_bits) + " detection failed"
+        error = unknown_msg if error is None else f"{error}; {unknown_msg}"
+
+    # Stage 3: write parquet + catalog row. A writer failure here is the
+    # least-recoverable case: we may have left a half-written parquet file
+    # on disk, but the next re-ingest will overwrite it. Mark `failed` so a
+    # re-run picks it up (an `ok` short-circuits otherwise).
+    try:
         write_session(
             conn=conn,
             corpus_root=root,
             session_id=sid,
             source_path=str(ibt_path),
             parse=parse,
+            car=car,
+            track=track,
+            status=status,
+            error=error,
         )
-    except Exception as exc:  # noqa: BLE001 — every failure must register
-        cat.upsert_session(
-            conn,
-            cat.SessionRow(
-                session_id=sid,
-                car="unknown",
-                track="unknown",
-                recorded_at=None,
-                duration_s=None,
-                lap_count=None,
-                weather_summary=None,
-                setup=None,
-                source_path=str(ibt_path),
-                ingested_at=_now_iso(),
-                parquet_path=None,
-                status="failed",
-                error=f"{type(exc).__name__}: {exc}",
-                dropped_channels=None,
-                sample_rate_hz=None,
-            ),
-        )
+    except Exception as exc:  # noqa: BLE001 — every writer failure must register
+        _record_failure(conn, sid=sid, source_path=str(ibt_path), exc=exc)
     return sid

@@ -93,10 +93,26 @@ def write_session(
     session_id: str,
     source_path: str,
     parse: ParseResult,
+    car: str | None = None,
+    track: str | None = None,
+    status: str = "ok",
+    error: str | None = None,
 ) -> Path:
-    """Write parquet + catalog rows. Returns the parquet path."""
-    car = detect_car(yaml_car=parse.yaml_car, filename_car=detect_car_from_filename(source_path))
-    track = slugify_track(parse.yaml_track)
+    """Write parquet + catalog rows. Returns the parquet path.
+
+    `car` and `track` default to detection from `parse` + `source_path`; the
+    caller (api._process_one) may pre-resolve them — including to "unknown"
+    — to support partial salvage when YAML detection fails. `status` lets the
+    caller stamp "partial" when channels parsed but lap segmentation or
+    car/track detection failed; "ok" is the unconditional success default.
+    """
+    if car is None:
+        car = detect_car(
+            yaml_car=parse.yaml_car,
+            filename_car=detect_car_from_filename(source_path),
+        )
+    if track is None:
+        track = slugify_track(parse.yaml_track)
 
     pq = parquet_path(corpus_root, car=car, track=track, session_id=session_id)
     pq.parent.mkdir(parents=True, exist_ok=True)
@@ -118,8 +134,8 @@ def write_session(
         source_path=source_path,
         ingested_at=_now_iso(),
         parquet_path=str(pq.relative_to(corpus_root).as_posix()),
-        status="ok",
-        error=None,
+        status=status,
+        error=error,
         # VISION §1 audit trail: every channel we silently dropped before now
         # round-trips into the catalog as a queryable JSON column.
         dropped_channels=json.dumps(parse.dropped_channels),
