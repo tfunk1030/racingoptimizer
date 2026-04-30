@@ -20,6 +20,11 @@ from racingoptimizer.physics.baselines import (
     baselines_for,
     derive_baselines,
 )
+from racingoptimizer.physics.damper_force import (
+    DIGRESSIVE_KNEE_MM_S,
+    damper_coefficient,
+    estimate_damper_force_n,
+)
 from racingoptimizer.physics.exceptions import InsufficientDataError, UntrainedError
 from racingoptimizer.physics.fitter import fit
 from racingoptimizer.physics.model import (
@@ -48,6 +53,7 @@ from racingoptimizer.physics.wind import aero_wind_modifier, decompose_wind
 
 __all__ = [
     "DEFAULT_BASELINES",
+    "DIGRESSIVE_KNEE_MM_S",
     "CarBaselines",
     "CornerPhaseStateWithConfidence",
     "FitRecord",
@@ -62,8 +68,10 @@ __all__ = [
     "aero_wind_modifier",
     "baselines_for",
     "classify_conditions",
+    "damper_coefficient",
     "decompose_wind",
     "derive_baselines",
+    "estimate_damper_force_n",
     "fit",
     "fittable_parameters",
     "ontology_for",
