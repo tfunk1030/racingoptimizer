@@ -51,6 +51,8 @@ def _grip_map_for_lap(n: int, p95: float) -> pl.DataFrame:
 
 
 def test_sudden_grip_loss_dilates_to_half_second_window():
+    # Spec §4.4 / §8: total mask window is 0.5 s centred on the trigger,
+    # i.e. ±15 samples at 60 Hz.
     n = 70
     accel = np.zeros(n)
     accel[30:51] = 8.0       # high grip 30..50 inclusive
@@ -66,13 +68,16 @@ def test_sudden_grip_loss_dilates_to_half_second_window():
     assert mask.shape == (n,)
     flagged = np.where(mask)[0]
     assert flagged.size > 0
-    assert int(flagged.min()) <= 21
+    # First trigger fires at sample 51; ±15 sample dilation flags samples 36..66.
+    assert int(flagged.min()) <= 36
     assert int(flagged.max()) >= 55
-    # Pre-trigger samples should be quiet.
-    assert not mask[:20].any()
+    # Pre-trigger samples (more than half-window before the first trigger) stay clean.
+    assert not mask[:35].any()
 
 
 def test_wheel_speed_spike_dilates_to_half_second_window():
+    # Spec §4.4 / §8: total mask window is 0.5 s centred on the trigger,
+    # i.e. ±15 samples at 60 Hz.
     n = 70
     diff = np.zeros(n)
     diff[40:43] = 200.0  # 200 m/s differential
@@ -87,8 +92,11 @@ def test_wheel_speed_spike_dilates_to_half_second_window():
     assert mask.shape == (n,)
     flagged = np.where(mask)[0]
     assert flagged.size > 0
-    assert int(flagged.min()) <= 10
+    # First trigger fires at sample 40; ±15 sample dilation flags samples 25..57.
+    assert int(flagged.min()) <= 25
     assert int(flagged.max()) >= 42
+    # Pre-trigger samples (more than half-window before the first trigger) stay clean.
+    assert not mask[:24].any()
 
 
 def test_cold_start_empty_grip_map_returns_all_false():

@@ -4,6 +4,16 @@ Born by slice E (physics fitter, spec §3) as a cross-cutting type. Every
 predicted physics-state value travels paired with a Confidence so downstream
 consumers (recommender, justification renderer) can phrase aggression vs
 caution based on data density and fit quality.
+
+Bracket convention (`lo`, `hi`):
+    The physics-fitter spec (`docs/superpowers/specs/2026-04-28-physics-fitter-design.md`
+    §3) pins `lo`, `hi` as the **95% bracket** around `value`. `Confidence.derive`
+    realises this by widening the K-fold residual std `cv_residual_std` by 1.96
+    (the Gaussian 95% multiplier) on either side of `value`. This matches the
+    spec's "empirical 2.5/97.5 percentiles of (predicted ± residuals)" promise
+    under a Gaussian-residual assumption — the same assumption already implicit
+    in summarising fit quality with a single residual std rather than the full
+    residual distribution.
 """
 from __future__ import annotations
 
@@ -13,6 +23,9 @@ from typing import Literal
 Regime = Literal["sparse", "noisy", "confident", "dense"]
 
 _VALID_REGIMES: frozenset[str] = frozenset({"sparse", "noisy", "confident", "dense"})
+
+# Two-sided Gaussian multiplier for a 95% confidence bracket.
+_GAUSSIAN_95_MULTIPLIER: float = 1.96
 
 
 @dataclass(slots=True, frozen=True)
@@ -61,10 +74,11 @@ class Confidence:
             else:
                 regime = "dense"
 
+        half_width = _GAUSSIAN_95_MULTIPLIER * cv_residual_std
         return cls(
             value=value,
-            lo=value - cv_residual_std,
-            hi=value + cv_residual_std,
+            lo=value - half_width,
+            hi=value + half_width,
             n_samples=n_samples,
             regime=regime,
         )
