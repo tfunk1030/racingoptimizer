@@ -309,3 +309,19 @@ Net additions:
   exist so callers iterating `parameters(car)` see them).
 - 1 new spec at `docs/superpowers/specs/2026-04-30-user-settable-and-full-setup-card.md`
   capturing the design intent of `bf2e48b`.
+
+### Update — 2026-05-01 third-pass re-audit
+
+A re-audit of the post-remediation tree surfaced four further gaps; all
+are closed in this revision.
+
+| # | Severity | Gap | Resolution |
+|---|---|---|---|
+| A | 🔴 | Camber bounds in `constraints.md` are real numeric ranges (front -2.9..0, rear -1.9..0) but the ontology had **zero** `camber_*_deg` ParameterSpec entries. The recommender could never search over camber — the most direct setup → tire-grip lever per VISION §5. | Added a new `camber` `Family` and four `ParameterSpec` entries (`camber_fl_deg`, `camber_fr_deg`, `camber_rl_deg`, `camber_rr_deg`) at JSON path `Chassis.<Corner>.Camber` for all 5 cars. Routed `camber` to `_GP_FAMILIES` so the joint surrogate stays GP. Per-car fittable count is now **18** (was 14, was 6 pre-`bf2e48b`). |
+| B | 🟠 | VISION §3 requires the model to learn shock/damper velocity as a function of setup. The corner aggregator computed `damper_velocity_p99_mms` / `damper_velocity_mean_mms` / `damper_force_p99_n` / `damper_force_mean_n` (`corner/states.py:504-511`) but `TARGET_OUTPUT_CHANNELS` (`physics/fitter.py:53`) only included shock **deflection** and ride heights. Velocity / force were never trained. | Added the four damper columns to `TARGET_OUTPUT_CHANNELS`. New `tests/physics/test_target_output_channels.py` (7 tests) pins this contract — including a structural test that every target channel name is referenced from `corner/states.py` source. |
+| C | 🟡 | ARB blade indices are integer-valued (1..5) but the DE search produced continuous values like `3.7`. `_post_clamp` only clamped to bounds; the user couldn't enter the recommended value. | New `is_discrete: bool = False` field on `ParameterSpec`. ARBs and dampers marked `is_discrete=True`. `_post_clamp` rounds discrete recommendations to the nearest integer post-clamp, then re-clamps inside the legal range, and emits a `discrete-click value rounded from X to N` warning so the user sees the rounding step. New `tests/cli/test_post_clamp_discrete.py` (8 tests) pins the round-then-reclamp behaviour, and asserts continuous parameters (brake bias, diff preload, springs, wing) keep their fractional precision. |
+| D | 🟡 | Pre-existing ruff E501 / F841 debt in 7 test files (carried-over baseline). | All 10 violations cleaned: 3 import-sort auto-fixes (`tests/aero/test_loader.py`, `test_smoke.py`, `tests/cli/test_environment_from_corpus.py`), 5 line-length wraps (`tests/test_api.py`, `test_catalog.py`, `test_writer.py`), 1 unused-var removal (`tests/test_ingest_smoke.py`). `ruff check src tests` returns **All checks passed!**. |
+
+Sandbox test count after the third pass: **493 passed, 88 skipped (LFS),
+28 deselected (slow)** — up from 478 with my +15 new tests
+(`test_target_output_channels.py` × 7, `test_post_clamp_discrete.py` × 8).

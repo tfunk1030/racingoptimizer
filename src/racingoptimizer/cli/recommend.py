@@ -842,7 +842,20 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
     Returns (rec_with_clamped_values, clamp_warnings, top_level_warnings).
     Clamped values are appended to the parameter's evidence via the
     `clamp_warnings` map consumed by `build_justifications`.
+
+    Discrete parameters (`ParameterSpec.is_discrete=True`, e.g. ARB blade
+    index, damper clicks) are rounded to the nearest integer after
+    clamping. The DE search runs continuously over `[lo, hi]`, so without
+    this round step the briefing emits values like "anti_roll_bar_front:
+    3.700" — a value the user cannot enter into the iRacing garage UI.
     """
+    from racingoptimizer.physics.ontology import ontology_for
+
+    try:
+        onto = ontology_for(model.car)
+    except KeyError:
+        onto = {}
+
     clamp_warnings: dict[str, str] = {}
     top_warnings: list[str] = []
     pinned = tuple(getattr(rec, "pinned_to_observed_median", ()) or ())
@@ -865,14 +878,27 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
                 f"{name} skipped: bound is TODO in constraints.md"
             )
             continue
-        if result.was_clamped:
+        clamped_value = float(result.value)
+        spec = onto.get(name)
+        if spec is not None and spec.is_discrete:
+            rounded = float(round(clamped_value))
+            # Re-clamp the rounded value back inside the legal range —
+            # `round(0.4)` from a `[1, 5]` bound would otherwise emit 0.
+            lo, hi = result.bound
+            rounded = min(max(rounded, lo), hi)
+            if rounded != clamped_value:
+                clamp_warnings[name] = (
+                    f"discrete-click value rounded from {clamped_value:.3f} "
+                    f"to {int(rounded)} (legal range "
+                    f"{int(lo)}..{int(hi)})"
+                )
+            clamped_value = rounded
+        if result.was_clamped and name not in clamp_warnings:
             clamp_warnings[name] = (
-                f"value clamped from {value:.3f} to {result.value:.3f} "
+                f"value clamped from {value:.3f} to {clamped_value:.3f} "
                 f"(legal bounds: {result.bound[0]:.3f} - {result.bound[1]:.3f})"
             )
-            new_params[name] = (float(result.value), confidence)
-        else:
-            new_params[name] = (value, confidence)
+        new_params[name] = (clamped_value, confidence)
     return replace(rec, parameters=new_params), clamp_warnings, top_warnings
 
 

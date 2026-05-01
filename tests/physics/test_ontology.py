@@ -151,6 +151,13 @@ def test_fittable_parameters_only_returns_bounded_user_settable() -> None:
         "anti_roll_bar_rear",
         "brake_bias_pct",
         "diff_preload_nm",
+        # Per-corner camber. Bounds in `constraints.md` are real numeric
+        # ranges (front -2.9..0, rear -1.9..0) — added to the ontology in
+        # the second-pass audit (gap A) so the recommender can search.
+        "camber_fl_deg",
+        "camber_fr_deg",
+        "camber_rl_deg",
+        "camber_rr_deg",
     }
     assert must_include.issubset(result), (
         f"missing expected fittable params: {must_include - result}"

@@ -10,7 +10,6 @@ from racingoptimizer.aero import AeroBounds, AeroSurface, load_aero_maps
 from racingoptimizer.aero.interpolator import BASELINE_AIR_DENSITY
 from racingoptimizer.aero.loader import load_aero_map_data
 
-
 CARS_AND_BOUNDS = [
     ("acura", (6.0, 10.0), 9),
     ("bmw", (12.0, 17.0), 6),

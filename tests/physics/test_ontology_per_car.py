@@ -46,8 +46,9 @@ PER_CAR_FIXTURES: dict[str, str] = {
     "porsche": "porsche963gtp_algarve gp 2026-04-07 15-49-17.ibt",
 }
 
-# Parameters introduced in `bf2e48b`. Plus the long-standing user-input
-# parameters as a regression check.
+# Parameters introduced in `bf2e48b` + cambers added in the second-pass
+# audit's gap-A remediation. Plus the long-standing user-input parameters
+# as a regression check.
 _USER_INPUT_PARAMS_TO_CHECK: tuple[str, ...] = (
     "rear_wing_angle_deg",
     "tyre_cold_pressure_kpa",
@@ -59,6 +60,10 @@ _USER_INPUT_PARAMS_TO_CHECK: tuple[str, ...] = (
     "third_perch_offset_rear_mm",
     "pushrod_length_offset_front_mm",
     "pushrod_length_offset_rear_mm",
+    "camber_fl_deg",
+    "camber_fr_deg",
+    "camber_rl_deg",
+    "camber_rr_deg",
 )
 
 

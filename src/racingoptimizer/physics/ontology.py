@@ -34,6 +34,7 @@ Family = Literal[
     "spring_rate",
     "perch_offset",
     "pushrod",
+    "camber",
 ]
 
 
@@ -56,6 +57,13 @@ class ParameterSpec:
     # "set this". Defaults to True for backward-compat with all the existing
     # entries that pre-date this flag — every legacy entry was a real input.
     user_settable: bool = True
+    # `is_discrete=True` → the iRacing garage UI exposes this parameter as
+    # an integer click count (e.g. ARB blade index 1..5, damper clicks).
+    # The DE search runs continuously over `[lo, hi]`, so the post-clamp
+    # step in `cli/recommend.py` rounds discrete recommendations to the
+    # nearest integer before rendering. Defaults to False for the
+    # continuous parameters (springs, perches, pressures, wing angle, etc.).
+    is_discrete: bool = False
 
 
 # --- Path-extraction helpers ----------------------------------------------
@@ -118,6 +126,14 @@ _SPRING_PERCH_OFFSET_R = ("Chassis", "LeftRear", "SpringPerchOffset")
 _THIRD_PERCH_OFFSET_R = ("Chassis", "Rear", "ThirdPerchOffset")
 _PUSHROD_OFFSET_F = ("Chassis", "Front", "PushrodLengthOffset")
 _PUSHROD_OFFSET_R = ("Chassis", "Rear", "PushrodLengthOffset")
+
+# Per-corner camber. iRacing GTP setup YAML stores camber as a string
+# (e.g. "-2.5 deg") at `Chassis.<Corner>.Camber`. Bounds in `constraints.md`
+# (front -2.9..0, rear -1.9..0) are real numeric ranges, not TODOs.
+_CAMBER_LF = ("Chassis", "LeftFront", "Camber")
+_CAMBER_RF = ("Chassis", "RightFront", "Camber")
+_CAMBER_LR = ("Chassis", "LeftRear", "Camber")
+_CAMBER_RR = ("Chassis", "RightRear", "Camber")
 
 
 def _common_bounded() -> dict[str, ParameterSpec]:
@@ -211,6 +227,24 @@ def _common_bounded() -> dict[str, ParameterSpec]:
             json_path=_PUSHROD_OFFSET_R, dtype=float, units="mm",
             family="pushrod", fittable=True, user_settable=True,
         ),
+        # Per-corner camber. Direct setup → tire-grip lever. Bounds in
+        # `constraints.md` are non-placeholder (front -2.9..0, rear -1.9..0).
+        "camber_fl_deg": ParameterSpec(
+            json_path=_CAMBER_LF, dtype=float, units="deg",
+            family="camber", fittable=True, user_settable=True,
+        ),
+        "camber_fr_deg": ParameterSpec(
+            json_path=_CAMBER_RF, dtype=float, units="deg",
+            family="camber", fittable=True, user_settable=True,
+        ),
+        "camber_rl_deg": ParameterSpec(
+            json_path=_CAMBER_LR, dtype=float, units="deg",
+            family="camber", fittable=True, user_settable=True,
+        ),
+        "camber_rr_deg": ParameterSpec(
+            json_path=_CAMBER_RR, dtype=float, units="deg",
+            family="camber", fittable=True, user_settable=True,
+        ),
     }
 
 
@@ -230,11 +264,11 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         # the user rounds to the nearest integer at the iRacing garage.
         "anti_roll_bar_front": ParameterSpec(
             json_path=("Chassis", "Front", "ArbBlades"), dtype=float, units="click",
-            family="arb", fittable=True,
+            family="arb", fittable=True, is_discrete=True,
         ),
         "anti_roll_bar_rear": ParameterSpec(
             json_path=("Chassis", "Rear", "ArbBlades"), dtype=float, units="click",
-            family="arb", fittable=True,
+            family="arb", fittable=True, is_discrete=True,
         ),
         # Brake bias front-axle pct (40..60 per `constraints.md`).
         # Fittable since bounds landed in `bf2e48b`.
@@ -287,7 +321,7 @@ def _damper_paths(
         for suffix, field_name in _DAMPER_MODES:
             out[f"damper_{suffix}_{code}"] = ParameterSpec(
                 json_path=(*parent_path, field_name), dtype=float, units="click",
-                family="damper", fittable=False,
+                family="damper", fittable=False, is_discrete=True,
             )
     return out
 

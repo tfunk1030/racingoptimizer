@@ -57,7 +57,6 @@ def test_partial_session_can_be_upgraded_to_ok(small_ibt: Path, tmp_corpus: Path
 
 def test_idempotent_ingest_writes_no_new_parquet(small_ibt: Path, tmp_corpus: Path) -> None:
     ids1 = learn(small_ibt, corpus_root=tmp_corpus)
-    sid = ids1[0]
     s = sessions(corpus_root=tmp_corpus, valid_only=False)
     pq = tmp_corpus / s["parquet_path"][0]
     mtime_before = pq.stat().st_mtime_ns

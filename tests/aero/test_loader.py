@@ -13,7 +13,6 @@ from racingoptimizer.aero.loader import (
     parse_aero_filename,
 )
 
-
 # --- filename parser ---------------------------------------------------------
 
 @pytest.mark.parametrize(

@@ -34,7 +34,9 @@ def test_learn_is_idempotent(small_ibt: Path, tmp_corpus: Path) -> None:
     assert s.height == 1
 
 
-def test_learn_handles_a_directory_recursively(tmp_path: Path, small_ibt: Path, tmp_corpus: Path) -> None:
+def test_learn_handles_a_directory_recursively(
+    tmp_path: Path, small_ibt: Path, tmp_corpus: Path,
+) -> None:
     # Place the small IBT in a nested folder.
     nested = tmp_path / "a" / "b"
     nested.mkdir(parents=True)
