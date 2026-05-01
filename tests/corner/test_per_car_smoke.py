@@ -23,10 +23,14 @@ CAR_PREFIXES: dict[str, tuple[str, ...]] = {
 
 
 def _first_fixture_for(car_key: str) -> Path | None:
+    from tests._lfs_util import is_unmaterialised_lfs_pointer
+
     if not IBT_DIR.is_dir():
         return None
     for prefix in CAR_PREFIXES[car_key]:
         for path in sorted(IBT_DIR.glob(f"{prefix}*.ibt")):
+            if is_unmaterialised_lfs_pointer(path):
+                continue
             return path
     return None
 
@@ -37,7 +41,7 @@ def test_corner_phase_states_runs_for_each_canonical_car(
 ) -> None:
     fixture = _first_fixture_for(car_key)
     if fixture is None:
-        pytest.skip(f"no {car_key} fixture present in ibtfiles/")
+        pytest.skip(f"no materialised {car_key} fixture in ibtfiles/")
 
     sids = learn(fixture, corpus_root=tmp_corpus)
     assert sids

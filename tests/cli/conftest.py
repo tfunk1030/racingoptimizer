@@ -47,9 +47,16 @@ def fixture_path(car: str) -> Path | None:
 @pytest.fixture
 def per_car_fixture(request) -> tuple[str, Path, str]:
     """Parametrised (car, ibt_path, track_substring) tuple per canonical car."""
+    from tests.conftest import _is_unmaterialised_lfs_pointer
+
     car = request.param
     name, track_sub = PER_CAR_FIXTURES[car]
     p = IBT_DIR / name
     if not p.exists():
         pytest.skip(f"fixture not present for {car}: {p}")
+    if _is_unmaterialised_lfs_pointer(p):
+        pytest.skip(
+            f"{car} fixture at {p.name} is an unmaterialised git-lfs pointer; "
+            "run `git lfs pull` first"
+        )
     return car, p, track_sub

@@ -135,8 +135,12 @@ def test_no_textbook_formulas_in_score() -> None:
 @pytest.fixture(scope="module")
 def cold_start_model(tmp_path_factory):
     """Fit a one-session BMW Sebring model (cold-start, sparse-by-design)."""
+    from tests._lfs_util import is_unmaterialised_lfs_pointer, lfs_skip_message
+
     if not BMW_SEBRING_IBT.exists():
         pytest.skip(f"missing BMW Sebring fixture at {BMW_SEBRING_IBT}")
+    if is_unmaterialised_lfs_pointer(BMW_SEBRING_IBT):
+        pytest.skip(lfs_skip_message(BMW_SEBRING_IBT))
     root = tmp_path_factory.mktemp("validator_gate_corpus") / "corpus"
     root.mkdir()
     sids = learn(BMW_SEBRING_IBT, corpus_root=root)

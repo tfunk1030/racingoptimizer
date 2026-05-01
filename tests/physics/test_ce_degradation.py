@@ -16,8 +16,11 @@ def test_ce_gated_families_show_in_untrained(tmp_path: Path) -> None:
     """With today's constraints.md (ARBs/dampers/etc. <TODO>), those families
     must appear in `untrained_parameters` and `fit()` must NOT raise.
     """
+    from tests._lfs_util import is_unmaterialised_lfs_pointer, lfs_skip_message
     if not BMW_SEBRING_IBT.exists():
         pytest.skip(f"missing BMW Sebring fixture at {BMW_SEBRING_IBT}")
+    if is_unmaterialised_lfs_pointer(BMW_SEBRING_IBT):
+        pytest.skip(lfs_skip_message(BMW_SEBRING_IBT))
     root = tmp_path / "corpus"
     root.mkdir()
     sids = learn(BMW_SEBRING_IBT, corpus_root=root)

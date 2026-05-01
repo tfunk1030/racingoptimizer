@@ -27,6 +27,8 @@ SHOCK_DEFL_CHANNELS = ("LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl
 
 
 def _find_fixture(car: str) -> Path | None:
+    from tests._lfs_util import is_unmaterialised_lfs_pointer
+
     prefix = next((k for k, v in CAR_PREFIX_MAP.items() if v == car), None)
     if prefix is None:
         return None
@@ -34,6 +36,7 @@ def _find_fixture(car: str) -> Path | None:
         return None
     matches = sorted(IBT_DIR.glob(f"{prefix}_*"))
     matches = [m for m in matches if "m4gt3" not in m.name.lower()]
+    matches = [m for m in matches if not is_unmaterialised_lfs_pointer(m)]
     return matches[0] if matches else None
 
 

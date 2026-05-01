@@ -106,8 +106,11 @@ def test_load_returns_none_for_unknown_track(tmp_path: Path) -> None:
 @pytest.mark.slow
 def test_fit_writes_accuracy_log(tmp_path: Path) -> None:
     """A real `fit()` run writes an accuracy log entry."""
+    from tests._lfs_util import is_unmaterialised_lfs_pointer, lfs_skip_message
     if not BMW_SEBRING_IBT.exists():
         pytest.skip(f"missing BMW Sebring fixture at {BMW_SEBRING_IBT}")
+    if is_unmaterialised_lfs_pointer(BMW_SEBRING_IBT):
+        pytest.skip(lfs_skip_message(BMW_SEBRING_IBT))
     root = tmp_path / "corpus"
     root.mkdir()
     sids = learn(BMW_SEBRING_IBT, corpus_root=root)

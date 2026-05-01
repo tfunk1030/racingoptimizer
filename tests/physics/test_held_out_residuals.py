@@ -61,9 +61,14 @@ _MIN_VALID_LAPS_TOTAL = 4
 
 
 def _bmw_sebring_fixtures() -> list[Path]:
+    from tests._lfs_util import is_unmaterialised_lfs_pointer
+
     if not _IBT_DIR.is_dir():
         return []
-    return sorted(_IBT_DIR.glob("bmwlmdh_sebring*.ibt"))
+    return [
+        p for p in sorted(_IBT_DIR.glob("bmwlmdh_sebring*.ibt"))
+        if not is_unmaterialised_lfs_pointer(p)
+    ]
 
 
 def _safe_float(value, default: float) -> float:

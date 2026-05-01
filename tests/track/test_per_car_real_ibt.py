@@ -109,10 +109,14 @@ class _Case(NamedTuple):
 
 def _discover_fixtures() -> dict[tuple[str, str], list[Path]]:
     """Group every .ibt under ibtfiles/ by (canonical car key, track slug)."""
+    from tests._lfs_util import is_unmaterialised_lfs_pointer
+
     grouped: dict[tuple[str, str], list[Path]] = defaultdict(list)
     if not _IBT_DIR.is_dir():
         return grouped
     for ibt in sorted(_IBT_DIR.rglob("*.ibt")):
+        if is_unmaterialised_lfs_pointer(ibt):
+            continue
         raw_car = detect_car_from_filename(ibt.name)
         track = detect_track_from_filename(ibt.name)
         if raw_car is None or track is None:

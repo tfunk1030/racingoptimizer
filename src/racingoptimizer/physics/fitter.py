@@ -70,10 +70,16 @@ TARGET_OUTPUT_CHANNELS: tuple[str, ...] = (
 )
 
 # Spec §5 family routing: continuous low-dim → GP. Discrete/coupled families
-# (damper, corner_weight, brake_bias, diff) fall through to ForestFitter.
+# (damper clicks, per-corner-weight balancing) fall through to ForestFitter.
+# Brake bias % and differential preload (Nm) are continuous scalars; they
+# routed to RF historically because they were CE-gated. With bounds landing
+# in `constraints.md` (bf2e48b) they join the GP cohort so the joint
+# surrogate stays GP for the full bounded vector.
 _GP_FAMILIES: frozenset[Family] = frozenset(
     {"heave_spring", "heave_slider", "tyre_pressure",
-     "front_wing", "rear_wing", "ride_height", "arb"}
+     "front_wing", "rear_wing", "ride_height", "arb",
+     "brake_bias", "diff",
+     "spring_rate", "perch_offset", "pushrod"}
 )
 
 # Per-phase columns the env feature vector pulls. Same 12 fields as

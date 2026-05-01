@@ -29,7 +29,6 @@ from typing import Any
 from racingoptimizer.physics.ontology import ontology_for
 from racingoptimizer.physics.recommendation import SetupRecommendation
 
-
 # Calculated readouts iRacing's UI displays as outputs. The driver cannot
 # type these into the garage. Identified by the leaf field name in the
 # setup JSON. Confirmed against the Cadillac V-Series.R YAML; the same leaf

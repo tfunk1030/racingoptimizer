@@ -630,9 +630,27 @@ def _build_or_load_model(
 
 
 def _model_cache_path(root: Path, car: str, track: str, session_ids: list[str]) -> Path:
-    digest = hashlib.sha256(
-        "|".join(sorted(session_ids)).encode("utf-8")
-    ).hexdigest()[:16]
+    """Cache path keyed by session ids + ontology fingerprint + feature schema.
+
+    The ontology fingerprint folds in the per-car parameter set and each
+    parameter's `(family, fittable, user_settable)` triple. Any change to
+    `physics.ontology` (e.g. flipping a CE-gated entry to `fittable=True`)
+    invalidates pre-existing cached pickles so a stale model cannot leak
+    a now-impossible recommendation. The feature-schema version pins the
+    pickle layout: pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3).
+    """
+    from racingoptimizer.physics.fitter import ENV_FEATURE_SCHEMA_VERSION
+    from racingoptimizer.physics.ontology import ontology_for
+
+    parts = ["|".join(sorted(session_ids))]
+    onto = ontology_for(car)
+    onto_fingerprint = "|".join(
+        f"{name}:{spec.family}:{int(spec.fittable)}:{int(spec.user_settable)}"
+        for name, spec in sorted(onto.items())
+    )
+    parts.append(f"onto={onto_fingerprint}")
+    parts.append(f"schema={int(ENV_FEATURE_SCHEMA_VERSION)}")
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
     return root / "models" / f"{car}__{track}__{digest}.pickle"
 
 
