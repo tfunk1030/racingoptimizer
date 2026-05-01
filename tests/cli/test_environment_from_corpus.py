@@ -14,9 +14,9 @@ import polars as pl
 import pytest
 
 from racingoptimizer.cli.recommend import (
+    _ENV_DEFAULTS,
     _circular_median_deg,
     _environment_from_corpus,
-    _ENV_DEFAULTS,
 )
 from racingoptimizer.ingest import catalog as cat
 from racingoptimizer.ingest.catalog import LapRow, SessionRow

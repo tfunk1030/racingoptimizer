@@ -22,8 +22,12 @@ BMW_SEBRING_RICH_IBT = _IBT_DIR / "bmwlmdh_sebring international 2026-03-22 14-5
 
 @pytest.fixture
 def bmw_sebring_corpus(tmp_path: Path) -> tuple[Path, list[str]]:
+    from tests._lfs_util import is_unmaterialised_lfs_pointer, lfs_skip_message
+
     if not BMW_SEBRING_RICH_IBT.exists():
         pytest.skip(f"missing BMW Sebring fixture at {BMW_SEBRING_RICH_IBT}")
+    if is_unmaterialised_lfs_pointer(BMW_SEBRING_RICH_IBT):
+        pytest.skip(lfs_skip_message(BMW_SEBRING_RICH_IBT))
     root = tmp_path / "corpus"
     root.mkdir()
     sids = learn(BMW_SEBRING_RICH_IBT, corpus_root=root)
@@ -33,8 +37,12 @@ def bmw_sebring_corpus(tmp_path: Path) -> tuple[Path, list[str]]:
 
 @pytest.fixture
 def bmw_sebring_minimal_corpus(tmp_path: Path) -> tuple[Path, list[str]]:
+    from tests._lfs_util import is_unmaterialised_lfs_pointer, lfs_skip_message
+
     if not BMW_SEBRING_IBT.exists():
         pytest.skip(f"missing BMW Sebring fixture at {BMW_SEBRING_IBT}")
+    if is_unmaterialised_lfs_pointer(BMW_SEBRING_IBT):
+        pytest.skip(lfs_skip_message(BMW_SEBRING_IBT))
     root = tmp_path / "corpus"
     root.mkdir()
     sids = learn(BMW_SEBRING_IBT, corpus_root=root)

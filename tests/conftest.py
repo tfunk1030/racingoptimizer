@@ -28,22 +28,50 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+_LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1"
+
+
+def _is_unmaterialised_lfs_pointer(path: Path) -> bool:
+    """The IBT corpus is tracked in git-lfs.
+
+    On checkouts where `git lfs pull` hasn't been run, the file at the
+    fixture path is a ~130-byte pointer text instead of the actual binary.
+    Feeding that pointer through the IRSDK parser causes runaway memory
+    allocation (the pointer text gets misinterpreted as a multi-GB
+    `session_info_len`). Detect the pointer header and skip cleanly.
+    """
+    try:
+        if path.stat().st_size > 4096:
+            return False
+        with path.open("rb") as fh:
+            return fh.read(len(_LFS_POINTER_PREFIX)) == _LFS_POINTER_PREFIX
+    except OSError:
+        return False
+
+
+def _resolve_real_ibt_or_skip(candidate: Path, label: str) -> Path:
+    if not candidate.exists():
+        pytest.skip(f"{label} not present at {candidate}")
+    if _is_unmaterialised_lfs_pointer(candidate):
+        pytest.skip(
+            f"{label} at {candidate.name} is an unmaterialised git-lfs pointer; "
+            "run `git lfs pull` before invoking IBT-loading tests"
+        )
+    return candidate
+
+
 @pytest.fixture
 def small_ibt() -> Path:
     """Path to a small real .ibt fixture from the repo's ibtfiles/ corpus."""
-    candidate = IBT_DIR / SMALL_IBT_NAME
-    if not candidate.exists():
-        pytest.skip(f"fixture IBT not present at {candidate}")
-    return candidate
+    return _resolve_real_ibt_or_skip(IBT_DIR / SMALL_IBT_NAME, "fixture IBT")
 
 
 @pytest.fixture
 def multi_lap_ibt() -> Path:
     """Path to a multi-lap real .ibt fixture (BMW Sebring, ≥3 valid laps)."""
-    candidate = IBT_DIR / MULTI_LAP_IBT_NAME
-    if not candidate.exists():
-        pytest.skip(f"multi-lap fixture not present at {candidate}")
-    return candidate
+    return _resolve_real_ibt_or_skip(
+        IBT_DIR / MULTI_LAP_IBT_NAME, "multi-lap fixture",
+    )
 
 
 @pytest.fixture

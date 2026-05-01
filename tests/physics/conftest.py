@@ -51,8 +51,15 @@ def bmw_model_session(tmp_path_factory):
     test_recommend.py / test_recommend_clamp.py / test_weight_corners.py /
     test_score_locality.py — none of these tests mutate the model.
     """
+    from tests.conftest import _is_unmaterialised_lfs_pointer
+
     if not BMW_SEBRING_IBT.exists():
         pytest.skip(f"missing BMW Sebring fixture at {BMW_SEBRING_IBT}")
+    if _is_unmaterialised_lfs_pointer(BMW_SEBRING_IBT):
+        pytest.skip(
+            f"BMW Sebring fixture at {BMW_SEBRING_IBT.name} is an unmaterialised "
+            "git-lfs pointer; run `git lfs pull` first"
+        )
     root = tmp_path_factory.mktemp("u10_corpus") / "corpus"
     root.mkdir()
     sids = learn(BMW_SEBRING_IBT, corpus_root=root)
@@ -68,10 +75,16 @@ def bmw_model_session(tmp_path_factory):
 
 
 def _discover_fixtures() -> dict[tuple[str, str], list[Path]]:
+    from tests.conftest import _is_unmaterialised_lfs_pointer
+
     grouped: dict[tuple[str, str], list[Path]] = defaultdict(list)
     if not _IBT_DIR.is_dir():
         return grouped
     for ibt in sorted(_IBT_DIR.rglob("*.ibt")):
+        # Skip git-lfs pointer files — feeding them through irsdk causes
+        # multi-GB allocations as the parser misreads the pointer text.
+        if _is_unmaterialised_lfs_pointer(ibt):
+            continue
         raw_car = detect_car_from_filename(ibt.name)
         track = detect_track_from_filename(ibt.name)
         if raw_car is None or track is None:

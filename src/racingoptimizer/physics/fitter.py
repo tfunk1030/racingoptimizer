@@ -67,13 +67,29 @@ TARGET_OUTPUT_CHANNELS: tuple[str, ...] = (
     "rf_ride_height_mean_mm",
     "lr_ride_height_mean_mm",
     "rr_ride_height_mean_mm",
+    # VISION §3 names "shock velocities" as a thing the empirical model
+    # must learn as a function of setup. The corner aggregator already
+    # produces velocity (mm/s) and force (N) columns at corner-phase
+    # grain (see `corner/states.py:504-511`); they belong here so the
+    # joint surrogate can predict spring/damper-rate → platform-velocity
+    # cause-and-effect for the recommender's setup search.
+    "damper_velocity_p99_mms",
+    "damper_velocity_mean_mms",
+    "damper_force_p99_n",
+    "damper_force_mean_n",
 )
 
 # Spec §5 family routing: continuous low-dim → GP. Discrete/coupled families
-# (damper, corner_weight, brake_bias, diff) fall through to ForestFitter.
+# (damper clicks, per-corner-weight balancing) fall through to ForestFitter.
+# Brake bias % and differential preload (Nm) are continuous scalars; they
+# routed to RF historically because they were CE-gated. With bounds landing
+# in `constraints.md` (bf2e48b) they join the GP cohort so the joint
+# surrogate stays GP for the full bounded vector.
 _GP_FAMILIES: frozenset[Family] = frozenset(
     {"heave_spring", "heave_slider", "tyre_pressure",
-     "front_wing", "rear_wing", "ride_height", "arb"}
+     "front_wing", "rear_wing", "ride_height", "arb",
+     "brake_bias", "diff",
+     "spring_rate", "perch_offset", "pushrod", "camber"}
 )
 
 # Per-phase columns the env feature vector pulls. Same 12 fields as

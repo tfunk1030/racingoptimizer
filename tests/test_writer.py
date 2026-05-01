@@ -39,7 +39,10 @@ def _fake_parse_result(
         recorded_at="2026-03-22T14:47:42",
         duration_s=n_samples / sample_rate_hz,
         sample_rate_hz=sample_rate_hz,
-        channels={"LapDistPct": pct, "Lap": lap, "Speed": speed, "Brake": brake, "Throttle": throttle},
+        channels={
+            "LapDistPct": pct, "Lap": lap, "Speed": speed,
+            "Brake": brake, "Throttle": throttle,
+        },
         setup={"chassis": {"front": {"wing": 16.0}}},
         weather_summary={"AirTemp_c_mean": 22.0},
         lap_spans=spans,
@@ -118,8 +121,14 @@ def test_write_session_is_idempotent_on_same_id(tmp_corpus: Path) -> None:
     init_schema(conn)
     pr = _fake_parse_result()
     sid = "1111222233334444"
-    write_session(conn=conn, corpus_root=tmp_corpus, session_id=sid, source_path="X:/a.ibt", parse=pr)
-    parquet_p = write_session(conn=conn, corpus_root=tmp_corpus, session_id=sid, source_path="X:/a.ibt", parse=pr)
+    write_session(
+        conn=conn, corpus_root=tmp_corpus,
+        session_id=sid, source_path="X:/a.ibt", parse=pr,
+    )
+    parquet_p = write_session(
+        conn=conn, corpus_root=tmp_corpus,
+        session_id=sid, source_path="X:/a.ibt", parse=pr,
+    )
     rows = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()
     laps = conn.execute("SELECT COUNT(*) FROM laps").fetchone()
     assert rows[0] == 1

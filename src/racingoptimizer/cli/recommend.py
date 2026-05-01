@@ -630,9 +630,27 @@ def _build_or_load_model(
 
 
 def _model_cache_path(root: Path, car: str, track: str, session_ids: list[str]) -> Path:
-    digest = hashlib.sha256(
-        "|".join(sorted(session_ids)).encode("utf-8")
-    ).hexdigest()[:16]
+    """Cache path keyed by session ids + ontology fingerprint + feature schema.
+
+    The ontology fingerprint folds in the per-car parameter set and each
+    parameter's `(family, fittable, user_settable)` triple. Any change to
+    `physics.ontology` (e.g. flipping a CE-gated entry to `fittable=True`)
+    invalidates pre-existing cached pickles so a stale model cannot leak
+    a now-impossible recommendation. The feature-schema version pins the
+    pickle layout: pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3).
+    """
+    from racingoptimizer.physics.fitter import ENV_FEATURE_SCHEMA_VERSION
+    from racingoptimizer.physics.ontology import ontology_for
+
+    parts = ["|".join(sorted(session_ids))]
+    onto = ontology_for(car)
+    onto_fingerprint = "|".join(
+        f"{name}:{spec.family}:{int(spec.fittable)}:{int(spec.user_settable)}"
+        for name, spec in sorted(onto.items())
+    )
+    parts.append(f"onto={onto_fingerprint}")
+    parts.append(f"schema={int(ENV_FEATURE_SCHEMA_VERSION)}")
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
     return root / "models" / f"{car}__{track}__{digest}.pickle"
 
 
@@ -824,7 +842,20 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
     Returns (rec_with_clamped_values, clamp_warnings, top_level_warnings).
     Clamped values are appended to the parameter's evidence via the
     `clamp_warnings` map consumed by `build_justifications`.
+
+    Discrete parameters (`ParameterSpec.is_discrete=True`, e.g. ARB blade
+    index, damper clicks) are rounded to the nearest integer after
+    clamping. The DE search runs continuously over `[lo, hi]`, so without
+    this round step the briefing emits values like "anti_roll_bar_front:
+    3.700" — a value the user cannot enter into the iRacing garage UI.
     """
+    from racingoptimizer.physics.ontology import ontology_for
+
+    try:
+        onto = ontology_for(model.car)
+    except KeyError:
+        onto = {}
+
     clamp_warnings: dict[str, str] = {}
     top_warnings: list[str] = []
     pinned = tuple(getattr(rec, "pinned_to_observed_median", ()) or ())
@@ -847,14 +878,27 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
                 f"{name} skipped: bound is TODO in constraints.md"
             )
             continue
-        if result.was_clamped:
+        clamped_value = float(result.value)
+        spec = onto.get(name)
+        if spec is not None and spec.is_discrete:
+            rounded = float(round(clamped_value))
+            # Re-clamp the rounded value back inside the legal range —
+            # `round(0.4)` from a `[1, 5]` bound would otherwise emit 0.
+            lo, hi = result.bound
+            rounded = min(max(rounded, lo), hi)
+            if rounded != clamped_value:
+                clamp_warnings[name] = (
+                    f"discrete-click value rounded from {clamped_value:.3f} "
+                    f"to {int(rounded)} (legal range "
+                    f"{int(lo)}..{int(hi)})"
+                )
+            clamped_value = rounded
+        if result.was_clamped and name not in clamp_warnings:
             clamp_warnings[name] = (
-                f"value clamped from {value:.3f} to {result.value:.3f} "
+                f"value clamped from {value:.3f} to {clamped_value:.3f} "
                 f"(legal bounds: {result.bound[0]:.3f} - {result.bound[1]:.3f})"
             )
-            new_params[name] = (float(result.value), confidence)
-        else:
-            new_params[name] = (value, confidence)
+        new_params[name] = (clamped_value, confidence)
     return replace(rec, parameters=new_params), clamp_warnings, top_warnings
 
 

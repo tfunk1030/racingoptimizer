@@ -21,8 +21,11 @@ BMW_SEBRING_IBT = REPO_ROOT / "ibtfiles" / "bmwlmdh_sebring international 2026-0
 def test_fit_without_aero_marks_correction_unavailable(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    from tests._lfs_util import is_unmaterialised_lfs_pointer, lfs_skip_message
     if not BMW_SEBRING_IBT.exists():
         pytest.skip(f"missing BMW Sebring fixture at {BMW_SEBRING_IBT}")
+    if is_unmaterialised_lfs_pointer(BMW_SEBRING_IBT):
+        pytest.skip(lfs_skip_message(BMW_SEBRING_IBT))
     root = tmp_path / "corpus"
     root.mkdir()
     sids = learn(BMW_SEBRING_IBT, corpus_root=root)
@@ -70,8 +73,11 @@ def test_aero_dependent_channels_cover_ride_heights() -> None:
 def test_predict_aero_unavailable_downgrades_one_tier(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from tests._lfs_util import is_unmaterialised_lfs_pointer, lfs_skip_message
     if not BMW_SEBRING_IBT.exists():
         pytest.skip(f"missing BMW Sebring fixture at {BMW_SEBRING_IBT}")
+    if is_unmaterialised_lfs_pointer(BMW_SEBRING_IBT):
+        pytest.skip(lfs_skip_message(BMW_SEBRING_IBT))
     root = tmp_path / "corpus"
     root.mkdir()
     sids = learn(BMW_SEBRING_IBT, corpus_root=root)

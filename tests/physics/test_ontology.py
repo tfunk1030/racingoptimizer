@@ -37,12 +37,21 @@ def test_ontology_covers_five_cars(car: str) -> None:
 
 @pytest.mark.parametrize("car", ["acura", "bmw", "cadillac", "ferrari", "porsche"])
 def test_ce_gated_families_present_but_unfittable(car: str) -> None:
+    """Families still awaiting bounds in `constraints.md` stay fittable=False.
+
+    ARBs / brake bias / differential preload were CE-gated in the original
+    landing of the ontology but flipped to fittable=True when bounds landed
+    in `bf2e48b` (see `test_fittable_parameters_only_returns_bounded_user_settable`
+    above). The CE-gated entries that remain are the ones whose bounds are
+    still `<TODO: from iRacing UI>` placeholders.
+    """
     onto = ontology_for(car)
-    assert "anti_roll_bar_front" in onto
-    assert onto["anti_roll_bar_front"].fittable is False
-    # Damper LSC FL specifically — every car has a damper.
+    # Per-corner damper clicks — bounds still TODO in `constraints.md`.
     assert "damper_lsc_fl" in onto
     assert onto["damper_lsc_fl"].fittable is False
+    # Per-corner-weight targets — bounds still TODO.
+    assert "corner_weight_fl_kg" in onto
+    assert onto["corner_weight_fl_kg"].fittable is False
 
 
 def test_unknown_car_raises() -> None:
@@ -135,6 +144,20 @@ def test_fittable_parameters_only_returns_bounded_user_settable() -> None:
         "third_perch_offset_rear_mm",
         "pushrod_length_offset_front_mm",
         "pushrod_length_offset_rear_mm",
+        # Bounded CE families flipped to fittable in clause-1 remediation
+        # (constraints.md gained ARB / brake-bias / diff-preload bounds in
+        # bf2e48b but the ontology kept them fittable=False).
+        "anti_roll_bar_front",
+        "anti_roll_bar_rear",
+        "brake_bias_pct",
+        "diff_preload_nm",
+        # Per-corner camber. Bounds in `constraints.md` are real numeric
+        # ranges (front -2.9..0, rear -1.9..0) — added to the ontology in
+        # the second-pass audit (gap A) so the recommender can search.
+        "camber_fl_deg",
+        "camber_fr_deg",
+        "camber_rl_deg",
+        "camber_rr_deg",
     }
     assert must_include.issubset(result), (
         f"missing expected fittable params: {must_include - result}"

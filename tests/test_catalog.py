@@ -110,8 +110,14 @@ def test_insert_laps_round_trip(conn: sqlite3.Connection) -> None:
     s = _make_session()
     upsert_session(conn, s)
     laps = [
-        LapRow(s.session_id, lap_index=0, lap_time_s=92.1, start_sample=0, end_sample=5530, valid=1, best=0),
-        LapRow(s.session_id, lap_index=1, lap_time_s=91.4, start_sample=5530, end_sample=11020, valid=1, best=1),
+        LapRow(
+            s.session_id, lap_index=0, lap_time_s=92.1,
+            start_sample=0, end_sample=5530, valid=1, best=0,
+        ),
+        LapRow(
+            s.session_id, lap_index=1, lap_time_s=91.4,
+            start_sample=5530, end_sample=11020, valid=1, best=1,
+        ),
     ]
     insert_laps(conn, laps)
     rows = conn.execute(
