@@ -4,7 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-`racingoptimizer` is the `optimize` Python CLI for iRacing GTP setup recommendations (VISION.md §8). All six VISION slices (A–F) plus three cross-cutting modules are merged. Install with `uv venv && uv pip install -e ".[dev]"`; ingest telemetry with `uv run optimize learn ./ibtfiles`; recommend a setup with `uv run optimize bmw sebring`; compare two IBTs with `uv run optimize compare a.ibt b.ibt`; coverage report with `uv run optimize status bmw`; the full ~325-test suite runs via `uv run pytest`. Read `VISION.md` first — it is the spec.
+`racingoptimizer` is the `optimize` Python CLI for iRacing GTP setup recommendations (VISION.md §8). All six VISION slices (A–F) plus three cross-cutting modules are merged. End-user walkthrough is in `GETTING_STARTED.md`; design spec is `VISION.md` (read it first); per-clause audit is `docs/VISION_COMPLIANCE.md`.
+
+## Commands
+
+```bash
+uv venv && uv pip install -e ".[dev]"
+
+uv run optimize learn ./ibtfiles            # ingest a directory of .ibt files
+uv run optimize bmw sebring                 # recommend by (car, track)
+uv run optimize ./my_session.ibt            # recommend by IBT path (auto-detect)
+uv run optimize compare a.ibt b.ibt         # diff two setups per (corner, phase)
+uv run optimize status bmw                  # coverage + fit-quality trend
+
+uv run pytest -q                            # full suite (568 tests, ~15 min)
+uv run pytest -q -m "not slow"              # fast suite (~2 min)
+uv run ruff check src tests                 # lint (must stay clean)
+```
 
 ## Active build
 
@@ -12,14 +28,22 @@ VISION.md is decomposed into six slices plus three cross-cutting modules. Status
 
 | Slice | Module | Code merged | Per-car verification scope |
 |---|---|---|---|
-| **A — IBT ingestion** | `racingoptimizer.ingest` | ✅ | Detect/normalize: ✓ all 5 (`tests/test_detect.py`). Parser/writer/api end-to-end: ✓ BMW Sebring fixture only. **Per-car parser smoke is the gap.** |
-| **B — Corner-phase decomposition** | `racingoptimizer.corner` | ✅ | ✓ all 5 (`tests/corner/test_per_car_smoke.py` loops the canonical car fixtures and asserts ≥1 corner detected). |
+| **A — IBT ingestion** | `racingoptimizer.ingest` | ✅ | Detect/normalize: ✓ all 5 (`tests/test_detect.py`). Per-car parser end-to-end: ✓ all 5 (`tests/test_parser_per_car.py`). |
+| **B — Corner-phase decomposition** | `racingoptimizer.corner` | ✅ | ✓ all 5 (`tests/corner/test_per_car_smoke.py` loops the canonical car fixtures and asserts ≥1 corner detected). VISION §2 damper-velocities-vs-forces fully wired: `damper_force_p99_n` / `damper_force_mean_n` columns derived per-car via `physics.damper_force.estimate_damper_force_n` (digressive curve, inlined as a Polars expression to keep the pipeline columnar). |
 | **C — Aero-map loader & interpolator** | `racingoptimizer.aero` | ✅ | ✓ all 5 (`tests/aero/test_loader.py::test_load_real_corpus_per_car` and `tests/aero/test_smoke.py::test_load_aero_maps_per_car_smoke`). |
-| **D — Track model** | `racingoptimizer.track` | ✅ | Synthetic only — **untested against real per-car IBT corpora.** Per-car compounding-regime smoke is the gap. |
-| **E — Physics fitter** | `racingoptimizer.physics` | ✅ — both halves merged (U9 train + U10 score/recommend). | ✓ BMW Sebring fixture only. **Acura is a known divergence (no shock-deflection channels).** Per-car ontology coverage and per-car fit smoke are gaps. |
-| **F — CLI / recommendation rendering** | `racingoptimizer.cli`, `racingoptimizer.explain` | ✅ — `optimize <car> <track>`, `optimize compare`, `optimize status` (U11). `optimize learn` (slice A) preserved. | ✓ all 5 (`tests/cli/test_per_car_smoke.py` loops the canonical car fixtures, runs `optimize <car> <track>` text + JSON, and asserts an exit-0 briefing with confidence + parameter blocks for every car). |
+| **D — Track model** | `racingoptimizer.track` | ✅ | ✓ all 5 (`tests/track/test_per_car_real_ibt.py`). Per-car curb-agreement threshold lives in `_PER_CAR_CURB_AGREEMENT_FRACTION` (Acura uses 0.3 instead of the 0.6 four-corner default — its heave/roll-shock signal aggregates more symmetrically and produces lower cross-session agreement). Per-IBT sample rate is threaded through `TrackModel.sample_rate_hz` and `_lap_length_from_speed_fallback` so high-rate (e.g. 360 Hz) recordings don't 6× the lap length. |
+| **E — Physics fitter** | `racingoptimizer.physics` | ✅ — both halves merged (U9 train + U10 score/recommend). | ✓ all 5 (`tests/physics/test_per_car_fit_predict.py`). Acura gracefully degrades when shock-deflection channels are missing — flagged in `untrained_parameters`, fit still runs. |
+| **F — CLI / recommendation rendering** | `racingoptimizer.cli`, `racingoptimizer.explain` | ✅ — `optimize <car> <track>`, `optimize <ibt_path>` (auto-detect), `optimize compare`, `optimize status` (U11). `optimize learn` (slice A) preserved. | ✓ all 5 (`tests/cli/test_per_car_smoke.py` loops the canonical car fixtures, runs `optimize <car> <track>` text + JSON, and asserts an exit-0 briefing with confidence + parameter blocks for every car). |
 
 **Verification convention:** before claiming a slice "works" or marking it ✅, the slice must have a `tests/<slice>/test_per_car_smoke.py` (or equivalent) that loops the five canonical car fixtures (skipping when missing) and asserts the slice's contract holds. Single-car smoke tests are gaps to fill before the slice is called done.
+
+**Repo layout:**
+
+- `src/racingoptimizer/<slice>/` — implementation (`ingest`, `corner`, `aero`, `track`, `physics`, `cli`, `explain`, plus cross-cutting `context`, `confidence`, `constraints`).
+- `tests/<slice>/` — pytest suites mirroring each module; per-car smoke tests live as `test_per_car_*.py`.
+- `docs/superpowers/specs/` — the design spec for each slice (read before touching the code).
+- `docs/VISION_COMPLIANCE.md` — per-clause file:line audit of how the code satisfies VISION.
+- `GETTING_STARTED.md` / `README.md` — end-user docs (don't duplicate them here).
 
 Cross-cutting modules (master-plan §2) — all merged:
 
@@ -27,7 +51,7 @@ Cross-cutting modules (master-plan §2) — all merged:
 - `racingoptimizer.confidence.Confidence` — frozen `(value, lo, hi, n_samples, regime)` with `Confidence.derive(...)` regime-derivation classmethod (sparse short-circuits noisy at `n_samples < 30`).
 - `racingoptimizer.constraints.{ConstraintsTable, load_constraints, clamp}` — markdown parser for `constraints.md` plus per-car-shadowing `clamp(value, parameter, car)`.
 
-Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/`. Read the active slice's spec before touching its code. The Wave-by-Wave decomposition that produced the eleven implementation units (U1–U11, of which 1–9 are merged) lives in `C:/Users/VYRAL/.claude/plans/ultrathink-and-read-through-wobbly-horizon.md`.
+Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/`. Read the active slice's spec before touching its code.
 
 `constraints.md` covers the bounded subset (wing, tyre pressure, heave spring/slider, static ride heights). ARBs, dampers, corner weights, brake bias, differential, camber, toe, brake ducts, and throttle/brake mapping are all `<TODO: from iRacing UI>` placeholders awaiting manual UI capture. Slice E's `fit` gracefully degrades — it lists CE-gated unbounded parameters in `untrained_parameters` and does not refuse to run.
 
@@ -67,6 +91,13 @@ These are deliberate design constraints, not suggestions. Diverging from them de
 ## CLI UX target (VISION.md §8)
 
 Top-level command is `optimize`, with auto-detection of car and track from IBT filenames. Avoid long flag chains and module-path invocations. The default path is "drop in an IBT, get a setup out." Power-user flags are fine as overrides, not as the primary interface.
+
+Two recommend invocations are supported and routed by `_OptimizeGroup.parse_args` in `cli/__init__.py`:
+
+- `optimize <car> <track>` — explicit pair. Track input is slugified before catalog lookup so `laguna-seca`, `Laguna Seca`, and `lagunaseca` all match.
+- `optimize <ibt_path>` — first positional is an existing `.ibt` file; car & track are sniffed from the filename via `detect_car_from_filename` / `detect_track_from_filename`.
+
+Both forms route to the same `recommend_cmd`. The end-user-facing walkthrough lives in `GETTING_STARTED.md`; do not duplicate it here.
 
 ## Cars covered
 

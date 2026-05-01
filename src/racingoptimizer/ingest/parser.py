@@ -38,6 +38,56 @@ EXCLUDED_CHANNEL_PATTERNS: tuple[str, ...] = (
 DEFAULT_SAMPLE_RATE_HZ: float = 60.0
 
 
+# iRacing's `TrackWetness` channel is an integer-coded enum, NOT a 0..1
+# fraction. The enum values come from `irsdk_TrackWetness` in the iRacing
+# SDK headers (mirrored by `pyirsdk`):
+#
+#     0 = Unknown          5 = Moderately Wet
+#     1 = Dry              6 = Very Wet
+#     2 = Mostly Dry       7 = Extremely Wet
+#     3 = Very Lightly Wet
+#     4 = Lightly Wet
+#
+# VISION §10 specifies `TrackWetness` as "0=dry to higher values for standing
+# water" — i.e. canonical downstream representation is a 0..1 fraction. We
+# remap at the parser boundary so per-session parquet, weather summaries, and
+# every consumer (`EnvironmentFrame`, `wet_mode.classify_conditions`,
+# `corner_phase_states`) see the same canonical scale.
+#
+# Mapping rationale: monotonically increasing, places the regime boundaries
+# used by `physics.wet_mode.classify_conditions` (dry < 0.05, damp < 0.3,
+# wet < 0.7, full_rain >= 0.7) at sensible enum break-points — Mostly Dry
+# stays dry, Very Lightly Wet is damp, Lightly/Moderately Wet are wet,
+# Very/Extremely Wet are full_rain. Unknown is treated as dry (safest
+# default — most of our corpus is enum=1 dry).
+_TRACK_WETNESS_ENUM_TO_FRACTION: dict[int, float] = {
+    0: 0.00,   # Unknown
+    1: 0.00,   # Dry
+    2: 0.10,   # Mostly Dry
+    3: 0.25,   # Very Lightly Wet
+    4: 0.40,   # Lightly Wet
+    5: 0.60,   # Moderately Wet
+    6: 0.80,   # Very Wet
+    7: 1.00,   # Extremely Wet
+}
+
+
+def convert_track_wetness_enum(raw: np.ndarray) -> np.ndarray:
+    """Convert iRacing's enum-coded `TrackWetness` channel to a 0..1 fraction.
+
+    `raw` is the per-sample float32 array as exposed by `pyirsdk` (values
+    are integer-valued floats in the range 0..7). Values outside the known
+    enum range are clipped to [0, 7] before lookup so a malformed IBT cannot
+    poison the corpus with NaNs. Returns a `float32` array of the same shape.
+    """
+    rounded = np.rint(raw).astype(np.int64)
+    clipped = np.clip(rounded, 0, 7)
+    table = np.array(
+        [_TRACK_WETNESS_ENUM_TO_FRACTION[i] for i in range(8)], dtype=np.float32
+    )
+    return table[clipped]
+
+
 class ParseResult(NamedTuple):
     yaml_car: str
     yaml_track: str
@@ -184,6 +234,17 @@ def parse_ibt(path: Path | str) -> ParseResult:
                 dropped[name] = f"unexpected ndim={arr.ndim} after get_all"
                 continue
             channels[name] = arr
+
+        # VISION §10 normalisation: convert iRacing's `TrackWetness` enum
+        # (1=Dry .. 7=Extremely Wet) to the spec-canonical 0..1 fraction
+        # before persistence. Done here, after the full channel pull, so the
+        # persisted parquet, the catalog weather summary, and every downstream
+        # consumer all see the same canonical scale. See
+        # `convert_track_wetness_enum` for the full mapping rationale.
+        if "TrackWetness" in channels:
+            channels["TrackWetness"] = convert_track_wetness_enum(
+                channels["TrackWetness"]
+            )
 
         for required in ("LapDistPct", "Lap"):
             if required not in channels:

@@ -52,9 +52,13 @@ def recommend(
         p for p in fittable_parameters(model.car, constraints)
         if constraints.bounds(model.car, p) is not None
     ]
+    observed_std_table: dict[str, float] = getattr(
+        model, "parameter_observed_std", {}
+    ) or {}
     param_names: list[str] = []
     bounds: list[tuple[float, float]] = []
     init_values: list[float] = []
+    pinned_constant: set[str] = set()
     for name in fittable:
         bound = constraints.bounds(model.car, name)
         if bound is None:
@@ -64,7 +68,15 @@ def recommend(
         ))
         baseline = min(max(baseline, bound[0]), bound[1])
         regime = _median_regime(model, name)
-        sub_bounds = _trust_bounds(bound, baseline, regime)
+        observed_std = float(observed_std_table.get(name, 0.0))
+        sub_bounds, was_pinned = _pin_or_trust_bounds(
+            bound=bound,
+            baseline=baseline,
+            regime=regime,
+            observed_std=observed_std,
+        )
+        if was_pinned:
+            pinned_constant.add(name)
         param_names.append(name)
         bounds.append(sub_bounds)
         init_values.append(baseline)
@@ -137,6 +149,7 @@ def recommend(
         score_breakdown=breakdown,
         untrained_parameters=tuple(model.untrained_parameters),
         aero_correction_available=bool(model.aero_correction_available),
+        pinned_to_observed_median=tuple(sorted(pinned_constant)),
     )
 
 
@@ -227,6 +240,61 @@ def _trust_bounds(
         return (lo, hi)
     span = (hi - lo) * fraction / 2.0
     return (max(lo, baseline - span), min(hi, baseline + span))
+
+
+# Threshold for declaring a parameter "effectively constant" in training.
+# When the observed per-session standard deviation is below this fraction of
+# the constraint range, the joint surrogate has no information about how the
+# response depends on the parameter — every training row sat at the same
+# value (modulo trivial garage-click noise). Pinning the parameter to its
+# observed median is the only honest answer; otherwise the DE search drifts
+# to whichever bound the noise gradient points at, producing constraint-edge
+# recommendations like "tyre pressure 166 kPa" when every observed session
+# ran 152 kPa.
+#
+# 2% of the constraint range is the empirical floor: tyre pressures span
+# 138-166 kPa (28 kPa range), so the threshold is ~0.6 kPa — narrower than
+# any meaningful click. Ride heights span 25-75 mm (50 mm range), so the
+# threshold is ~1 mm. Both are inside the iRacing garage-UI step quantum
+# for those parameters, so any session with intentional variation across
+# clicks will clear the threshold.
+_NEAR_CONSTANT_FRACTION: float = 0.02
+
+# Width of the pinned bound. scipy.optimize.differential_evolution requires
+# `lo < hi` for every dimension, so we can't pass a true zero-width bound.
+# 1e-6 of the constraint range is small enough that DE cannot explore around
+# the pin meaningfully; the `_post_clamp` step in the CLI rounds to user-
+# meaningful precision so the final reported value still equals the pin.
+_PIN_HALF_WIDTH_FRACTION: float = 1e-6
+
+
+def _pin_or_trust_bounds(
+    *,
+    bound: tuple[float, float],
+    baseline: float,
+    regime: str,
+    observed_std: float,
+) -> tuple[tuple[float, float], bool]:
+    """Decide search bounds for a single parameter.
+
+    Returns ``((lo, hi), was_pinned)``. ``was_pinned`` is ``True`` when the
+    parameter was held effectively constant in training and the bound has
+    been collapsed to a near-degenerate window around ``baseline``; the
+    recommender adds those parameters to a "pinned" warning so the briefing
+    can explain why no exploration happened. Otherwise the existing trust-
+    radius logic applies (sparse → 30%, noisy → 50%, confident/dense → full).
+    """
+    lo, hi = bound
+    span = hi - lo
+    if span > 0.0 and observed_std / span < _NEAR_CONSTANT_FRACTION:
+        eps = max(span * _PIN_HALF_WIDTH_FRACTION, 1e-9)
+        pinned_lo = max(lo, baseline - eps)
+        pinned_hi = min(hi, baseline + eps)
+        # Guarantee lo < hi for DE even at the constraint edge.
+        if pinned_hi <= pinned_lo:
+            pinned_hi = min(hi, pinned_lo + 2 * eps)
+        return ((pinned_lo, pinned_hi), True)
+    return (_trust_bounds(bound, baseline, regime), False)
 
 
 def _seed_population(

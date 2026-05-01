@@ -126,6 +126,16 @@ class TrackModel:
     cache_path: Path
     summary_path: Path
     corpus_root: Path | None = None
+    # Per-IBT recording rate detected at ingest (S1.4). Defaults to 60 Hz
+    # for backward-compat with TrackModels built before this field existed
+    # (the catalog stores `sample_rate_hz` as nullable so old rows return
+    # None; we coalesce to the iRacing default at lookup time).
+    sample_rate_hz: float = 60.0
+    # Canonical car key (e.g. "acura", "bmw"). Drives per-car threshold lookups
+    # in `compute_curb_mask` (Acura uses a lower curb-agreement fraction —
+    # see `racingoptimizer.track.masks._PER_CAR_CURB_AGREEMENT_FRACTION`).
+    # `None` keeps the legacy four-corner defaults.
+    car: str | None = None
 
     @property
     def geometry(self) -> pl.DataFrame:
@@ -176,7 +186,11 @@ class TrackModel:
             return np.zeros(lap_df.height, dtype=bool)
         lap_length = self._resolve_lap_length(lap_df)
         return compute_curb_mask(
-            lap_df, self.bump_map, lap_length_m=lap_length, bin_size_m=self.bin_size_m
+            lap_df,
+            self.bump_map,
+            lap_length_m=lap_length,
+            bin_size_m=self.bin_size_m,
+            car=self.car,
         )
 
     def off_track_mask(self, lap_df: pl.DataFrame) -> np.ndarray:
@@ -188,7 +202,7 @@ class TrackModel:
             self.grip_map,
             lap_length_m=lap_length,
             bin_size_m=self.bin_size_m,
-            sample_rate_hz=60,
+            sample_rate_hz=int(round(self.sample_rate_hz)),
         )
 
     def _resolve_lap_length(self, lap_df: pl.DataFrame) -> float:
@@ -196,7 +210,8 @@ class TrackModel:
         if stored is not None and stored > 0.0:
             return stored
         if "Speed" in lap_df.columns and lap_df.height > 0:
-            return float(np.sum(lap_df["Speed"].to_numpy()) / 60.0)
+            # VISION §1: per-IBT sample rate, never the hardcoded 60 Hz default.
+            return float(np.sum(lap_df["Speed"].to_numpy()) / self.sample_rate_hz)
         return 1.0
 
     # ---- S4.1: predict expected & flag anomalies (VISION §9) ----
@@ -299,6 +314,7 @@ def build_track_model(
     *,
     bin_size_m: float = DEFAULT_BIN_SIZE_M,
     corpus_root: Path | str | None = None,
+    car: str | None = None,
 ) -> TrackModel:
     sorted_ids = sorted(session_ids)
     digest = sessions_hash(sorted_ids)
@@ -310,6 +326,12 @@ def build_track_model(
     regime: Literal["cold_start", "compounding"] = (
         "compounding" if len(sorted_ids) >= _COLD_START_THRESHOLD else "cold_start"
     )
+
+    sample_rate_hz = _resolve_session_sample_rate(sorted_ids, root)
+    # When the caller doesn't pin a car, infer one from the catalog so per-car
+    # threshold lookups (curb-agreement, shock channels) still apply. Falls
+    # back to the dominant car across the requested session ids.
+    resolved_car = car if car else _resolve_session_car(sorted_ids, root)
 
     if cache.exists() and summary.exists():
         summary_df = pl.read_parquet(summary)
@@ -326,6 +348,8 @@ def build_track_model(
             cache_path=cache,
             summary_path=summary,
             corpus_root=root,
+            sample_rate_hz=sample_rate_hz,
+            car=resolved_car,
         )
 
     if regime == "cold_start":
@@ -336,7 +360,10 @@ def build_track_model(
             sorted_ids, bin_size_m=bin_size_m, corpus_root=root, track=track
         )
         summary_df = _collapse_across_sessions(
-            per_session, bin_size_m=bin_size_m, lap_length_m=lap_length_m
+            per_session,
+            bin_size_m=bin_size_m,
+            lap_length_m=lap_length_m,
+            car=resolved_car,
         )
 
     per_session.write_parquet(cache, compression="zstd")
@@ -355,7 +382,58 @@ def build_track_model(
         cache_path=cache,
         summary_path=summary,
         corpus_root=root,
+        sample_rate_hz=sample_rate_hz,
+        car=resolved_car,
     )
+
+
+def _resolve_session_car(session_ids: list[str], corpus_root: Path) -> str | None:
+    """Look up the dominant canonical car key across the requested sessions.
+
+    Returns ``None`` when no rows exist or the catalog is empty — callers
+    treat ``None`` as "use the four-corner default thresholds". When sessions
+    span multiple cars (which is unusual but legal — one track may host
+    different cars on different days), the most-frequent car wins.
+    """
+    if not session_ids:
+        return None
+    try:
+        df = ingest_api.sessions(corpus_root=corpus_root)
+    except Exception:
+        return None
+    if df.height == 0 or "car" not in df.columns:
+        return None
+    matching = df.filter(pl.col("session_id").is_in(session_ids))
+    cars = [c for c in matching["car"].to_list() if c]
+    if not cars:
+        return None
+    counts: dict[str, int] = {}
+    for c in cars:
+        counts[c] = counts.get(c, 0) + 1
+    return max(counts.items(), key=lambda kv: (kv[1], kv[0]))[0]
+
+
+def _resolve_session_sample_rate(session_ids: list[str], corpus_root: Path) -> float:
+    """Look up the per-IBT sample rate for the dominant session.
+
+    Reads ``sessions(...).sample_rate_hz`` for the requested ids and returns
+    the median (most non-trivial corpora are recorded at a single rate).
+    Falls back to 60.0 Hz when the catalog is empty or every row is null —
+    matching iRacing's default IBT recording rate.
+    """
+    if not session_ids:
+        return 60.0
+    try:
+        df = ingest_api.sessions(corpus_root=corpus_root)
+    except Exception:
+        return 60.0
+    if df.height == 0 or "sample_rate_hz" not in df.columns:
+        return 60.0
+    matching = df.filter(pl.col("session_id").is_in(session_ids))
+    rates = [r for r in matching["sample_rate_hz"].to_list() if r is not None and r > 0]
+    if not rates:
+        return 60.0
+    return float(sorted(rates)[len(rates) // 2])
 
 
 # ---- internals ----
@@ -499,7 +577,11 @@ def _aggregate_one_session(
 
 
 def _collapse_across_sessions(
-    per_session: pl.DataFrame, *, bin_size_m: float, lap_length_m: float
+    per_session: pl.DataFrame,
+    *,
+    bin_size_m: float,
+    lap_length_m: float,
+    car: str | None = None,
 ) -> pl.DataFrame:
     if per_session.height == 0:
         return pl.DataFrame(schema=_SUMMARY_SCHEMA)
@@ -521,7 +603,7 @@ def _collapse_across_sessions(
         for _, sub in indexed.group_by("session_id", maintain_order=True)
     ]
 
-    bump = aggregate_curb_likelihood(per_session_p99)
+    bump = aggregate_curb_likelihood(per_session_p99, car=car)
     grip = aggregate_grip_map(per_session_grip)
     speed_env = _aggregate_speed_envelope(indexed)
 
@@ -579,8 +661,16 @@ def _lap_length_for_session(
     corpus_root: Path,
 ) -> float | None:
     sess = cat.get_session(conn, session_id)
+    # Per-IBT recording rate (S1.4) — None when the catalog row predates the
+    # column or the session failed to ingest a header rate. Coalesce to the
+    # iRacing default so the speed-integration fallback stays usable.
+    rate_hz = float(sess.sample_rate_hz) if (
+        sess is not None and sess.sample_rate_hz is not None and sess.sample_rate_hz > 0
+    ) else 60.0
     if sess is None or sess.setup is None:
-        return _lap_length_from_speed_fallback(session_id, corpus_root=corpus_root)
+        return _lap_length_from_speed_fallback(
+            session_id, corpus_root=corpus_root, sample_rate_hz=rate_hz
+        )
     try:
         setup = json.loads(sess.setup)
     except json.JSONDecodeError:
@@ -590,7 +680,9 @@ def _lap_length_for_session(
     parsed = _parse_track_length(raw)
     if parsed is not None and parsed > 0.0:
         return parsed
-    return _lap_length_from_speed_fallback(session_id, corpus_root=corpus_root)
+    return _lap_length_from_speed_fallback(
+        session_id, corpus_root=corpus_root, sample_rate_hz=rate_hz
+    )
 
 
 def _parse_track_length(raw: object) -> float | None:
@@ -608,7 +700,7 @@ _RACING_LAP_MIN_MEAN_SPEED_M_S = 30.0
 
 
 def _lap_length_from_speed_fallback(
-    session_id: str, *, corpus_root: Path
+    session_id: str, *, corpus_root: Path, sample_rate_hz: float = 60.0
 ) -> float | None:
     """Estimate lap length by integrating Speed × dt over a clean racing lap.
 
@@ -622,7 +714,12 @@ def _lap_length_from_speed_fallback(
     well above 30 m/s on a real lap), then pick the candidate with the
     highest mean Speed — most likely a clean timed lap. Returns None when
     no lap clears the threshold so the caller can skip the session.
+
+    `sample_rate_hz` defaults to 60.0 (iRacing's standard IBT rate) but the
+    caller MUST pass the per-IBT detected rate when known — high-frequency
+    recordings (e.g. 360 Hz) would otherwise overestimate lap length 6×.
     """
+    rate = float(sample_rate_hz) if sample_rate_hz and sample_rate_hz > 0 else 60.0
     lap_rows = ingest_api.laps(
         session_id=session_id, valid_only=True, corpus_root=corpus_root
     )
@@ -646,7 +743,7 @@ def _lap_length_from_speed_fallback(
             continue
         if mean_speed > best_mean_speed:
             best_mean_speed = mean_speed
-            best_lap_length = float(np.sum(speed) / 60.0)
+            best_lap_length = float(np.sum(speed) / rate)
 
     return best_lap_length
 

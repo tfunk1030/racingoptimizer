@@ -204,10 +204,6 @@ def test_compounding_maps_have_real_content(car: str, per_car_corpora, request):
         pytest.skip(f"no .ibt fixtures for car={car}")
     if case.expected_regime != "compounding":
         pytest.skip(f"car={car} only has cold-start fixtures")
-    if car == "acura":
-        request.node.add_marker(
-            pytest.mark.xfail(reason=_BUG_REAL_IBT_ACURA_AGREEMENT, strict=True)
-        )
     sids, corpus = per_car_corpora[car]
 
     model = build_track_model(case.track, list(sids), corpus_root=corpus)
@@ -221,13 +217,27 @@ def test_compounding_maps_have_real_content(car: str, per_car_corpora, request):
     assert bump_df.filter(pl.col("curb_likelihood") > 0.0).height > 0
     assert bump_df.filter(pl.col("bump_likelihood") > 0.0).height > 0
 
-    sample_lap = _first_lap_df(sids[0], corpus)
+    # Some sessions have zero laps (e.g. a session that crashed before the
+    # first lap completed); skip past them to find one with a real flying
+    # lap so the mask intersection actually has bins to flag.
+    sample_lap = None
+    sample_sid = None
+    for sid in sids:
+        try:
+            sample_lap = _first_lap_df(sid, corpus)
+        except AssertionError:
+            continue
+        sample_sid = sid
+        break
+    assert sample_lap is not None and sample_sid is not None, (
+        f"no session in {sids} has a usable lap"
+    )
     mask = model.curb_mask(sample_lap)
     assert mask.shape == (sample_lap.height,)
     assert mask.dtype == bool
     assert mask.any()
 
-    result = apply_quality_mask(sids[0], track_model=model, corpus_root=corpus)
+    result = apply_quality_mask(sample_sid, track_model=model, corpus_root=corpus)
     assert result.regime == "compounding"
     assert result.noop is False
     assert result.n_samples_clean_after < result.n_samples_clean_before
@@ -236,7 +246,37 @@ def test_compounding_maps_have_real_content(car: str, per_car_corpora, request):
 
 
 def _first_lap_df(session_id: str, corpus_root: Path) -> pl.DataFrame:
-    lap_rows = laps(session_id=session_id, corpus_root=corpus_root)
-    assert lap_rows.height > 0, f"no valid laps for session {session_id}"
-    lap_index = int(lap_rows["lap_index"].to_list()[0])
+    """Return a representative full racing lap for a session.
+
+    Earlier this helper picked ``lap_index[0]`` unconditionally — but iRacing
+    sessions begin with a short pit-out lap (e.g. 9 s for the Acura corpus)
+    that barely moves and visits only a handful of track bins. Some sessions
+    also include 300+ s aggregate laps (multi-pit-stops collapsed into one
+    lap_index by iRacing's lap detection). Curb-mask intersection tests need
+    a full *flying* lap, so:
+
+    1. Take ``best=1`` when iRacing flagged a fastest lap (it is by definition
+       a complete on-pace lap).
+    2. Else filter valid laps to plausible GTP lap times (30–200 s) and take
+       the one with the most samples — the longest clean lap.
+    3. Else fall back to whatever the catalog lists first.
+    """
+    lap_rows_valid = laps(session_id=session_id, corpus_root=corpus_root, valid_only=True)
+    lap_rows_all = laps(session_id=session_id, corpus_root=corpus_root)
+    lap_rows = lap_rows_valid if lap_rows_valid.height > 0 else lap_rows_all
+    assert lap_rows.height > 0, f"no laps at all for session {session_id}"
+    plausible = lap_rows.filter(
+        (pl.col("lap_time_s") >= 30.0) & (pl.col("lap_time_s") <= 200.0)
+    )
+    plausible_best = plausible.filter(pl.col("best") == 1)
+    if plausible_best.height > 0:
+        candidates = plausible_best
+    elif plausible.height > 0:
+        candidates = plausible
+    else:
+        candidates = lap_rows
+    candidates = candidates.with_columns(
+        (pl.col("end_sample") - pl.col("start_sample")).alias("_n_samples")
+    ).sort("_n_samples", descending=True)
+    lap_index = int(candidates["lap_index"].to_list()[0])
     return lap_data(session_id, lap_index, corpus_root=corpus_root)

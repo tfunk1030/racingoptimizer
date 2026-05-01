@@ -30,12 +30,16 @@ from racingoptimizer.explain import (
     render_status_json,
     render_status_text,
 )
+from racingoptimizer.explain.full_setup_card import render_full_setup_card
 from racingoptimizer.explain.justification import build_justifications
 from racingoptimizer.explain.status import ModelStatus, TrackCoverage
 from racingoptimizer.ingest import api as ingest_api
 from racingoptimizer.ingest.detect import (
     UnknownCarError,
+    detect_car_from_filename,
+    detect_track_from_filename,
     normalize_car_key,
+    slugify_track,
 )
 from racingoptimizer.ingest.paths import resolve_corpus_root
 
@@ -52,7 +56,7 @@ CANONICAL_CARS = ("acura", "bmw", "cadillac", "ferrari", "porsche")
     context_settings={"ignore_unknown_options": False},
 )
 @click.argument("car")
-@click.argument("track")
+@click.argument("track", required=False, default=None)
 @click.option("--wing", type=float, default=None, help="Pin rear wing angle (degrees).")
 @click.option(
     "--air-temp", type=float, default=None,
@@ -88,7 +92,7 @@ CANONICAL_CARS = ("acura", "bmw", "cadillac", "ferrari", "porsche")
 )
 def recommend_cmd(
     car: str,
-    track: str,
+    track: str | None,
     wing: float | None,
     air_temp: float | None,
     track_temp: float | None,
@@ -99,8 +103,17 @@ def recommend_cmd(
     corpus_root: Path | None,
     no_cache: bool,
 ) -> None:
-    """Recommend a setup for `<car>` at `<track>`."""
-    car_key = _resolve_car_or_exit(car)
+    """Recommend a setup for `<car>` at `<track>`.
+
+    Two invocation forms:
+
+    \b
+    * ``optimize <car> <track>`` — explicit pair (e.g. ``optimize bmw sebring``).
+    * ``optimize <ibt_path>`` — single positional pointing at an existing
+      ``.ibt`` file; car & track are auto-detected from the filename
+      (VISION §8 "drop in an IBT, get a setup out").
+    """
+    car_key, track = _resolve_car_track_or_exit(car, track)
     root = resolve_corpus_root(corpus_root)
     catalog_sessions = _safe_sessions(car_key, corpus_root=root)
     track_slug, donor_track = _resolve_track_or_extrapolate(
@@ -161,6 +174,20 @@ def recommend_cmd(
             pinned=pinned_overrides,
             warnings=top_warnings,
             track_display=track_slug,
+        ))
+        # Append the full garage-panel setup card. Pulls the user's most
+        # recent ingested setup blob for this (car, track) so every
+        # parameter the iRacing UI exposes is rendered with the right
+        # tag — [OPT] for optimizer-recommended, [past] for unbounded
+        # carry-over, [readout] for calculated.
+        most_recent_setup = _most_recent_setup_for(
+            sessions_for_fit if donor_track is None
+            else _safe_sessions(car_key, corpus_root=root).filter(
+                pl.col("track") == fit_track
+            ),
+        )
+        click.echo(render_full_setup_card(
+            rec, car=car_key, most_recent_setup=most_recent_setup,
         ))
 
 
@@ -358,6 +385,68 @@ def _resolve_car_or_exit(raw: str) -> str:
         sys.exit(2)
 
 
+def _resolve_car_track_or_exit(
+    car_or_path: str, track: str | None
+) -> tuple[str, str]:
+    """Accept either ``(<car>, <track>)`` or ``(<ibt_path>, None)``.
+
+    VISION §8: "drop in an IBT, get a setup out". When the first positional
+    argument points at an existing ``.ibt`` file, sniff car and track from
+    the filename (catalog ingestion not required — purely pattern-driven).
+    Otherwise treat both args as the canonical ``<car> <track>`` pair.
+    """
+    candidate = Path(car_or_path)
+    looks_like_ibt = (
+        track is None
+        and candidate.suffix.lower() == ".ibt"
+        and candidate.exists()
+    )
+    if looks_like_ibt:
+        raw_car = detect_car_from_filename(candidate.name)
+        raw_track = detect_track_from_filename(candidate.name)
+        if raw_car is None or raw_track is None:
+            click.echo(
+                f"could not auto-detect car/track from filename {candidate.name!r}; "
+                "pass `<car> <track>` explicitly",
+                err=True,
+            )
+            sys.exit(2)
+        try:
+            car_key = normalize_car_key(raw_car)
+        except UnknownCarError:
+            click.echo(
+                f"unknown car prefix {raw_car!r} in {candidate.name!r}",
+                err=True,
+            )
+            sys.exit(2)
+        return car_key, raw_track
+    if track is None:
+        click.echo(
+            "missing TRACK; usage: `optimize <car> <track>` or `optimize <ibt_path>`",
+            err=True,
+        )
+        sys.exit(2)
+    return _resolve_car_or_exit(car_or_path), track
+
+
+def _most_recent_setup_for(sessions_df: pl.DataFrame) -> dict | str | None:
+    """Return the parsed setup JSON from the most recently recorded session.
+
+    Used by the full-setup-card renderer so every garage parameter the
+    iRacing UI exposes can be shown with a value (the optimizer fills the
+    bounded ones, the past setup fills the rest). Returns ``None`` when
+    no past setup is ingested — the renderer prints a skip message.
+    """
+    if sessions_df.height == 0 or "setup" not in sessions_df.columns:
+        return None
+    if "recorded_at" in sessions_df.columns:
+        ordered = sessions_df.sort("recorded_at", descending=True)
+    else:
+        ordered = sessions_df
+    raw = ordered["setup"][0]
+    return raw if raw else None
+
+
 def _safe_sessions(car: str, *, corpus_root: Path) -> pl.DataFrame:
     try:
         return ingest_api.sessions(car=car, corpus_root=corpus_root)
@@ -380,12 +469,26 @@ def _resolve_track_or_extrapolate(
     `donor_slug` is the trained track with the most sessions — the model
     will be fit there and recommendations extrapolated. When the car has no
     other tracks ingested, exit 2 with the standard untrained message.
+
+    User input is slugified with the same rules ingestion applies to the IBT
+    filename, so ``laguna-seca`` / ``Laguna Seca`` / ``laguna_seca`` all
+    collapse to the catalog's canonical ``lagunaseca`` (or ``laguna_seca``)
+    slug. Substring matching also tries the un-slugified bare alphanum form
+    so ``lagunaseca`` matches a catalog entry stored as ``laguna_seca``.
     """
-    needle = track.strip().lower()
+    raw = track.strip().lower()
+    needle = slugify_track(raw) or raw
+    bare = needle.replace("_", "")
     available = sorted(set(sessions["track"].to_list()))
     if needle in available:
         return needle, None
-    matches = [slug for slug in available if needle in slug]
+    if bare in available:
+        return bare, None
+    matches = [
+        slug for slug in available
+        if needle in slug or bare in slug.replace("_", "")
+    ]
+    matches = sorted(set(matches))
     if len(matches) == 1:
         return matches[0], None
     if len(matches) > 1:
@@ -499,7 +602,10 @@ def _build_or_load_model(
     from racingoptimizer.physics import InsufficientDataError, fit
     from racingoptimizer.track import build_track_model
 
-    track_model = build_track_model(track, session_ids, corpus_root=root)
+    # Pass `car` so the track model picks the per-car curb-agreement
+    # threshold (Acura's heave/roll signal needs a lower fraction than the
+    # four-corner default; see racingoptimizer.track.masks).
+    track_model = build_track_model(track, session_ids, corpus_root=root, car=car)
     # Cold-start corpora (≤2 sessions) have too few rows for k=5 CV; fall
     # back to k=2 so the recommend path produces *some* fit. Spec §10
     # untrained-recommendation handling kicks in further down if even k=2
@@ -721,6 +827,12 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
     """
     clamp_warnings: dict[str, str] = {}
     top_warnings: list[str] = []
+    pinned = tuple(getattr(rec, "pinned_to_observed_median", ()) or ())
+    if pinned:
+        top_warnings.append(
+            "pinned to observed median (no per-session variation in training "
+            "corpus, no learnable response surface): " + ", ".join(pinned)
+        )
     new_params: dict[str, tuple[float, Confidence]] = {}
     for name, (value, confidence) in rec.parameters.items():
         if name not in constraints_table.parameters():

@@ -2,14 +2,20 @@
 
 Composed by each slice that contributes commands:
 - `learn` (slice A) — owned by `racingoptimizer.ingest.cli`
-- `compare`, `status`, and the positional `<car> <track>` recommend
-  invocation (slice F) — owned by `racingoptimizer.cli.recommend`
+- `compare`, `status`, and the positional `<car> <track>` / `<ibt_path>`
+  recommend invocations (slice F) — owned by `racingoptimizer.cli.recommend`
 
-Positional shorthand: `optimize <car> <track>` is auto-routed to the
-`recommend` subcommand when the first argument is one of the canonical
-car keys, so the user never has to type `optimize recommend ...`.
+Positional shorthands routed to the `recommend` subcommand so the user
+never has to type ``optimize recommend ...``:
+
+* ``optimize <car> <track>`` — first arg is one of the canonical car keys.
+* ``optimize <path/to/file.ibt>`` — first arg is an existing ``.ibt`` file;
+  the recommend command then auto-detects car and track from the filename
+  (VISION §8 "drop in an IBT, get a setup out").
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 import click
 
@@ -23,11 +29,18 @@ from racingoptimizer.ingest.cli import learn_command
 
 
 class _OptimizeGroup(click.Group):
-    """Click group that dispatches `optimize <car> <track>` to `recommend`."""
+    """Click group dispatching positional shorthands to `recommend`."""
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
-        if args and args[0].strip().lower() in CANONICAL_CARS:
-            args = ["recommend", *args]
+        if args:
+            first = args[0]
+            if first.strip().lower() in CANONICAL_CARS:
+                args = ["recommend", *args]
+            else:
+                # Treat any existing .ibt file as an auto-detect recommend.
+                candidate = Path(first)
+                if candidate.suffix.lower() == ".ibt" and candidate.exists():
+                    args = ["recommend", *args]
         return super().parse_args(ctx, args)
 
 

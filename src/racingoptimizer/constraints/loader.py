@@ -81,11 +81,18 @@ DAMPER_SUFFIX = {
 }
 
 
-def _section_to_param_base(heading: str) -> tuple[str, str | None]:
-    """Map a section heading to (base_key, default_unit_suffix).
+def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
+    """Map a section heading to ``(base_key, default_unit_suffix)``.
 
     The unit suffix is appended only for single-row sections; corner/multi-row
     sections build their own keys via `_compose_param_key`.
+
+    Returns ``None`` for headings the loader does not understand. The caller
+    is expected to skip such sections, which lets ``constraints.md`` carry
+    annotation-only sub-sections (e.g. parenthetical "(USER input — TODO
+    bounds)" notes for params not yet captured from the iRacing UI) without
+    breaking the parse. Unknown sections were previously a hard error — that
+    made even one-line documentation drift fatal to the optimizer.
     """
     h = heading.strip().lower()
 
@@ -97,6 +104,24 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None]:
         return ("", None)
     if h == "static ride height":
         return ("static_ride_height", "mm")
+    # USER-input families that drive the calculated readouts above. Bound
+    # ranges are estimates — see the prose annotation in `constraints.md`.
+    if h == "heave spring rate":
+        return ("heave_spring_rate_n_per_mm", None)
+    if h == "rear third spring rate":
+        return ("third_spring_rate_n_per_mm", None)
+    if h == "rear coil spring rate":
+        return ("rear_coil_spring_rate_n_per_mm", None)
+    if h == "heave perch offset front":
+        return ("heave_perch_offset_front_mm", None)
+    if h == "spring perch offset rear":
+        return ("spring_perch_offset_rear_mm", None)
+    if h == "third perch offset rear":
+        return ("third_perch_offset_rear_mm", None)
+    if h == "pushrod length offset front":
+        return ("pushrod_length_offset_front_mm", None)
+    if h == "pushrod length offset rear":
+        return ("pushrod_length_offset_rear_mm", None)
     if h.startswith("anti-roll bar"):
         side = h.split("—", 1)[1].strip() if "—" in h else h.rsplit(maxsplit=1)[-1]
         return (f"anti_roll_bar_{side}", None)
@@ -122,7 +147,7 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None]:
         return (f"brake_duct_{side}", None)
     if h.startswith("throttle") and "brake" in h and "mapping" in h:
         return ("throttle_brake_mapping", None)
-    raise ConstraintsParseError(f"unknown constraint section: {heading!r}")
+    return None
 
 
 def _slug(text: str) -> str:
@@ -225,7 +250,14 @@ def load_constraints(path: Path | None = None) -> ConstraintsTable:
             h3 = _HEADING_RE.match(line)
             if h3:
                 heading = h3.group(1)
-                base, default_unit = _section_to_param_base(heading)
+                resolved = _section_to_param_base(heading)
+                if resolved is None:
+                    # Unknown / annotation-only section. Skip the heading and
+                    # keep scanning — let other recognised sections continue
+                    # to populate the table normally.
+                    i += 1
+                    continue
+                base, default_unit = resolved
                 # Find next table
                 j = i + 1
                 while j < len(lines) and not lines[j].strip().startswith("|"):
@@ -251,9 +283,11 @@ def load_constraints(path: Path | None = None) -> ConstraintsTable:
             if current_car is not None:
                 m = _OVERRIDE_RE.match(line)
                 if m:
-                    base, default_unit = _section_to_param_base(m.group("param"))
-                    key = base if default_unit is None else f"{base}_{default_unit}"
-                    by_car[current_car][key] = (float(m["lo"]), float(m["hi"]))
+                    resolved = _section_to_param_base(m.group("param"))
+                    if resolved is not None:
+                        base, default_unit = resolved
+                        key = base if default_unit is None else f"{base}_{default_unit}"
+                        by_car[current_car][key] = (float(m["lo"]), float(m["hi"]))
             i += 1
             continue
 

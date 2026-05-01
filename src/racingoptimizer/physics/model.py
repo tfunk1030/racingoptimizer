@@ -118,6 +118,25 @@ class PhysicsModel:
     # v2 = 12-channel env, per-parameter linear sum.
     # v3 = 12-channel env, joint multi-input model (Stage 3).
     feature_schema_version: int = 3
+    # ----------------------------------------------------------------------
+    # IMPORTANT: append-only beyond this point.
+    #
+    # PhysicsModel is a frozen+slots dataclass; pickle serialises instance
+    # state as a positional list ordered by `__slots__`. Inserting a field
+    # in the middle would shift every later slot's position and silently
+    # corrupt revives of older pickles. New fields MUST go at the end so
+    # __setstate__ can backfill defaults via `slot_values.setdefault(...)`
+    # without mis-aligning legacy lists.
+    # ----------------------------------------------------------------------
+
+    # Per-parameter observed standard deviation across training sessions.
+    # Used by `physics/recommend.py` to detect parameters the driver held
+    # effectively constant in the training corpus — those have no learnable
+    # response surface, so the recommender pins them to `baseline_setup`
+    # rather than letting the DE search drift to a constraint bound. Empty
+    # on PhysicsModels pickled before this field existed (default-pinned by
+    # the recommender as long as `baseline_setup` is populated).
+    parameter_observed_std: dict[str, float] = field(default_factory=dict)
 
     @property
     def resolved_baselines(self) -> CarBaselines:
@@ -154,6 +173,11 @@ class PhysicsModel:
         # v2 pickles set it to 2. Stage-3 pickles set it to 3.
         slot_values.setdefault("feature_schema_version", 1)
         slot_values.setdefault("car_baselines", None)
+        # `parameter_observed_std` was added after the wet-mode-enum fix.
+        # Old pickles default to an empty dict; the recommender treats every
+        # parameter as "observed std unknown" → falls through to the existing
+        # trust-radius behaviour (no pinning, no regression).
+        slot_values.setdefault("parameter_observed_std", {})
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 

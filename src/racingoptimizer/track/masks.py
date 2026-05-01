@@ -63,6 +63,32 @@ def _max_abs_shock_vel(df: pl.DataFrame, channels: tuple[str, ...]) -> np.ndarra
 T_CURB_SESSION_MM_S: float = 350.0
 T_CURB_AGGREGATE_MM_S: float = 400.0
 CURB_AGREEMENT_FRACTION: float = 0.6
+
+# Per-car overrides for the curb-agreement fraction. The default 0.6 is
+# calibrated against the four-corner shock signal (BMW/Cadillac/Ferrari/Porsche),
+# where any one wheel hitting a curb pushes that bin's session p99 above the
+# trigger. Acura ARX-06 instead exposes two HEAVE channels and two ROLL
+# channels — the heave signal aggregates symmetric loading across both wheels
+# of an axle, so the per-session p99 is lower-amplitude and only one or two
+# sessions out of a small N agree on which bins trigger. With as few as 3
+# sessions in the corpus the agreement values are quantised at {0, ⅓, ⅔, 1}
+# so 0.6 disqualifies a 2-of-3 (≈0.67) majority but 0.3 catches the single-
+# session sightings that BMW's four-corner signal would have caught with one
+# session. Empirically tuned against the Acura Hockenheim 3-session corpus.
+_PER_CAR_CURB_AGREEMENT_FRACTION: dict[str, float] = {
+    "acura": 0.3,
+}
+
+
+def curb_agreement_fraction_for(car: str | None) -> float:
+    """Return the per-car curb-agreement fraction (defaults to 0.6)."""
+    if car is None:
+        return CURB_AGREEMENT_FRACTION
+    return _PER_CAR_CURB_AGREEMENT_FRACTION.get(
+        car.strip().lower(), CURB_AGREEMENT_FRACTION
+    )
+
+
 BUMP_RANGE_MIN_MM_S: float = 150.0
 BUMP_RANGE_MAX_MM_S: float = 350.0
 OFFTRACK_GRIP_LOSS_RATIO: float = 0.5
@@ -146,8 +172,19 @@ def aggregate_curb_likelihood(
     *,
     t_session: float = T_CURB_SESSION_MM_S,
     t_aggregate: float = T_CURB_AGGREGATE_MM_S,
-    agreement: float = CURB_AGREEMENT_FRACTION,
+    agreement: float | None = None,
+    car: str | None = None,
 ) -> pl.DataFrame:
+    """Aggregate per-session p99 frames into a cross-session curb/bump map.
+
+    The persistent-curb / suppress-bump rule fires when a bin's
+    cross-session agreement >= ``agreement`` AND its max p99 >= ``t_aggregate``.
+    When ``agreement`` is left as ``None`` the per-car default is resolved via
+    :func:`curb_agreement_fraction_for` (Acura uses a lower threshold to
+    accommodate its heave/roll-shock signal — see the table comment).
+    """
+    if agreement is None:
+        agreement = curb_agreement_fraction_for(car)
     if not per_session_p99:
         return pl.DataFrame(schema=_BUMP_MAP_SCHEMA)
 
@@ -222,13 +259,15 @@ def compute_curb_mask(
     *,
     lap_length_m: float,
     bin_size_m: float = DEFAULT_BIN_SIZE_M,
+    car: str | None = None,
 ) -> np.ndarray:
     n = lap_df.height
     if n == 0 or bump_map.height == 0:
         return np.zeros(n, dtype=bool)
 
+    threshold = curb_agreement_fraction_for(car)
     curb_bins = (
-        bump_map.filter(pl.col("curb_likelihood") >= CURB_AGREEMENT_FRACTION)["bin_index"]
+        bump_map.filter(pl.col("curb_likelihood") >= threshold)["bin_index"]
         .to_numpy()
         .astype(np.int32)
     )

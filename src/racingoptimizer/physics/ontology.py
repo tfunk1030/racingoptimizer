@@ -31,6 +31,9 @@ Family = Literal[
     "corner_weight",
     "brake_bias",
     "diff",
+    "spring_rate",
+    "perch_offset",
+    "pushrod",
 ]
 
 
@@ -40,7 +43,19 @@ class ParameterSpec:
     dtype: type
     units: str
     family: Family
+    # `fittable=True` → the model trains a per-(corner, phase, channel)
+    # fitter that includes this parameter in its feature vector. Setting
+    # this to False excludes the parameter from the joint surrogate
+    # entirely (used for fields the model has no use for).
     fittable: bool
+    # `user_settable=True` → the driver can type this value into the iRacing
+    # garage UI. False marks calculated readouts (ride heights, deflections,
+    # corner weights, aero-calculator outputs, last hot pressures, etc.)
+    # that the model is allowed to LEARN as targets but the optimizer must
+    # not put into its search space and the briefing must not list as
+    # "set this". Defaults to True for backward-compat with all the existing
+    # entries that pre-date this flag — every legacy entry was a real input.
+    user_settable: bool = True
 
 
 # --- Path-extraction helpers ----------------------------------------------
@@ -90,6 +105,20 @@ _HEAVE_SPRING_F = ("Chassis", "Front", "HeaveSpringDefl")
 _HEAVE_SLIDER_F = ("Chassis", "Front", "HeaveSliderDefl")
 _BRAKE_BIAS = ("BrakesDriveUnit", "BrakeSpec", "BrakePressureBias")
 
+# USER-input setup parameters that drive the calculated readouts above.
+# Ranges are bounded by `constraints.md` (see the "estimated bounds" note).
+# Spring rates and perch offsets sit at the "Front" / "Rear" axle level;
+# per-corner spring rates are read off LeftRear (mirrored to RightRear by
+# the iRacing UI when the symmetric option is on).
+_HEAVE_SPRING_RATE_F = ("Chassis", "Front", "HeaveSpring")
+_THIRD_SPRING_RATE_R = ("Chassis", "Rear", "ThirdSpring")
+_REAR_COIL_SPRING_RATE = ("Chassis", "LeftRear", "SpringRate")
+_HEAVE_PERCH_OFFSET_F = ("Chassis", "Front", "HeavePerchOffset")
+_SPRING_PERCH_OFFSET_R = ("Chassis", "LeftRear", "SpringPerchOffset")
+_THIRD_PERCH_OFFSET_R = ("Chassis", "Rear", "ThirdPerchOffset")
+_PUSHROD_OFFSET_F = ("Chassis", "Front", "PushrodLengthOffset")
+_PUSHROD_OFFSET_R = ("Chassis", "Rear", "PushrodLengthOffset")
+
 
 def _common_bounded() -> dict[str, ParameterSpec]:
     """Bounded families that every car shares (path conventions vary; see overrides)."""
@@ -102,21 +131,72 @@ def _common_bounded() -> dict[str, ParameterSpec]:
             json_path=_TYRE_FL, dtype=float, units="kPa",
             family="tyre_pressure", fittable=True,
         ),
+        # ------------------------------------------------------------------
+        # CALCULATED READOUTS — `user_settable=False`.
+        # iRacing's garage UI displays these as outputs of the actual setup
+        # work (perch offsets, pushrod lengths, torsion-bar turns, spring
+        # rates, corner weights). The driver cannot type them into the
+        # garage; they update as a consequence of the inputs.
+        # `fittable=True` is correct — the model SHOULD learn the
+        # correlation between user inputs and these readouts so it can score
+        # candidate setups against the resulting platform state. But the
+        # optimizer's free variables and the briefing's "set this" output
+        # must exclude them (filtered via `user_settable=False`). Real
+        # bounds for the underlying USER inputs (HeavePerchOffset,
+        # PushrodLengthOffset, SpringPerchOffset, TorsionBarTurns, spring
+        # rates) are pending iRacing UI capture — see `constraints.md`.
+        # ------------------------------------------------------------------
         "static_ride_height_front_mm": ParameterSpec(
             json_path=_RIDE_LF, dtype=float, units="mm",
-            family="ride_height", fittable=True,
+            family="ride_height", fittable=True, user_settable=False,
         ),
         "static_ride_height_rear_mm": ParameterSpec(
             json_path=_RIDE_LR, dtype=float, units="mm",
-            family="ride_height", fittable=True,
+            family="ride_height", fittable=True, user_settable=False,
         ),
         "heave_spring_mm": ParameterSpec(
             json_path=_HEAVE_SPRING_F, dtype=float, units="mm",
-            family="heave_spring", fittable=True,
+            family="heave_spring", fittable=True, user_settable=False,
         ),
         "heave_slider_mm": ParameterSpec(
             json_path=_HEAVE_SLIDER_F, dtype=float, units="mm",
-            family="heave_slider", fittable=True,
+            family="heave_slider", fittable=True, user_settable=False,
+        ),
+        # USER-input setup parameters that drive the calculated readouts
+        # above. The optimizer searches over these; the platform state
+        # (ride heights, deflections) is the model's prediction of what
+        # results. Ranges in `constraints.md` are estimates.
+        "heave_spring_rate_n_per_mm": ParameterSpec(
+            json_path=_HEAVE_SPRING_RATE_F, dtype=float, units="N/mm",
+            family="spring_rate", fittable=True, user_settable=True,
+        ),
+        "third_spring_rate_n_per_mm": ParameterSpec(
+            json_path=_THIRD_SPRING_RATE_R, dtype=float, units="N/mm",
+            family="spring_rate", fittable=True, user_settable=True,
+        ),
+        "rear_coil_spring_rate_n_per_mm": ParameterSpec(
+            json_path=_REAR_COIL_SPRING_RATE, dtype=float, units="N/mm",
+            family="spring_rate", fittable=True, user_settable=True,
+        ),
+        "heave_perch_offset_front_mm": ParameterSpec(
+            json_path=_HEAVE_PERCH_OFFSET_F, dtype=float, units="mm",
+            family="perch_offset", fittable=True, user_settable=True,
+        ),
+        "spring_perch_offset_rear_mm": ParameterSpec(
+            json_path=_SPRING_PERCH_OFFSET_R, dtype=float, units="mm",
+            family="perch_offset", fittable=True, user_settable=True,
+        ),
+        "third_perch_offset_rear_mm": ParameterSpec(
+            json_path=_THIRD_PERCH_OFFSET_R, dtype=float, units="mm",
+            family="perch_offset", fittable=True, user_settable=True,
+        ),
+        "pushrod_length_offset_front_mm": ParameterSpec(
+            json_path=_PUSHROD_OFFSET_F, dtype=float, units="mm",
+            family="pushrod", fittable=True, user_settable=True,
+        ),
+        "pushrod_length_offset_rear_mm": ParameterSpec(
+            json_path=_PUSHROD_OFFSET_R, dtype=float, units="mm",
+            family="pushrod", fittable=True, user_settable=True,
         ),
     }
 
@@ -217,7 +297,8 @@ def _build(
 # Porsche/Acura share the split layout.
 _ACURA_HEAVE_SLIDER = ParameterSpec(
     json_path=("Chassis", "Front", "HeaveDamperDefl"),
-    dtype=float, units="mm", family="heave_slider", fittable=True,
+    dtype=float, units="mm", family="heave_slider",
+    fittable=True, user_settable=False,  # readout, not user input
 )
 
 ACURA: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, heave_slider_mm=_ACURA_HEAVE_SLIDER)
@@ -251,15 +332,26 @@ def parameters(car: str) -> list[str]:
 
 
 def fittable_parameters(car: str, table: ConstraintsTable) -> list[str]:
-    """Parameters that are both `fittable=True` AND bounded by `constraints.md`.
+    """Parameters that the OPTIMIZER may search over.
 
-    A spec marked `fittable=True` whose constraint bound is `None` (CE TODO)
-    is excluded — it must wait for CE to land.
+    Three gates, all required:
+
+    1. ``spec.fittable=True`` — model is allowed to learn correlations on
+       this parameter.
+    2. ``spec.user_settable=True`` — driver can type this value into the
+       iRacing garage UI. Calculated readouts (ride heights, deflections,
+       corner weights, etc.) are excluded — the optimizer must not produce
+       a value the user cannot enter.
+    3. ``constraints.md`` provides bounds — CE-gated parameters whose
+       bounds are still ``<TODO: from iRacing UI>`` are excluded until
+       captured.
     """
     onto = ontology_for(car)
     out: list[str] = []
     for name, spec in onto.items():
         if not spec.fittable:
+            continue
+        if not spec.user_settable:
             continue
         bound = table.bounds(car.strip().lower(), name)
         if bound is None:

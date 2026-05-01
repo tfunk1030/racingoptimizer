@@ -1,7 +1,7 @@
 """SetupRecommendation dataclass (spec §2)."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from racingoptimizer.confidence import Confidence
 from racingoptimizer.context import EnvironmentFrame
@@ -17,6 +17,12 @@ class SetupRecommendation:
     score_breakdown: dict[CornerPhaseKey, float]
     untrained_parameters: tuple[str, ...]
     aero_correction_available: bool
+    # Parameters that were pinned to their training-data median because the
+    # observed value held effectively constant across sessions — no signal
+    # for the joint surrogate to recommend deviating. The CLI surfaces
+    # these in the briefing so the user understands why no exploration
+    # happened on those clicks. Empty tuple means nothing was pinned.
+    pinned_to_observed_median: tuple[str, ...] = field(default_factory=tuple)
 
 
 __all__ = ["SetupRecommendation"]

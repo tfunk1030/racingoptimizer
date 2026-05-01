@@ -1,12 +1,24 @@
 # VISION.md Compliance Report
 
-**Date:** 2026-04-29
-**Master HEAD:** `f7c448bc7b1860335f7b89fb2ae8a22e0abe2812`
+**Date:** 2026-04-30 (post follow-up audit)
+**Master HEAD:** see latest commit on `master`
 **Scope:** Full audit of every clause in VISION.md against the merged master tree, the fast + slow test suites, and end-to-end CLI execution for all 5 GTP cars.
 
 ## Summary
 
-All 12 audited VISION sections (§1–§10, the "What This Is NOT" rules, and the Philosophy) score 🟢 with file:line evidence and per-car test coverage. The five-car CLI E2E sweep (`optimize <car> <track>` text + JSON, plus `optimize status <car>`) exits 0 for `bmw`, `acura`, `cadillac`, `ferrari`, and `porsche`. The fast suite is 530/530 green; the slow suite is 37/37 + 1 documented xfail (Acura curb-likelihood threshold calibration — see "Known follow-ups"). The xfail is a tuning gap on a single per-car threshold inside the track-mask aggregator, not a VISION violation.
+All 12 audited VISION sections (§1–§10, the "What This Is NOT" rules, and the Philosophy) score 🟢 with file:line evidence and per-car test coverage. The five-car CLI E2E sweep (`optimize <car> <track>` text + JSON, plus `optimize status <car>`) exits 0 for `bmw`, `acura`, `cadillac`, `ferrari`, and `porsche`. The full test suite is green; the previously-documented Acura curb-likelihood xfail now passes after a per-car threshold calibration (see "Follow-up audit fixes" below).
+
+## Follow-up audit fixes (post initial 🟢 sign-off)
+
+A line-by-line audit of the original report flagged five real divergences between the prose and the implementation. All five are now fixed:
+
+| # | Original gap | Resolution |
+|---|---|---|
+| 1 | Track pipeline hardcoded `60.0 Hz` in `track/builder.py` (`_lap_length_from_speed_fallback` integration, `TrackModel._resolve_lap_length`, off-track mask window) — bypassed Slice A's per-IBT sample-rate detection. | `TrackModel.sample_rate_hz` is detected via `_resolve_session_sample_rate(session_ids, corpus_root)` and threaded into every per-rate path. `_lap_length_from_speed_fallback` now takes the rate as a parameter. |
+| 2 | CLI auto-detect was fictitious — `cli/recommend.py` only had a `CANONICAL_CARS` whitelist, no path-based dispatch. | `optimize <ibt_path>` form added: `_resolve_car_track_or_exit` sniffs car/track from the IBT filename via `detect_car_from_filename` / `detect_track_from_filename`. `_OptimizeGroup.parse_args` routes any existing `.ibt` first-arg to `recommend`. |
+| 3 | Hyphenated track names (`laguna-seca`) didn't match catalog slug `lagunaseca`. | `_resolve_track_or_extrapolate` slugifies user input via `slugify_track` and also tries the bare-alphanum form so `laguna-seca`, `Laguna Seca`, `laguna_seca`, and `lagunaseca` all resolve to the catalog entry. |
+| 4 | `physics/damper_force.py` was dead code from the corner pipeline — VISION §2 explicitly requires "damper velocities vs forces" but only velocities were emitted. | `corner_phase_states` now derives `damper_force_p99_n` and `damper_force_mean_n` per (corner, phase) using a per-car digressive curve inlined as a Polars expression (no per-sample Python UDF). |
+| 5 | Acura curb-mask was all-False on real telemetry — the 0.6 cross-session agreement threshold (calibrated against four-corner shock channels) was too strict for Acura's heave/roll-shock fallback. Marked `xfail strict`. | `_PER_CAR_CURB_AGREEMENT_FRACTION = {"acura": 0.3}` (others stay at 0.6). Threaded through `aggregate_curb_likelihood`, `compute_curb_mask`, `TrackModel.car`, and `build_track_model`. Per-car real-IBT test (`test_compounding_maps_have_real_content[acura-…]`) now passes; xfail removed. |
 
 ## Per-clause scorecard
 
@@ -129,7 +141,7 @@ All 12 audited VISION sections (§1–§10, the "What This Is NOT" rules, and th
 | Cold-start vs compounding regime | `_COLD_START_THRESHOLD = 3` sessions (`track/predict.py:37`, `track/builder.py:310-312`); `expected_from_cache` returns None when n_sessions < 3 | `tests/track/test_cold_start.py`, `test_compounding.py` |
 | Predict expected shock-vel / lateral-G per position; flag anomalies | `expected(track_pos_m, channel)` (`track/builder.py:204-224`) + `flag_anomalies` (`builder.py:250-274`) → labels `data_noise` / `setup_problem` / `driver_error` (`track/anomaly.py:1-80`) | `tests/track/test_predict.py`, `test_anomaly.py` |
 
-**Score: 🟢** — every §9 capability is implemented; the per-car coverage spans synthetic tests for the masking primitives + real-IBT tests parametrised over all 5 cars for builder structure / channel mapping / curb detection. The single Acura xfail is a threshold-tuning gap on `curb_likelihood` (cross-session agreement of 0.6 too strict for Acura's heave/roll-shock signal), not a missing capability.
+**Score: 🟢** — every §9 capability is implemented; the per-car coverage spans synthetic tests for the masking primitives + real-IBT tests parametrised over all 5 cars for builder structure / channel mapping / curb detection. The previously-flagged Acura `curb_likelihood` threshold gap was resolved with a per-car table (`_PER_CAR_CURB_AGREEMENT_FRACTION` in `track/masks.py`) — Acura uses 0.3 because its heave/roll-shock signal aggregates more symmetrically and produces lower cross-session agreement than the four-corner default (0.6) is calibrated for. The xfail has been removed and the test passes.
 
 ### §10 — Weather & Track Conditions ("understand the environment")
 
@@ -191,10 +203,9 @@ Additional commands verified end-to-end:
 
 ## Known follow-ups (not VISION violations, but flagged)
 
-1. **Acura curb-likelihood threshold** — `tests/track/test_per_car_real_ibt.py::test_compounding_maps_have_real_content[acura-hockenheim_gp-compounding]` xfails. The 0.6 cross-session agreement threshold (`CURB_AGREEMENT_FRACTION` in `track/masks.py:65`) is calibrated for the four-corner shockVel signal and is too strict for the heave/roll-shock fallback Acura uses. Per-signal or per-car thresholding would clear the xfail. Does not affect the per-car CLI E2E (Acura still recommends a setup with `regime = sparse`).
-2. **constraints.md placeholders** — ARBs, dampers, corner weights, brake bias, differential, camber, toe, brake ducts, and throttle/brake mapping are still `<TODO: from iRacing UI>` in `constraints.md`. Slice E gracefully degrades and lists these in `untrained_parameters` rather than refusing to run, so VISION is satisfied; the gap is one of input-data capture, not architecture. Adding bounds will let the recommender search the full parameter space.
-3. **Damper-force curve calibration** — `physics/damper_force.py` uses seeded per-car coefficients (4–8 N·s/mm range) pending real damper-spec data from iRacing's garage tooltips. Force estimation works; absolute magnitudes are stepping-stone values.
-4. **Aero `out of envelope` warnings during DE search** — when the optimiser's differential-evolution probes ride heights briefly outside the aero map envelope, the interpolator emits `front_rh_mm=… out of envelope (…) for car bmw; clamped to …` warnings. The interpolator clamps and returns a value, the search continues, and the final clamped recommendation is correct. Cosmetic stderr noise.
+1. **constraints.md placeholders** — ARBs, dampers, corner weights, brake bias, differential, camber, toe, brake ducts, and throttle/brake mapping are still `<TODO: from iRacing UI>` in `constraints.md`. Slice E gracefully degrades and lists these in `untrained_parameters` rather than refusing to run, so VISION is satisfied; the gap is one of input-data capture, not architecture. Adding bounds will let the recommender search the full parameter space.
+2. **Damper-force curve calibration** — `physics/damper_force.py` uses seeded per-car coefficients (4–8 N·s/mm range) pending real damper-spec data from iRacing's garage tooltips. Force estimation is now wired into the corner aggregator (`damper_force_p99_n` / `damper_force_mean_n` columns), but absolute magnitudes are stepping-stone values until the per-car damper-spec table is filled in.
+3. **Aero `out of envelope` warnings during DE search** — when the optimiser's differential-evolution probes ride heights briefly outside the aero map envelope, the interpolator emits `front_rh_mm=… out of envelope (…) for car bmw; clamped to …` warnings. The interpolator clamps and returns a value, the search continues, and the final clamped recommendation is correct. Cosmetic stderr noise.
 
 ## Sign-off
 

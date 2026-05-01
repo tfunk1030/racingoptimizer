@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import warnings
 from pathlib import Path
-from statistics import median
+from statistics import median, pstdev
 
 import numpy as np
 import polars as pl
@@ -225,13 +225,32 @@ def fit(
 
     aero_available = _try_load_aero(car_key)
 
-    baseline = {
-        name: float(median(v for v in (
+    # Per-parameter observed values across the requested sessions. Both
+    # `baseline_setup` (median) and `parameter_observed_std` (population std)
+    # come from the same source of truth so the recommender can detect
+    # parameters the driver held effectively constant in training.
+    #
+    # Why std matters: when a parameter has zero (or near-zero) variation in
+    # the training corpus, the joint surrogate has no information about how
+    # the response surface depends on it. The DE search then drifts to
+    # whichever bound the noise gradient points at — producing absurd
+    # constraint-edge recommendations like "tyre pressure 166 kPa" when
+    # every observed session ran 152 kPa. The recommender uses this dict
+    # to pin such parameters to the observed median (see
+    # `physics/recommend.py::_pin_or_trust_bounds`).
+    baseline: dict[str, float] = {}
+    parameter_observed_std: dict[str, float] = {}
+    for name in fit_params:
+        observed = [
             setup_snapshots[sid].get(name) for sid in sorted_ids
-        ) if v is not None))
-        for name in fit_params
-        if any(setup_snapshots[sid].get(name) is not None for sid in sorted_ids)
-    }
+        ]
+        observed = [v for v in observed if v is not None]
+        if not observed:
+            continue
+        baseline[name] = float(median(observed))
+        parameter_observed_std[name] = (
+            float(pstdev(observed)) if len(observed) >= 2 else 0.0
+        )
 
     car_baselines = derive_baselines(car_key, training)
 
@@ -245,6 +264,7 @@ def fit(
         untrained_parameters=tuple(sorted(untrained_params)),
         aero_correction_available=aero_available,
         baseline_setup=baseline,
+        parameter_observed_std=parameter_observed_std,
         seed=int(seed),
         car_baselines=car_baselines,
         feature_schema_version=ENV_FEATURE_SCHEMA_VERSION,

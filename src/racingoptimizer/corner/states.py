@@ -44,6 +44,11 @@ from racingoptimizer.ingest.paths import (
     resolve_corpus_root,
 )
 
+# NOTE: ``racingoptimizer.physics.damper_force`` is imported lazily inside
+# ``_aggregate`` because the physics package's ``__init__`` re-exports the
+# fitter, which in turn imports ``corner_phase_states`` from us — a top-level
+# import here would create a circular dependency.
+
 # Stage-2 empirical understeer-signal coefficients (rad / m·s⁻²).
 #
 # VISION §3 forbids the textbook bicycle-model `Speed^2` denominator that
@@ -325,6 +330,12 @@ def _aggregate(
     # Materialise per-sample damper velocity (mm/s) before group_by so the
     # diff stays within the lap. Raw shockDefl is in METERS; * 1000 -> mm/s.
     # The leading sample's diff is null; Polars aggregates ignore nulls.
+    #
+    # VISION §2: emit BOTH damper velocities and damper forces. Force is
+    # estimated via the per-car digressive curve in
+    # ``racingoptimizer.physics.damper_force`` (low-velocity linear, high-
+    # velocity sqrt taper), inlined here as a Polars expression so we keep
+    # the columnar pipeline (no per-sample Python UDF).
     if has_shocks:
         dt = pl.col("t_s").diff()
         inner = inner.with_columns(
@@ -333,6 +344,26 @@ def _aggregate(
                 for src in ("LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl")
             ]
         )
+        # Per-car damper coefficient (N·s/mm) → digressive force estimator.
+        # Values are already abs(mm/s); below the digressive knee force is
+        # linear in v, above it tapers as sqrt of the over-knee excess.
+        # Lazy import — see module-level note about the circular dependency.
+        from racingoptimizer.physics.damper_force import (
+            DIGRESSIVE_KNEE_MM_S,
+            damper_coefficient,
+        )
+        k_damper = damper_coefficient(car)
+        knee = float(DIGRESSIVE_KNEE_MM_S)
+        force_exprs = []
+        for src in ("LFshockDefl", "RFshockDefl", "LRshockDefl", "RRshockDefl"):
+            v = pl.col(f"_v_{src}")
+            force = (
+                pl.when(v < knee)
+                .then(k_damper * v)
+                .otherwise(k_damper * knee * (1.0 + ((v - knee) / knee).sqrt()))
+            )
+            force_exprs.append(force.alias(f"_f_{src}"))
+        inner = inner.with_columns(force_exprs)
 
     aggs: list[pl.Expr] = [
         pl.len().cast(pl.UInt32).alias("n_samples"),
@@ -463,15 +494,21 @@ def _aggregate(
             .alias("aero_platform_pitch_mean_mm")
         )
 
-    # Spec section 6: damper velocities.
+    # Spec section 6 + VISION §2: damper velocities AND forces.
     # p99 = max p99 across the four corners; mean = mean of per-corner means.
-    # Pre-computed `_v_*shockDefl` columns are already abs(mm/s).
+    # Pre-computed `_v_*shockDefl` columns are already abs(mm/s); `_f_*` are N.
     if has_shocks:
         v_cols = ("_v_LFshockDefl", "_v_RFshockDefl", "_v_LRshockDefl", "_v_RRshockDefl")
         max_p99 = pl.max_horizontal(*[pl.col(c).quantile(0.99) for c in v_cols])
         mean_of_means = pl.mean_horizontal(*[pl.col(c).mean() for c in v_cols])
         aggs.append(max_p99.cast(pl.Float32).alias("damper_velocity_p99_mms"))
         aggs.append(mean_of_means.cast(pl.Float32).alias("damper_velocity_mean_mms"))
+
+        f_cols = ("_f_LFshockDefl", "_f_RFshockDefl", "_f_LRshockDefl", "_f_RRshockDefl")
+        max_p99_n = pl.max_horizontal(*[pl.col(c).quantile(0.99) for c in f_cols])
+        mean_of_means_n = pl.mean_horizontal(*[pl.col(c).mean() for c in f_cols])
+        aggs.append(max_p99_n.cast(pl.Float32).alias("damper_force_p99_n"))
+        aggs.append(mean_of_means_n.cast(pl.Float32).alias("damper_force_mean_n"))
 
     # VISION section 10 12-channel env set. Atmospheric floats aggregate as
     # means; discrete weather state aggregates as max so a transient flag
@@ -629,6 +666,8 @@ def _output_columns(present: list[str]) -> list[str]:
         "aero_platform_pitch_mean_mm",
         "damper_velocity_p99_mms",
         "damper_velocity_mean_mms",
+        "damper_force_p99_n",
+        "damper_force_mean_n",
         # VISION section 10 12-channel env aggregates.
         "air_temp_c_mean",
         "air_density_mean",
@@ -705,6 +744,8 @@ def _empty_frame(has: dict[str, bool]) -> pl.DataFrame:
         schema["load_transfer_asymmetry_mean"] = pl.Float32
         schema["damper_velocity_p99_mms"] = pl.Float32
         schema["damper_velocity_mean_mms"] = pl.Float32
+        schema["damper_force_p99_n"] = pl.Float32
+        schema["damper_force_mean_n"] = pl.Float32
     if has_wheel_speeds_e and has["Speed"]:
         schema["traction_util_mean"] = pl.Float32
     if has_ride_heights_e:

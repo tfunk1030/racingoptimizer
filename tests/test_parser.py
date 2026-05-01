@@ -10,6 +10,7 @@ from racingoptimizer.ingest.parser import (
     EXCLUDED_CHANNEL_PATTERNS,
     ParseResult,
     _detect_sample_rate,
+    convert_track_wetness_enum,
     parse_ibt,
 )
 
@@ -192,3 +193,83 @@ def test_weather_summary_covers_vision_section_10_channels(small_ibt: Path) -> N
             )
     # Every emitted key must be in the expected set (no stray fields).
     assert set(result.weather_summary).issubset(expected_keys)
+
+
+# ---------------------------------------------------------------------------
+# TrackWetness enum -> 0..1 fraction conversion (VISION §10).
+# iRacing's `TrackWetness` channel is enum-coded (1=Dry .. 7=Extremely Wet),
+# not a 0..1 fraction. The parser remaps at ingest time so every downstream
+# module sees the spec-canonical scale. Without the remap, every dry
+# (enum=1) session was being classified as `full_rain` by `wet_mode`.
+# ---------------------------------------------------------------------------
+
+def test_convert_track_wetness_enum_dry_maps_to_zero() -> None:
+    raw = np.array([1.0, 1.0, 1.0], dtype=np.float32)
+    out = convert_track_wetness_enum(raw)
+    assert np.allclose(out, 0.0)
+    assert out.dtype == np.float32
+
+
+def test_convert_track_wetness_enum_extremely_wet_maps_to_one() -> None:
+    raw = np.array([7.0, 7.0], dtype=np.float32)
+    out = convert_track_wetness_enum(raw)
+    assert np.allclose(out, 1.0)
+
+
+def test_convert_track_wetness_enum_full_table() -> None:
+    """Every documented enum value maps to the published fraction."""
+    # (enum_value, expected_fraction) — must stay aligned with
+    # `_TRACK_WETNESS_ENUM_TO_FRACTION` in parser.py.
+    expected = {
+        0: 0.00,  # Unknown (treated as dry)
+        1: 0.00,  # Dry
+        2: 0.10,  # Mostly Dry
+        3: 0.25,  # Very Lightly Wet
+        4: 0.40,  # Lightly Wet
+        5: 0.60,  # Moderately Wet
+        6: 0.80,  # Very Wet
+        7: 1.00,  # Extremely Wet
+    }
+    raw = np.array(list(expected), dtype=np.float32)
+    out = convert_track_wetness_enum(raw)
+    assert np.allclose(out, np.array(list(expected.values()), dtype=np.float32))
+
+
+def test_convert_track_wetness_enum_clips_out_of_range() -> None:
+    """Malformed IBTs must not produce NaN or out-of-range fractions."""
+    raw = np.array([-3.0, 0.0, 8.0, 99.0], dtype=np.float32)
+    out = convert_track_wetness_enum(raw)
+    assert out[0] == 0.0   # negative -> Unknown -> dry
+    assert out[1] == 0.0   # 0 -> Unknown -> dry
+    assert out[2] == 1.0   # over-range -> Extremely Wet
+    assert out[3] == 1.0
+    assert not np.isnan(out).any()
+
+
+def test_convert_track_wetness_enum_rounds_intermediate_floats() -> None:
+    """Float values from pyirsdk are integer-valued; defensive rounding
+    handles any float-precision drift around enum boundaries."""
+    raw = np.array([1.49, 1.51, 4.999], dtype=np.float32)
+    out = convert_track_wetness_enum(raw)
+    # 1.49 rounds to 1 (Dry -> 0.0); 1.51 rounds to 2 (Mostly Dry -> 0.10);
+    # 4.999 rounds to 5 (Moderately Wet -> 0.60).
+    assert out[0] == pytest.approx(0.0)
+    assert out[1] == pytest.approx(0.10, abs=1e-5)
+    assert out[2] == pytest.approx(0.60, abs=1e-5)
+
+
+def test_real_ibt_track_wetness_in_canonical_range(small_ibt: Path) -> None:
+    """End-to-end: a parsed real IBT must expose `TrackWetness` in [0, 1].
+
+    Pre-fix, every dry session in the corpus reported `TrackWetness == 1.0`
+    because the raw enum value (1=Dry) was passed through unchanged. Pin the
+    contract so a regression here can never poison `wet_mode` again.
+    """
+    result = parse_ibt(small_ibt)
+    if "TrackWetness" not in result.channels:
+        pytest.skip("fixture IBT does not expose TrackWetness")
+    arr = result.channels["TrackWetness"]
+    assert arr.min() >= 0.0
+    assert arr.max() <= 1.0
+    if "TrackWetness_max" in result.weather_summary:
+        assert 0.0 <= result.weather_summary["TrackWetness_max"] <= 1.0

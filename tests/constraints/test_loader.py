@@ -48,14 +48,18 @@ def test_tyre_cold_pressure(table: ConstraintsTable) -> None:
 
 
 def test_todo_placeholders_return_none(table: ConstraintsTable) -> None:
+    """Parameters whose `constraints.md` row is still ``<TODO: from iRacing UI>``.
+
+    Note: ARB blades, brake bias, diff preload, and the camber rows now have
+    estimated bounds (annotated as such in `constraints.md`). When iRacing-
+    UI capture invalidates an estimate, edit `constraints.md` accordingly —
+    do NOT add the row back to this test list.
+    """
     assert table.bounds("default", "damper_lsc_fl") is None
-    assert table.bounds("default", "anti_roll_bar_front") is None
-    assert table.bounds("default", "anti_roll_bar_rear") is None
-    assert table.bounds("default", "brake_bias_pct") is None
-    assert table.bounds("default", "diff_preload_nm") is None
     assert table.bounds("default", "diff_coast_ratio_pct") is None
     assert table.bounds("default", "diff_power_ratio_pct") is None
-    assert table.bounds("default", "camber_fl_deg") is None
+    # Toe is in mm but the loader's "Toe" section is degree-based — kept TODO
+    # until the units mismatch is resolved.
     assert table.bounds("default", "toe_rr_deg") is None
     assert table.bounds("default", "brake_duct_front") is None
     assert table.bounds("default", "corner_weight_fl_kg") is None

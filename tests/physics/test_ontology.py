@@ -109,21 +109,46 @@ def test_parameters_helper_sorted_and_complete() -> None:
     assert "rear_wing_angle_deg" in names
 
 
-def test_fittable_parameters_only_returns_bounded() -> None:
+def test_fittable_parameters_only_returns_bounded_user_settable() -> None:
+    """The optimizer's search list must satisfy three gates: fittable AND
+    user-settable AND bounded by `constraints.md`. Calculated readouts
+    (ride heights, heave deflections — `user_settable=False`) must be
+    excluded even though they're still `fittable=True` (model learns the
+    correlation as targets, but the driver can't type their values into
+    the garage UI). CE-gated parameters with TODO bounds must also be
+    excluded.
+    """
     table = load_constraints()
-    result = fittable_parameters("bmw", table)
-    expected_bounded = {
+    result = set(fittable_parameters("bmw", table))
+    # Every entry the optimizer is allowed to recommend MUST be a real
+    # garage input (user_settable=True) AND must have legal bounds.
+    must_include = {
         "rear_wing_angle_deg",
         "tyre_cold_pressure_kpa",
-        "heave_spring_mm",
-        "heave_slider_mm",
-        "static_ride_height_front_mm",
-        "static_ride_height_rear_mm",
+        # USER-input springs / perches / pushrods that drive the calculated
+        # readouts — added once `constraints.md` gained estimated bounds.
+        "heave_spring_rate_n_per_mm",
+        "third_spring_rate_n_per_mm",
+        "rear_coil_spring_rate_n_per_mm",
+        "heave_perch_offset_front_mm",
+        "spring_perch_offset_rear_mm",
+        "third_perch_offset_rear_mm",
+        "pushrod_length_offset_front_mm",
+        "pushrod_length_offset_rear_mm",
     }
-    assert set(result) == expected_bounded
-    # CE-gated must NOT show up (constraints are <TODO>).
-    assert "anti_roll_bar_front" not in result
+    assert must_include.issubset(result), (
+        f"missing expected fittable params: {must_include - result}"
+    )
+    # Calculated readouts: `user_settable=False`, must be excluded even
+    # though `constraints.md` still has rows for them (kept for the
+    # observation-envelope record).
+    assert "static_ride_height_front_mm" not in result
+    assert "static_ride_height_rear_mm" not in result
+    assert "heave_spring_mm" not in result
+    assert "heave_slider_mm" not in result
+    # CE-gated must NOT show up (constraints are still <TODO>).
     assert "damper_lsc_fl" not in result
+    assert "diff_coast_ratio_pct" not in result
 
 
 @pytest.mark.parametrize(
