@@ -1045,8 +1045,8 @@ def _overall_regime(coverage: list[TrackCoverage]) -> str:
 
 def _status_notes() -> list[str]:
     return [
-        "constraints.md is missing bounds for: ARBs, dampers, corner_weights, "
-        "brake_bias, differential, camber, toe, brake_ducts.",
+        "constraints.md is missing bounds for: dampers, corner_weights, toe, "
+        "brake_ducts, differential coast/power details, and throttle/brake mapping.",
     ]
 
 

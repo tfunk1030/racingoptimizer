@@ -46,27 +46,6 @@ PER_CAR_FIXTURES: dict[str, str] = {
     "porsche": "porsche963gtp_algarve gp 2026-04-07 15-49-17.ibt",
 }
 
-# Parameters introduced in `bf2e48b` + cambers added in the second-pass
-# audit's gap-A remediation. Plus the long-standing user-input parameters
-# as a regression check.
-_USER_INPUT_PARAMS_TO_CHECK: tuple[str, ...] = (
-    "rear_wing_angle_deg",
-    "tyre_cold_pressure_kpa",
-    "heave_spring_rate_n_per_mm",
-    "third_spring_rate_n_per_mm",
-    "rear_coil_spring_rate_n_per_mm",
-    "heave_perch_offset_front_mm",
-    "spring_perch_offset_rear_mm",
-    "third_perch_offset_rear_mm",
-    "pushrod_length_offset_front_mm",
-    "pushrod_length_offset_rear_mm",
-    "camber_fl_deg",
-    "camber_fr_deg",
-    "camber_rl_deg",
-    "camber_rr_deg",
-)
-
-
 _LFS_POINTER_PREFIX = b"version https://git-lfs.github.com/spec/v1"
 
 
@@ -134,32 +113,26 @@ def test_per_car_setup_yaml_resolves_every_user_input(car: str) -> None:
     setup = _read_setup_yaml(fixture_path)
     onto = ontology_for(car)
 
-    # 1. Spot-check the named user-input parameters (gives sharper failure
-    #    messages when one specific path is wrong).
+    # 1. Every bounded user input the optimizer will search must resolve.
+    #    Car-not-applicable or unit-incompatible leaves are represented in
+    #    the ontology with fittable=False, so they do not appear here.
+    constraints = load_constraints()
+    fittable = fittable_parameters(car, constraints)
     failures: list[str] = []
-    for name in _USER_INPUT_PARAMS_TO_CHECK:
+    for name in fittable:
         value = setup_value(car, name, setup)
         if value is None:
             failures.append(
                 f"{name} (path={onto[name].json_path})"
             )
     assert not failures, (
-        f"{car}: {len(failures)} user-input parameter(s) missing from real "
+        f"{car}: {len(failures)} fittable parameter(s) missing from real "
         f"setup YAML. Adjust the per-car ontology dict or the JSON path:\n"
         + "\n".join(f"  - {f}" for f in failures)
     )
 
-    # 2. Exhaustive: every parameter the optimizer would search over for
-    #    this car must resolve. Catches regressions where adding a new
-    #    bound to constraints.md silently activates a parameter whose
-    #    JSON path hasn't been verified.
-    constraints = load_constraints()
-    fittable = fittable_parameters(car, constraints)
-    unresolved = [
-        name for name in fittable if setup_value(car, name, setup) is None
-    ]
-    assert not unresolved, (
-        f"{car}: {len(unresolved)} fittable parameter(s) failed to resolve "
-        f"against real setup YAML: {unresolved}. Either ontology JSON path "
-        f"is wrong, or constraints.md should not list these as bounded."
-    )
+    # 2. Every fittable parameter is truly user-settable and bounded.
+    for name in fittable:
+        assert onto[name].user_settable is True
+        assert onto[name].fittable is True
+        assert constraints.bounds(car, name) is not None

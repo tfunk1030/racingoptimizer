@@ -7,6 +7,7 @@ from racingoptimizer.corner import CornerPhaseKey, Phase
 from racingoptimizer.physics.baselines import CarBaselines
 from racingoptimizer.physics.model import CornerPhaseStateWithConfidence
 from racingoptimizer.physics.score import (
+    _score_breakdown,
     aero_eff,
     aggregate_utilization,
     balance,
@@ -209,6 +210,47 @@ def test_aggregate_utilization_marks_sparse_when_significant_sub_sparse() -> Non
         state, Phase.MID_CORNER, _env(), aero=None, baselines=_BASELINES,
     )
     assert conf.regime == "sparse"
+
+
+def test_score_breakdown_penalizes_sparse_prediction_confidence() -> None:
+    dense_state = _state({
+        "accel_lat_g_max": 0.75,
+        "understeer_angle_mean_rad": 0.0,
+        "yaw_rate_max_rad_s": 1.0,
+        "wheel_speed_max_diff_ms": 0.0,
+        "lf_ride_height_mean_mm": 30.0,
+        "rf_ride_height_mean_mm": 30.0,
+        "lr_ride_height_mean_mm": 30.0,
+        "rr_ride_height_mean_mm": 30.0,
+    }, regime="dense")
+    sparse_state = _state({
+        "accel_lat_g_max": 0.75,
+        "understeer_angle_mean_rad": 0.0,
+        "yaw_rate_max_rad_s": 1.0,
+        "wheel_speed_max_diff_ms": 0.0,
+        "lf_ride_height_mean_mm": 30.0,
+        "rf_ride_height_mean_mm": 30.0,
+        "lr_ride_height_mean_mm": 30.0,
+        "rr_ride_height_mean_mm": 30.0,
+    }, regime="sparse")
+
+    class Model:
+        def __init__(self, state: CornerPhaseStateWithConfidence) -> None:
+            self.state = state
+
+        def predict(self, setup, env, cpkey):  # noqa: ANN001
+            return self.state
+
+    keys = [(0, Phase.MID_CORNER.value)]
+    weights = {0: 1.0}
+    dense_score = sum(_score_breakdown(
+        Model(dense_state), {}, _env(), None, keys, weights, _BASELINES,
+    ).values())
+    sparse_score = sum(_score_breakdown(
+        Model(sparse_state), {}, _env(), None, keys, weights, _BASELINES,
+    ).values())
+
+    assert sparse_score < dense_score
 
 
 def test_score_setup_no_lap_time_reference() -> None:

@@ -113,6 +113,11 @@ _ENV_COLUMNS: tuple[str, ...] = (
     "skies_max",
 )
 
+# Corner-phase rows aggregate per-sample track quality into a clean fraction.
+# Dirty sections (curbs/off-track/contact-like events) must not train the same
+# as clean phases per VISION §9.
+MIN_TRAINING_CLEAN_FRACTION: float = 0.8
+
 # Number of env features in the v1 schema (pre-S2.2). Kept for legacy pickles
 # that lived under that schema.
 ENV_FEATURE_COUNT_V1: int = 5
@@ -400,6 +405,8 @@ def _fit_one_quadruple(
     k_folds: int,
 ) -> FitRecord | None:
     """Fit one (corner_id, phase, output_channel) quadruple over the joint vector."""
+    if "data_quality_clean_frac" in sub.columns:
+        sub = sub.filter(pl.col("data_quality_clean_frac") >= MIN_TRAINING_CLEAN_FRACTION)
     drop_cols = [output_channel] + [p for p in parameters if p in sub.columns]
     cleaned = sub.drop_nulls(drop_cols)
     if cleaned.height < 3:

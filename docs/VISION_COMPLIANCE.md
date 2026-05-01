@@ -1,5 +1,10 @@
 # VISION.md Compliance Report
 
+> **Superseded audit note (2026-05-01):** this file contains historical
+> compliance claims and some stale green-only assertions. Use
+> `docs/VISION_ADHERENCE_REPORT.md` as the current post-parameter-wiring and
+> scratch-corpus rebuild status.
+
 **Date:** 2026-05-01 (post second-pass audit)
 **Master HEAD:** see latest commit on the audit branch (`claude/audit-codebase-vision-c0bnt`)
 **Scope:** Full audit of every clause in VISION.md against the merged master tree, the fast + slow test suites, and end-to-end CLI execution for all 5 GTP cars.

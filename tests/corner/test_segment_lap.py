@@ -40,6 +40,32 @@ def _five_corner_frame() -> pl.DataFrame:
     )
 
 
+def _five_corner_frame_at_rate(sample_hz: int) -> pl.DataFrame:
+    """Build the same 5-corner timing profile at an arbitrary sample rate."""
+    flat_pre = np.zeros(int(0.5 * sample_hz))
+    parts: list[np.ndarray] = [flat_pre]
+    for _ in range(5):
+        n = int(1.0 * sample_hz)
+        hump = 0.8 * np.sin(np.linspace(0.0, np.pi, n, endpoint=False))
+        parts.append(hump)
+        parts.append(np.zeros(int(1.5 * sample_hz)))
+    accel_lat_g = np.concatenate(parts)
+    n = accel_lat_g.size
+    return pl.DataFrame(
+        {
+            "t_s": pl.Series("t_s", np.arange(n) / sample_hz, dtype=pl.Float64),
+            "AccelLat": pl.Series(
+                "AccelLat", accel_lat_g * G_MS2, dtype=pl.Float32
+            ),
+            "Brake": pl.Series("Brake", np.zeros(n), dtype=pl.Float32),
+            "Throttle": pl.Series("Throttle", np.zeros(n), dtype=pl.Float32),
+            "SteeringWheelAngle": pl.Series(
+                "SteeringWheelAngle", np.zeros(n), dtype=pl.Float32
+            ),
+        }
+    )
+
+
 def test_segment_lap_appends_corner_id_and_phase() -> None:
     df = _five_corner_frame()
     n_in = df.height
@@ -101,3 +127,32 @@ def test_segment_lap_is_pure_two_calls_identical() -> None:
     a = segment_lap(df)
     b = segment_lap(df)
     assert_frame_equal(a, b)
+
+
+def test_segment_lap_derives_sample_rate_from_time_axis() -> None:
+    sample_hz = 360
+    flat_pre = np.zeros(int(0.5 * sample_hz))
+    # 0.2 s above threshold is shorter than the 400 ms minimum corner
+    # duration. A stale 60 Hz conversion sees 72 samples >= 24 and accepts it;
+    # deriving 360 Hz from t_s correctly requires 144 samples and rejects it.
+    short_hump = 0.8 * np.sin(np.linspace(0.0, np.pi, int(0.2 * sample_hz)))
+    accel_lat_g = np.concatenate([flat_pre, short_hump, flat_pre])
+    n = accel_lat_g.size
+    df = pl.DataFrame(
+        {
+            "t_s": pl.Series("t_s", np.arange(n) / sample_hz, dtype=pl.Float64),
+            "AccelLat": pl.Series(
+                "AccelLat", accel_lat_g * G_MS2, dtype=pl.Float32
+            ),
+            "Brake": pl.Series("Brake", np.zeros(n), dtype=pl.Float32),
+            "Throttle": pl.Series("Throttle", np.zeros(n), dtype=pl.Float32),
+            "SteeringWheelAngle": pl.Series(
+                "SteeringWheelAngle", np.zeros(n), dtype=pl.Float32
+            ),
+        }
+    )
+
+    out = segment_lap(df)
+
+    distinct = sorted({c for c in out["corner_id"].to_list() if c >= 0})
+    assert distinct == []

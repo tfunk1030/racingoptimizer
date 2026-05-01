@@ -126,6 +126,8 @@ _SPRING_PERCH_OFFSET_R = ("Chassis", "LeftRear", "SpringPerchOffset")
 _THIRD_PERCH_OFFSET_R = ("Chassis", "Rear", "ThirdPerchOffset")
 _PUSHROD_OFFSET_F = ("Chassis", "Front", "PushrodLengthOffset")
 _PUSHROD_OFFSET_R = ("Chassis", "Rear", "PushrodLengthOffset")
+_PUSHROD_DELTA_F = ("Chassis", "Front", "PushrodLengthDelta")
+_PUSHROD_DELTA_R = ("Chassis", "Rear", "PushrodLengthDelta")
 
 # Per-corner camber. iRacing GTP setup YAML stores camber as a string
 # (e.g. "-2.5 deg") at `Chassis.<Corner>.Camber`. Bounds in `constraints.md`
@@ -303,6 +305,19 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
     }
 
 
+def _blocked_like(base: ParameterSpec, *, units: str | None = None) -> ParameterSpec:
+    """Return a known user input that is not safe to fit/recommend yet."""
+    return ParameterSpec(
+        json_path=base.json_path,
+        dtype=base.dtype,
+        units=units or base.units,
+        family=base.family,
+        fittable=False,
+        user_settable=base.user_settable,
+        is_discrete=base.is_discrete,
+    )
+
+
 # (constraint suffix, IBT field name) for the four damper modes.
 _DAMPER_MODES: tuple[tuple[str, str], ...] = (
     ("lsc", "LsCompDamping"),
@@ -353,7 +368,7 @@ def _build(
     damper_paths: dict[str, ParameterSpec],
     **overrides: ParameterSpec,
 ) -> dict[str, ParameterSpec]:
-    return {**_common_bounded(), **overrides, **_common_ce_gated(), **damper_paths}
+    return {**_common_bounded(), **_common_ce_gated(), **damper_paths, **overrides}
 
 
 # Acura uses HeaveDamperDefl for the heave slider; the rest follow the
@@ -365,11 +380,96 @@ _ACURA_HEAVE_SLIDER = ParameterSpec(
     fittable=True, user_settable=False,  # readout, not user input
 )
 
-ACURA: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, heave_slider_mm=_ACURA_HEAVE_SLIDER)
+_ACURA_OVERRIDES: dict[str, ParameterSpec] = {
+    "heave_slider_mm": _ACURA_HEAVE_SLIDER,
+    "third_spring_rate_n_per_mm": ParameterSpec(
+        json_path=("Chassis", "Rear", "HeaveSpring"), dtype=float, units="N/mm",
+        family="spring_rate", fittable=True, user_settable=True,
+    ),
+    "spring_perch_offset_rear_mm": ParameterSpec(
+        json_path=("Chassis", "Rear", "HeavePerchOffset"), dtype=float, units="mm",
+        family="perch_offset", fittable=True, user_settable=True,
+    ),
+    "pushrod_length_offset_front_mm": ParameterSpec(
+        json_path=_PUSHROD_DELTA_F, dtype=float, units="mm",
+        family="pushrod", fittable=True, user_settable=True,
+    ),
+    "pushrod_length_offset_rear_mm": ParameterSpec(
+        json_path=_PUSHROD_DELTA_R, dtype=float, units="mm",
+        family="pushrod", fittable=True, user_settable=True,
+    ),
+    "brake_bias_pct": ParameterSpec(
+        json_path=("Systems", "BrakeSpec", "BrakePressureBias"),
+        dtype=float, units="pct", family="brake_bias", fittable=True,
+    ),
+    "diff_preload_nm": ParameterSpec(
+        json_path=("Systems", "RearDiffSpec", "Preload"),
+        dtype=float, units="Nm", family="diff", fittable=True,
+    ),
+    # Acura has no rear coil / third perch leaves in the canonical setup YAML.
+    "rear_coil_spring_rate_n_per_mm": _blocked_like(
+        _common_bounded()["rear_coil_spring_rate_n_per_mm"],
+    ),
+    "third_perch_offset_rear_mm": _blocked_like(_common_bounded()["third_perch_offset_rear_mm"]),
+}
+
+_CADILLAC_OVERRIDES: dict[str, ParameterSpec] = {
+    "diff_preload_nm": ParameterSpec(
+        json_path=("BrakesDriveUnit", "DiffSpec", "Preload"),
+        dtype=float, units="Nm", family="diff", fittable=True,
+    ),
+}
+
+_FERRARI_OVERRIDES: dict[str, ParameterSpec] = {
+    "pushrod_length_offset_front_mm": ParameterSpec(
+        json_path=_PUSHROD_DELTA_F, dtype=float, units="mm",
+        family="pushrod", fittable=True, user_settable=True,
+    ),
+    "pushrod_length_offset_rear_mm": ParameterSpec(
+        json_path=_PUSHROD_DELTA_R, dtype=float, units="mm",
+        family="pushrod", fittable=True, user_settable=True,
+    ),
+    "brake_bias_pct": ParameterSpec(
+        json_path=("Systems", "BrakeSpec", "BrakePressureBias"),
+        dtype=float, units="pct", family="brake_bias", fittable=True,
+    ),
+    "diff_preload_nm": ParameterSpec(
+        json_path=("Systems", "RearDiffSpec", "Preload"),
+        dtype=float, units="Nm", family="diff", fittable=True,
+    ),
+    # Ferrari stores heave/torsion controls as UI indices, not N/mm values.
+    # Leave them known but blocked until Ferrari-specific legal ranges are captured.
+    "heave_spring_rate_n_per_mm": ParameterSpec(
+        json_path=_HEAVE_SPRING_RATE_F, dtype=float, units="index",
+        family="spring_rate", fittable=False, user_settable=True,
+    ),
+    "third_spring_rate_n_per_mm": ParameterSpec(
+        json_path=("Chassis", "Rear", "HeaveSpring"), dtype=float, units="index",
+        family="spring_rate", fittable=False, user_settable=True,
+    ),
+    "rear_coil_spring_rate_n_per_mm": _blocked_like(
+        _common_bounded()["rear_coil_spring_rate_n_per_mm"],
+    ),
+    "spring_perch_offset_rear_mm": _blocked_like(_common_bounded()["spring_perch_offset_rear_mm"]),
+    "third_perch_offset_rear_mm": _blocked_like(_common_bounded()["third_perch_offset_rear_mm"]),
+}
+
+_PORSCHE_OVERRIDES: dict[str, ParameterSpec] = {
+    "anti_roll_bar_front": ParameterSpec(
+        json_path=("Chassis", "Front", "ArbAdj"), dtype=float, units="click",
+        family="arb", fittable=True, is_discrete=True,
+    ),
+    "anti_roll_bar_rear": ParameterSpec(
+        json_path=("Chassis", "Rear", "ArbAdj"), dtype=float, units="click",
+        family="arb", fittable=True, is_discrete=True,
+    ),
+}
+
+ACURA: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_ACURA_OVERRIDES)
 BMW: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS)
-CADILLAC: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS)
-FERRARI: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS)
-PORSCHE: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS)
+CADILLAC: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_CADILLAC_OVERRIDES)
+FERRARI: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_FERRARI_OVERRIDES)
+PORSCHE: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_PORSCHE_OVERRIDES)
 
 _BY_CAR: dict[str, dict[str, ParameterSpec]] = {
     "acura": ACURA,

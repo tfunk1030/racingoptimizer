@@ -122,6 +122,32 @@ def test_fit_empty_session_list_raises() -> None:
         fit("bmw", [], None, k_folds=2)  # type: ignore[arg-type]
 
 
+def test_fit_one_quadruple_ignores_dirty_corner_phase_rows() -> None:
+    from racingoptimizer.physics.fitter import _fit_one_quadruple
+
+    sub = pytest.importorskip("polars").DataFrame(
+        {
+            "accel_lat_g_max": [1.00, 1.05, 1.10, 1.15, 2.50, 2.75],
+            "rear_wing_angle_deg": [14.0, 14.5, 15.0, 15.5, 16.0, 16.5],
+            "air_density_mean": [1.20, 1.21, 1.22, 1.23, 1.24, 1.25],
+            "data_quality_clean_frac": [1.0, 0.95, 0.9, 0.8, 0.5, 0.0],
+        }
+    )
+
+    record = _fit_one_quadruple(
+        sub=sub,
+        parameters=["rear_wing_angle_deg"],
+        output_channel="accel_lat_g_max",
+        family_kind="gp",
+        seed=1,
+        cv_seed=2,
+        k_folds=2,
+    )
+
+    assert record is not None
+    assert record.n_samples == 4
+
+
 def test_fit_emits_v3_feature_schema(
     bmw_sebring_corpus: tuple[Path, list[str]],
 ) -> None:

@@ -1,6 +1,6 @@
 # Setup Legalities
 
-Hard bounds the optimizer must clamp every recommended parameter to. **Partial slice** — does not yet cover ARBs, dampers, corner weights, brake bias, diff, etc.
+Hard bounds the optimizer must clamp every recommended parameter to. **Partial slice** — ARB blade indices, brake bias, differential preload, camber, springs, perches, pushrods, wing, tyre pressure, and observation envelopes for calculated platform readouts are covered. Damper clicks, corner-weight targets, toe, brake ducts, differential coast/power details, and throttle/brake mapping still have TODO bounds or units and are therefore blocked from recommendations until captured from the iRacing garage UI.
 
 Car keys match `aero-maps/` filenames: `acura`, `bmw`, `cadillac`, `ferrari`, `porsche`. Per-car overrides shadow the defaults.
 
@@ -47,9 +47,9 @@ Car keys match `aero-maps/` filenames: `acura`, `bmw`, `cadillac`, `ferrari`, `p
 > they update as a consequence of perch offsets, pushrod lengths, and
 > spring rates. The ontology marks them `user_settable=False` so the
 > optimizer's search space and the briefing's "set this" output exclude
-> them. The model still LEARNS the correlation between user inputs and
-> these readouts (so it can score candidates). Keep the bounds for
-> reference, but the recommender will never emit values for them.
+> them. The model learns the dynamic per-corner platform state from telemetry
+> channels instead; these setup readout bounds are kept for reference, but the
+> recommender will never emit values for them.
 
 ### Suspension deflections
 | parameter | min | max |

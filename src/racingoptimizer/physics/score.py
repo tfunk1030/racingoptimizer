@@ -38,6 +38,12 @@ _REGIME_RANK: dict[str, int] = {"sparse": 0, "noisy": 1, "confident": 2, "dense"
 _RANK_TO_REGIME: dict[int, Regime] = {
     0: "sparse", 1: "noisy", 2: "confident", 3: "dense",
 }
+_OBJECTIVE_CONFIDENCE_MULTIPLIER: dict[str, float] = {
+    "sparse": 0.60,
+    "noisy": 0.80,
+    "confident": 0.95,
+    "dense": 1.00,
+}
 
 
 def _clip01(x: float) -> float:
@@ -455,10 +461,16 @@ def _score_breakdown(
         if not state.states:
             out[cpkey] = 0.0
             continue
-        util, _conf = aggregate_utilization(state, phase, env, aero, baselines)
+        util, conf = aggregate_utilization(state, phase, env, aero, baselines)
         w = weights.get(int(corner_id), 0.0)
-        out[cpkey] = float(util * w)
+        out[cpkey] = float(_confidence_adjusted_utilization(util, conf) * w)
     return out
+
+
+def _confidence_adjusted_utilization(util: float, conf: Confidence) -> float:
+    """Conservatively score uncertain predictions inside the objective."""
+    multiplier = _OBJECTIVE_CONFIDENCE_MULTIPLIER[conf.regime]
+    return float(util * multiplier)
 
 
 __all__ = [

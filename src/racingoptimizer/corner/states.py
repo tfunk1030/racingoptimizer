@@ -22,6 +22,7 @@ unit U8). Passing a non-`None` value today raises `NotImplementedError`.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -212,7 +213,7 @@ def segment_lap(
             f"segment_lap: missing required column(s): {', '.join(missing)}"
         )
 
-    th = DEFAULT_THRESHOLDS if thresholds is None else thresholds
+    th = _thresholds_for_frame(lap_df, thresholds)
     corner_ids = detect_corners(lap_df, thresholds=th)
     phases = assign_phases(lap_df, corner_ids, thresholds=th)
 
@@ -270,7 +271,7 @@ def corner_phase_states(
     if rename_map:
         df = df.rename(rename_map)
 
-    th = DEFAULT_THRESHOLDS if thresholds is None else thresholds
+    th = _thresholds_for_frame(df, thresholds)
     labeled = segment_lap(df, thresholds=th)
 
     return _aggregate(labeled, session_id=session_id, lap_index=lap_index, car=sess.car)
@@ -284,6 +285,25 @@ def _get_session(session_id: str, corpus_root: Path | str | None) -> cat.Session
     if sess is None:
         raise KeyError(f"unknown session_id: {session_id}")
     return sess
+
+
+def _thresholds_for_frame(
+    df: pl.DataFrame,
+    thresholds: PhaseThresholds | None,
+) -> PhaseThresholds:
+    """Resolve phase thresholds, deriving sample rate from the lap time axis."""
+    base = DEFAULT_THRESHOLDS if thresholds is None else thresholds
+    if thresholds is not None or "t_s" not in df.columns or df.height < 2:
+        return base
+    times = df["t_s"].cast(pl.Float64).to_numpy()
+    deltas = times[1:] - times[:-1]
+    positive = deltas[deltas > 0.0]
+    if positive.size == 0:
+        return base
+    sample_rate_hz = int(round(1.0 / float(positive.mean())))
+    if sample_rate_hz <= 0:
+        return base
+    return replace(base, sample_rate_hz=sample_rate_hz)
 
 
 # ---- internal aggregation ------------------------------------------------
