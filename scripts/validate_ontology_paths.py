@@ -416,7 +416,7 @@ def main() -> int:
         lines.extend(_markdown_per_car(report))
 
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text("\n".join(lines) + "\n")
+    REPORT_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(f"Wrote {REPORT_PATH.relative_to(REPO_ROOT)}")
     failure = False

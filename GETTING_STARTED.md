@@ -30,7 +30,7 @@ The output has two parts:
 
 ```bash
 uv run optimize compare a.ibt b.ibt         # diff two setups corner-phase by corner-phase
-uv run optimize status cadillac             # what does the model know about this car?
+uv run optimize status cadillac           # what does the model know about this car?
 ```
 
 ## Useful options on `optimize <car> <track>`
@@ -68,3 +68,4 @@ uv run optimize status cadillac             # what does the model know about thi
 uv run pytest -q                 # full suite (~15 min)
 uv run pytest -q -m "not slow"   # fast suite (~2 min)
 ```
+  
