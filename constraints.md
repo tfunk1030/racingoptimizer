@@ -38,7 +38,7 @@ Car keys match `aero-maps/` filenames: `acura`, `bmw`, `cadillac`, `ferrari`, `p
 ### Tyre cold pressure
 | min | max |
 | --- | --- |
-| 165.0 kPa | 220.0 kPa |
+| 152.0 kPa | 220.0 kPa |
 
 > **NOTE — calculated readouts.** The "Suspension deflections" and
 > "Static ride height" sections below define observation envelopes for

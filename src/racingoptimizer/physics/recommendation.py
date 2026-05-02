@@ -23,6 +23,14 @@ class SetupRecommendation:
     # these in the briefing so the user understands why no exploration
     # happened on those clicks. Empty tuple means nothing was pinned.
     pinned_to_observed_median: tuple[str, ...] = field(default_factory=tuple)
+    # Parameter -> human-readable warning when the recommendation came out
+    # at a constraint bound AND the model's training baseline was outside
+    # the bound (i.e. the constraint floor/ceiling silently dragged the
+    # output away from where every observed session actually ran). A
+    # populated entry means "verify the constraint in constraints.md
+    # against the iRacing UI — the floor/ceiling looks wrong relative to
+    # the data". Empty dict means no bound-binding mismatch was detected.
+    clamp_warnings: dict[str, str] = field(default_factory=dict)
 
 
 __all__ = ["SetupRecommendation"]

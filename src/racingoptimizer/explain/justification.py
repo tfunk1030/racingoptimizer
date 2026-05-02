@@ -314,8 +314,15 @@ def _evidence(
     if clamp_warning:
         out.append(clamp_warning)
     if confidence.lo != confidence.hi:
+        # Bracket is the per-fitter training-data CI around the observed
+        # median (recommend.py:_parameter_confidence). It is NOT the
+        # recommendation's CI — the recommendation comes out of the joint
+        # DE search and may legitimately differ from the per-parameter
+        # median when multiple corners trade off against each other.
+        # Label it accordingly so the briefing's reader doesn't read it as
+        # "the recommendation should be in this bracket but isn't".
         out.append(
-            f"value bracket [{confidence.lo:.3f}, {confidence.hi:.3f}]"
+            f"observed in training [{confidence.lo:.3f}, {confidence.hi:.3f}]"
         )
     return out
 

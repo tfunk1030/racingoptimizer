@@ -39,7 +39,11 @@ def render_recommendation_text(
 ) -> str:
     if justifications is None:
         from racingoptimizer.explain.justification import build_justifications
-        justifications = build_justifications(rec, model, pinned=pinned)
+        justifications = build_justifications(
+            rec, model,
+            pinned=pinned,
+            clamp_warnings=dict(rec.clamp_warnings),
+        )
     pinned = pinned or {}
     warnings = list(warnings or [])
 

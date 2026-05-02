@@ -59,14 +59,34 @@ def recommend(
     bounds: list[tuple[float, float]] = []
     init_values: list[float] = []
     pinned_constant: set[str] = set()
+    # Parameter -> warning when the model's observed median sat outside the
+    # constraint bound. We populate this here (baseline-clamp time) and
+    # again after DE (result-at-bound time); both are signals that the
+    # constraint may be wrong relative to what iRacing actually allows.
+    clamp_warnings: dict[str, str] = {}
+    raw_baselines: dict[str, float] = {}
     for name in fittable:
         bound = constraints.bounds(model.car, name)
         if bound is None:
             continue
-        baseline = float(model.baseline_setup.get(
+        raw_baseline = float(model.baseline_setup.get(
             name, 0.5 * (bound[0] + bound[1]),
         ))
-        baseline = min(max(baseline, bound[0]), bound[1])
+        raw_baselines[name] = raw_baseline
+        baseline = min(max(raw_baseline, bound[0]), bound[1])
+        if abs(raw_baseline - baseline) > 1e-6:
+            # Observed median in the training corpus sat OUTSIDE the
+            # constraint bound. The pin-to-median logic later will pin to
+            # the clamped value, not the true median, so the recommendation
+            # will sit at the bound rather than at observed reality. The
+            # constraint is almost certainly wrong — the user should check
+            # constraints.md against the iRacing garage UI for this param.
+            clamp_warnings[name] = (
+                f"observed median {raw_baseline:.3f} sat outside legal "
+                f"[{bound[0]:.3f}, {bound[1]:.3f}] in constraints.md — "
+                f"verify the constraint matches the iRacing garage UI; "
+                f"recommendation pinned to bound {baseline:.3f}"
+            )
         regime = _median_regime(model, name)
         observed_std = float(observed_std_table.get(name, 0.0))
         sub_bounds, was_pinned = _pin_or_trust_bounds(
@@ -134,6 +154,36 @@ def recommend(
                 f"recommend produced out-of-bounds value for {name!r}: "
                 f"value={value!r} clamped_to={clamped.value!r}"
             )
+        # Detect bound-binding: if DE returned a value within ~1% of either
+        # bound AND the training baseline was outside the bound, the
+        # constraint is almost certainly suppressing exploration. Already
+        # warned at baseline-clamp time, but re-check here for the case
+        # where the baseline was inside the bound but DE still drifted to
+        # an edge — second-order signal that the constraint is too tight.
+        if name not in clamp_warnings and name in raw_baselines:
+            bound = constraints.bounds(model.car, name)
+            if bound is not None:
+                lo, hi = bound
+                span = hi - lo
+                if span > 0:
+                    edge_eps = max(span * 0.01, 1e-6)
+                    raw_b = raw_baselines[name]
+                    at_lo = (
+                        abs(float(clamped.value) - lo) <= edge_eps
+                        and raw_b < lo - edge_eps
+                    )
+                    at_hi = (
+                        abs(float(clamped.value) - hi) <= edge_eps
+                        and raw_b > hi + edge_eps
+                    )
+                    if at_lo or at_hi:
+                        clamp_warnings[name] = (
+                            f"recommendation pinned at constraint bound "
+                            f"{float(clamped.value):.3f} but observed "
+                            f"median {raw_b:.3f} sat the other side of "
+                            f"the bound — verify constraints.md against "
+                            f"the iRacing garage UI"
+                        )
         recommended[name] = float(clamped.value)
         parameters[name] = (float(clamped.value), _parameter_confidence(model, name))
 
@@ -150,6 +200,7 @@ def recommend(
         untrained_parameters=tuple(model.untrained_parameters),
         aero_correction_available=bool(model.aero_correction_available),
         pinned_to_observed_median=tuple(sorted(pinned_constant)),
+        clamp_warnings=dict(clamp_warnings),
     )
 
 

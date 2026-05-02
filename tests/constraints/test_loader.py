@@ -44,7 +44,11 @@ def test_static_ride_height_per_corner(table: ConstraintsTable) -> None:
 
 
 def test_tyre_cold_pressure(table: ConstraintsTable) -> None:
-    assert table.bounds("default", "tyre_cold_pressure_kpa") == (165.0, 220.0)
+    # Floor is 152 kPa — confirmed iRacing GTP minimum cold-set pressure.
+    # Higher floors (e.g. 165) silently clamp the recommender's training-
+    # baseline-pinned output to an illegal-high value when every observed
+    # session ran 152 kPa. See clamp-warning regression in test_recommend.py.
+    assert table.bounds("default", "tyre_cold_pressure_kpa") == (152.0, 220.0)
 
 
 def test_todo_placeholders_return_none(table: ConstraintsTable) -> None:
