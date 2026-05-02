@@ -11,7 +11,7 @@ Rear Wing Angle: 12.50 deg   [confidence: confident]
            T7-straight (straight score cost 0.018, score -0.018)
     Evidence:
       - confident confidence backed by 240 samples
-      - value bracket [12.000, 13.000]
+      - observed in training [12.000, 13.000]
 
 Tyre Cold Pressure: 165.00 kPa   [confidence: dense]
     +1 click: -0.011 score    -1 click: -0.005 score
@@ -20,7 +20,7 @@ Tyre Cold Pressure: 165.00 kPa   [confidence: dense]
            T3-trail_brake (trail-brake score gain 0.019, score +0.019)
     Evidence:
       - dense confidence backed by 480 samples
-      - value bracket [163.500, 166.500]
+      - observed in training [163.500, 166.500]
 
 Front Static Ride Height: 55.00 mm   [confidence: confident]
     +1 click: -0.006 score    -1 click: +0.003 score
@@ -30,7 +30,7 @@ Front Static Ride Height: 55.00 mm   [confidence: confident]
            T5-exit (exit score cost 0.009, score -0.009)
     Evidence:
       - confident confidence backed by 120 samples
-      - value bracket [54.000, 56.000]
+      - observed in training [54.000, 56.000]
 
 Rear Static Ride Height: 70.00 mm   [confidence: noisy]
     +1 click: +0.002 score    -1 click: -0.004 score
@@ -40,7 +40,7 @@ Rear Static Ride Height: 70.00 mm   [confidence: noisy]
            T1-braking (braking score cost 0.007, score -0.007)
     Evidence:
       - noisy confidence backed by 90 samples
-      - value bracket [68.500, 71.500]
+      - observed in training [68.500, 71.500]
 
 Warnings:
   - untrained_parameters: damper_lsc_fl, anti_roll_bar_front (skipped — bounds not in constraints.md)

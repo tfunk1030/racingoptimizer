@@ -26,10 +26,10 @@ def test_clamp_uses_default_for_bmw() -> None:
 
 def test_clamp_below_default_min() -> None:
     r = clamp(100.0, "tyre_cold_pressure_kpa", "ferrari")
-    assert r.value == 165.0
+    assert r.value == 152.0
     assert r.was_clamped is True
     assert r.status == "clamped"
-    assert r.bound == (165.0, 220.0)
+    assert r.bound == (152.0, 220.0)
 
 
 def test_clamp_unbounded_parameter() -> None:

@@ -160,7 +160,7 @@ def _build_synthetic_justifications() -> list[SetupJustification]:
         sensitivity_plus_1_click=0.008,
         telemetry_evidence=(
             "confident confidence backed by 240 samples",
-            "value bracket [12.000, 13.000]",
+            "observed in training [12.000, 13.000]",
         ),
     )
     tyre_pressure = SetupJustification(
@@ -185,7 +185,7 @@ def _build_synthetic_justifications() -> list[SetupJustification]:
         sensitivity_plus_1_click=-0.011,
         telemetry_evidence=(
             "dense confidence backed by 480 samples",
-            "value bracket [163.500, 166.500]",
+            "observed in training [163.500, 166.500]",
         ),
     )
     front_rh = SetupJustification(
@@ -211,7 +211,7 @@ def _build_synthetic_justifications() -> list[SetupJustification]:
         sensitivity_plus_1_click=-0.006,
         telemetry_evidence=(
             "confident confidence backed by 120 samples",
-            "value bracket [54.000, 56.000]",
+            "observed in training [54.000, 56.000]",
         ),
     )
     rear_rh = SetupJustification(
@@ -237,7 +237,7 @@ def _build_synthetic_justifications() -> list[SetupJustification]:
         sensitivity_plus_1_click=0.002,
         telemetry_evidence=(
             "noisy confidence backed by 90 samples",
-            "value bracket [68.500, 71.500]",
+            "observed in training [68.500, 71.500]",
         ),
     )
     return [rear_wing, tyre_pressure, front_rh, rear_rh]

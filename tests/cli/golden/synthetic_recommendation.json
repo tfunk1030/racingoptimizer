@@ -54,7 +54,7 @@
       ],
       "telemetry_evidence": [
         "confident confidence backed by 240 samples",
-        "value bracket [12.000, 13.000]"
+        "observed in training [12.000, 13.000]"
       ]
     },
     {
@@ -88,7 +88,7 @@
       "corners_hurt": [],
       "telemetry_evidence": [
         "dense confidence backed by 480 samples",
-        "value bracket [163.500, 166.500]"
+        "observed in training [163.500, 166.500]"
       ]
     },
     {
@@ -123,7 +123,7 @@
       ],
       "telemetry_evidence": [
         "confident confidence backed by 120 samples",
-        "value bracket [54.000, 56.000]"
+        "observed in training [54.000, 56.000]"
       ]
     },
     {
@@ -158,7 +158,7 @@
       ],
       "telemetry_evidence": [
         "noisy confidence backed by 90 samples",
-        "value bracket [68.500, 71.500]"
+        "observed in training [68.500, 71.500]"
       ]
     }
   ],

@@ -71,6 +71,12 @@ def render_recommendation_text(
             f"(skipped — bounds not in constraints.md)"
         )
 
+    if rec.clamp_warnings:
+        for name in sorted(rec.clamp_warnings):
+            warnings.append(
+                f"constraint check ({name}): {rec.clamp_warnings[name]}"
+            )
+
     if warnings:
         lines.append("Warnings:")
         for w in warnings:

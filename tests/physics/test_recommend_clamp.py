@@ -70,3 +70,49 @@ def test_recommend_post_clamp_holds(bmw_model_track) -> None:
             continue
         lo, hi = bound
         assert lo <= value <= hi
+
+
+def test_recommend_warns_when_observed_median_outside_bound(
+    bmw_model_track,
+) -> None:
+    """If `model.baseline_setup` (observed median) sits outside the legal
+    constraint range for a parameter, `recommend` must emit a clamp_warning
+    so the briefing surfaces the constraint as suspect — this is the
+    regression for the Cadillac tyre-pressure 165 vs 152 kPa bug.
+    """
+    model, track = bmw_model_track
+    constraints = load_constraints()
+    # Pick any bounded parameter and shove its baseline OUTSIDE the legal
+    # range on a copy of the model. We mutate `model.baseline_setup` after
+    # constructing the rec context — the dict is stored by reference on
+    # the frozen dataclass.
+    chosen: str | None = None
+    chosen_bound: tuple[float, float] | None = None
+    for name in model.baseline_setup:
+        bound = constraints.bounds(model.car, name)
+        if bound is None:
+            continue
+        chosen = name
+        chosen_bound = bound
+        break
+    if chosen is None or chosen_bound is None:
+        pytest.skip("no bounded parameter on this model")
+    # Drop the observed median 5% below the constraint floor.
+    span = chosen_bound[1] - chosen_bound[0]
+    out_of_bound = chosen_bound[0] - max(span * 0.05, 1e-3)
+    model.baseline_setup[chosen] = out_of_bound  # frozen dataclass; dict mutable
+
+    env = EnvironmentFrame(
+        air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
+        wind_dir_deg=120.0, track_wetness=0.0,
+    )
+    rec = recommend(model, track, env, constraints)
+    assert chosen in rec.clamp_warnings, (
+        f"expected clamp_warning for {chosen!r} when baseline "
+        f"{out_of_bound} sat outside bound {chosen_bound}; got "
+        f"warnings={rec.clamp_warnings!r}"
+    )
+    msg = rec.clamp_warnings[chosen]
+    assert "verify" in msg.lower() or "constraints.md" in msg.lower(), (
+        f"clamp_warning should point at constraints.md; got: {msg!r}"
+    )
