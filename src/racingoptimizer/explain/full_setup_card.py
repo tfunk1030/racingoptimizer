@@ -24,10 +24,17 @@ the driver can actually type. Calculated readouts must NOT be presented as
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
-from racingoptimizer.physics.ontology import ontology_for
+from racingoptimizer.physics.ontology import ParameterSpec, ontology_for
 from racingoptimizer.physics.recommendation import SetupRecommendation
+
+# Pulls a leading signed float out of YAML strings like "30 N/mm" or "-22.5 mm".
+# Used by `_scalar_from_yaml` so the renderer can compute past→opt deltas
+# against numeric values regardless of whether the YAML stored them as
+# strings (the iRacing setup blob format) or pre-coerced floats.
+_LEADING_NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 # Calculated readouts iRacing's UI displays as outputs. The driver cannot
 # type these into the garage. Identified by the leaf field name in the
@@ -96,21 +103,73 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
+def _round_to_step(value: float, step: float | None) -> float:
+    """Snap ``value`` to the nearest ``step`` increment.
+
+    The iRacing garage UI exposes parameters as discrete clicks (e.g. spring
+    rates step in 5 N/mm, perch offsets in 0.5 mm). Outputting a continuous
+    optimizer value like ``26.438 N/mm`` is unenterable — the driver can
+    only set ``25`` or ``30``. Rounding here keeps the recommendation in
+    the legal value lattice without changing the search itself.
+
+    ``step is None`` returns the value unchanged.
+    """
+    if step is None or step <= 0.0:
+        return value
+    return round(value / step) * step
+
+
+def _format_opt_value(value: float, step: float | None, units: str) -> str:
+    """Render an optimizer-recommended numeric with garage-step rounding + units."""
+    snapped = _round_to_step(value, step)
+    if step is None or step >= 1.0:
+        body = f"{snapped:.0f}"
+    elif step >= 0.1:
+        body = f"{snapped:.1f}"
+    else:
+        body = f"{snapped:.2f}"
+    return f"{body} {units}".rstrip()
+
+
+def _scalar_from_yaml(raw: Any) -> float | None:
+    """Pull a single float out of the YAML setup blob.
+
+    YAML leaf values are usually strings like ``"30 N/mm"`` or ``"-22.5 mm"``;
+    pyyaml does not auto-coerce these. We accept the leading number and drop
+    the unit so the renderer can compute deltas against the optimizer's
+    raw float. Returns ``None`` when no number can be parsed.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return float(raw)
+    if isinstance(raw, str):
+        m = _LEADING_NUM_RE.search(raw)
+        if m is not None:
+            try:
+                return float(m.group(0))
+            except ValueError:
+                return None
+    return None
+
+
 def _ontology_path_index(rec: SetupRecommendation, car: str) -> dict[
-    tuple[str, ...], tuple[str, float]
+    tuple[str, ...], tuple[str, float, ParameterSpec]
 ]:
-    """Build ``{json_path: (parameter_name, optimizer_value)}`` for the
+    """Build ``{json_path: (parameter_name, optimizer_value, spec)}`` for the
     parameters the optimizer reported a value for.
 
     The renderer uses this to splice the optimizer's recommendation into the
     ingested-setup walk: when a leaf's path matches a recommended parameter,
-    we replace the past value with the optimizer's and tag it ``[OPT]``.
+    we replace the past value with the optimizer's, round to the garage
+    click step, append units, and emit the past→opt delta — all of which
+    require the spec.
     """
     try:
         onto = ontology_for(car)
     except KeyError:
         return {}
-    index: dict[tuple[str, ...], tuple[str, float]] = {}
+    index: dict[tuple[str, ...], tuple[str, float, ParameterSpec]] = {}
     for name, (value, _conf) in rec.parameters.items():
         spec = onto.get(name)
         if spec is None:
@@ -120,7 +179,7 @@ def _ontology_path_index(rec: SetupRecommendation, car: str) -> dict[
             # but if it ever did (legacy pickle, future bug), the renderer
             # must not present them as "set this".
             continue
-        index[spec.json_path] = (name, float(value))
+        index[spec.json_path] = (name, float(value), spec)
     return index
 
 
@@ -188,10 +247,20 @@ def _render_panel(
     panel_label: str,
     top_key: str,
     block: dict,
-    opt_index: dict[tuple[str, ...], tuple[str, float]],
+    opt_index: dict[tuple[str, ...], tuple[str, float, ParameterSpec]],
     pinned: set[str],
 ) -> list[str]:
-    """Walk one top-level garage panel and emit its rows."""
+    """Walk one top-level garage panel and emit its rows.
+
+    Emits one line per leaf with the format:
+
+        Heave Spring          25 N/mm    (was 30)  [OPT]
+
+    where the value is rounded to the iRacing garage click step and the
+    parenthetical shows the past value when it differs (so the user can
+    spot what actually changed). Calculated readouts pass through with
+    their raw YAML string and the ``[readout]`` tag.
+    """
     lines: list[str] = [f"-- {panel_label} " + "-" * (60 - len(panel_label))]
     rows = list(_walk_block(block, prefix=(top_key,)))
     if not rows:
@@ -210,20 +279,30 @@ def _render_panel(
         opt_match = opt_index.get(path)
         is_calc = _is_leaf_calculated(leaf_name)
 
+        delta_note = ""
         if is_calc:
             tag = "[readout]"
             displayed = _format_value(value)
         elif opt_match is not None:
-            param_name, opt_val = opt_match
+            param_name, opt_val, spec = opt_match
             tag = "[OPT pin]" if param_name in pinned else "[OPT]"
-            displayed = _format_value(opt_val)
+            displayed = _format_opt_value(opt_val, spec.step, spec.units)
+            past_scalar = _scalar_from_yaml(value)
+            if past_scalar is not None:
+                snapped = _round_to_step(opt_val, spec.step)
+                if abs(snapped - past_scalar) >= max(spec.step or 0.0, 1e-6) / 2:
+                    delta_note = f" (was {_format_value(past_scalar)})"
         else:
             tag = "[past]"
             displayed = _format_value(value)
 
         label = _humanize_leaf(leaf_name)
-        # Pad label to 28 chars, value to 18, tag right-aligned.
-        lines.append(f"    {label:<28} {displayed:>18}  {tag}")
+        # Pad label to 28 chars, displayed value to 18, tag at the end.
+        # Delta note (if any) sits between value and tag so the eye lands
+        # on the OLD value the user is currently running.
+        lines.append(
+            f"    {label:<28} {displayed:>18}{delta_note:<14}  {tag}"
+        )
     return lines
 
 

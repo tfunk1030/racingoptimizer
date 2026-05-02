@@ -64,6 +64,25 @@ class ParameterSpec:
     # nearest integer before rendering. Defaults to False for the
     # continuous parameters (springs, perches, pressures, wing angle, etc.).
     is_discrete: bool = False
+    # ----------------------------------------------------------------------
+    # IMPORTANT: append-only beyond this point.
+    #
+    # ParameterSpec is a frozen+slots dataclass; instances are referenced
+    # from `ACURA`/`BMW`/`CADILLAC`/etc. module-level dicts that get
+    # pickled inside `PhysicsModel.ontology`. Inserting a field in the
+    # middle would shift every later slot's pickle position and silently
+    # corrupt revives of older models. New fields MUST go at the end.
+    # ----------------------------------------------------------------------
+    # iRacing garage UI click-step in `units`. The garage exposes every
+    # parameter as a discrete adjustment — the driver clicks ◀ / ▶ chevrons
+    # to step by this increment. The renderer rounds optimizer-recommended
+    # values to the nearest step before displaying so the briefing always
+    # shows a value the driver can actually enter. ``None`` disables
+    # rounding (used for parameters whose step the loader does not yet know
+    # — value is shown raw). Step sizes are ESTIMATES from the user's
+    # "general idea" garage-ranges table and may need refinement against
+    # the live iRacing UI.
+    step: float | None = None
 
 
 # --- Path-extraction helpers ----------------------------------------------
@@ -143,11 +162,11 @@ def _common_bounded() -> dict[str, ParameterSpec]:
     return {
         "rear_wing_angle_deg": ParameterSpec(
             json_path=_AERO_REAR_WING, dtype=float, units="deg",
-            family="rear_wing", fittable=True,
+            family="rear_wing", fittable=True, step=1.0,
         ),
         "tyre_cold_pressure_kpa": ParameterSpec(
             json_path=_TYRE_FL, dtype=float, units="kPa",
-            family="tyre_pressure", fittable=True,
+            family="tyre_pressure", fittable=True, step=0.5,
         ),
         # ------------------------------------------------------------------
         # CALCULATED READOUTS — `user_settable=False`.
@@ -196,56 +215,66 @@ def _common_bounded() -> dict[str, ParameterSpec]:
         # USER-input setup parameters that drive the calculated readouts
         # above. The optimizer searches over these; the platform state
         # (ride heights, deflections) is the model's prediction of what
-        # results. Ranges in `constraints.md` are estimates.
+        # results. Ranges in `constraints.md` are estimates. `step` is the
+        # iRacing garage UI click increment so the renderer can round
+        # recommendations to the nearest enterable value.
         "heave_spring_rate_n_per_mm": ParameterSpec(
             json_path=_HEAVE_SPRING_RATE_F, dtype=float, units="N/mm",
             family="spring_rate", fittable=True, user_settable=True,
+            step=5.0,
         ),
         "third_spring_rate_n_per_mm": ParameterSpec(
             json_path=_THIRD_SPRING_RATE_R, dtype=float, units="N/mm",
             family="spring_rate", fittable=True, user_settable=True,
+            step=5.0,
         ),
         "rear_coil_spring_rate_n_per_mm": ParameterSpec(
             json_path=_REAR_COIL_SPRING_RATE, dtype=float, units="N/mm",
             family="spring_rate", fittable=True, user_settable=True,
+            step=5.0,
         ),
         "heave_perch_offset_front_mm": ParameterSpec(
             json_path=_HEAVE_PERCH_OFFSET_F, dtype=float, units="mm",
             family="perch_offset", fittable=True, user_settable=True,
+            step=0.5,
         ),
         "spring_perch_offset_rear_mm": ParameterSpec(
             json_path=_SPRING_PERCH_OFFSET_R, dtype=float, units="mm",
             family="perch_offset", fittable=True, user_settable=True,
+            step=0.5,
         ),
         "third_perch_offset_rear_mm": ParameterSpec(
             json_path=_THIRD_PERCH_OFFSET_R, dtype=float, units="mm",
             family="perch_offset", fittable=True, user_settable=True,
+            step=0.5,
         ),
         "pushrod_length_offset_front_mm": ParameterSpec(
             json_path=_PUSHROD_OFFSET_F, dtype=float, units="mm",
             family="pushrod", fittable=True, user_settable=True,
+            step=0.5,
         ),
         "pushrod_length_offset_rear_mm": ParameterSpec(
             json_path=_PUSHROD_OFFSET_R, dtype=float, units="mm",
             family="pushrod", fittable=True, user_settable=True,
+            step=0.5,
         ),
         # Per-corner camber. Direct setup → tire-grip lever. Bounds in
         # `constraints.md` are non-placeholder (front -2.9..0, rear -1.9..0).
         "camber_fl_deg": ParameterSpec(
             json_path=_CAMBER_LF, dtype=float, units="deg",
-            family="camber", fittable=True, user_settable=True,
+            family="camber", fittable=True, user_settable=True, step=0.1,
         ),
         "camber_fr_deg": ParameterSpec(
             json_path=_CAMBER_RF, dtype=float, units="deg",
-            family="camber", fittable=True, user_settable=True,
+            family="camber", fittable=True, user_settable=True, step=0.1,
         ),
         "camber_rl_deg": ParameterSpec(
             json_path=_CAMBER_LR, dtype=float, units="deg",
-            family="camber", fittable=True, user_settable=True,
+            family="camber", fittable=True, user_settable=True, step=0.1,
         ),
         "camber_rr_deg": ParameterSpec(
             json_path=_CAMBER_RR, dtype=float, units="deg",
-            family="camber", fittable=True, user_settable=True,
+            family="camber", fittable=True, user_settable=True, step=0.1,
         ),
     }
 
