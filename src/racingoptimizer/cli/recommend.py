@@ -108,6 +108,18 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
     ),
 )
 @click.option(
+    "--reset", "reset_mode", is_flag=True, default=False,
+    help=(
+        "Throw away the per-track trust radius and search the FULL "
+        "constraint envelope from each parameter's midpoint. Use when "
+        "you feel the current setup is fundamentally wrong and small "
+        "tweaks aren't moving the car. Recommendations diverge sharply "
+        "from your past setup, every parameter's confidence is "
+        "downgraded, and the briefing prints a banner. Verify on track "
+        "before pushing."
+    ),
+)
+@click.option(
     "--air-temp", type=float, default=None,
     help="Override training-data median air temperature (deg C).",
 )
@@ -155,6 +167,7 @@ def recommend_cmd(
     quali: bool,
     explore_pct: float,
     detailed: bool,
+    reset_mode: bool,
     air_temp: float | None,
     track_temp: float | None,
     wind: float | None,
@@ -231,6 +244,13 @@ def recommend_cmd(
         constraints_table, car_key, pinned_overrides,
     )
 
+    if reset_mode:
+        click.echo(
+            "RESET MODE -- recommendations diverge sharply from your past "
+            "setup; treat as a fresh starting point and verify on track.",
+            err=True,
+        )
+
     if car_key in PER_CAR_MODEL_CARS:
         # Per-car path: pool every Cadillac session across every track. The
         # target track is whatever the user asked for; we build a target
@@ -257,6 +277,7 @@ def recommend_cmd(
         rec = model.recommend(
             track_slug, env, pinned_constraints,
             schedule=schedule, quali=quali, explore_pct=explore_pct,
+            reset_mode=reset_mode,
         )
     else:
         track_slug, donor_track = _resolve_track_or_extrapolate(
@@ -277,6 +298,7 @@ def recommend_cmd(
         rec = model.recommend(
             fit_track, env, pinned_constraints,
             quali=quali, explore_pct=explore_pct,
+            reset_mode=reset_mode,
         )
         schedule = None  # v3 path: per-(car, track) keying owns the corners
 

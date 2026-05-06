@@ -19,6 +19,7 @@ tests/physics/test_score.py asserts this module contains no such reference.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from statistics import median
 
 import numpy as np
@@ -50,6 +51,7 @@ def recommend(
     schedule: list | None = None,
     quali: bool = False,
     explore_pct: float = 0.0,
+    reset_mode: bool = False,
 ) -> SetupRecommendation:
     """Constraint-clamped DE search for the optimal setup.
 
@@ -163,6 +165,7 @@ def recommend(
             click_step=target_step,
             empirical_range=empirical_range,
             explore_pct=explore_pct,
+            reset_mode=reset_mode,
         )
         if was_pinned:
             pinned_constant.add(name)
@@ -186,9 +189,17 @@ def recommend(
     # → ~15 min on the 47-param BMW per-car search). Empirical lift
     # is small (≤3% of total objective) but consistent.
     pop_size = 20
+    # `--reset` swaps the DE seed: instead of anchoring candidate 0 at
+    # the past-setup baseline (and letting DE polish around it), seed
+    # at the constraint MIDPOINT so the search starts deliberately
+    # away from the user's current setup. Composes with the open-
+    # envelope sub_bounds returned by _pin_or_trust_bounds(reset_mode).
+    seed_baseline = (
+        [(lo + hi) / 2.0 for lo, hi in bounds] if reset_mode else init_values
+    )
     init_population = _seed_population(
         bounds=bounds,
-        baseline=init_values,
+        baseline=seed_baseline,
         seed=model.seed,
         pop_size=pop_size,
     )
@@ -284,7 +295,13 @@ def recommend(
                             f"the iRacing garage UI"
                         )
         recommended[name] = float(clamped.value)
-        parameters[name] = (float(clamped.value), _parameter_confidence(model, name))
+        confidence = _parameter_confidence(model, name)
+        if reset_mode and confidence.regime in ("dense", "confident"):
+            # Reset mode searches outside corpus density on purpose;
+            # downgrade so the briefing doesn't claim a confident
+            # prediction for a value the regressor extrapolated to.
+            confidence = replace(confidence, regime="noisy")
+        parameters[name] = (float(clamped.value), confidence)
 
     _fill_untrained_baselines(parameters, model, full_baseline)
     breakdown = score_breakdown(
@@ -433,6 +450,13 @@ _NEAR_CONSTANT_FRACTION: float = 0.02
 # meaningful precision so the final reported value still equals the pin.
 _PIN_HALF_WIDTH_FRACTION: float = 1e-6
 
+# `--reset` widening factor: percentage of the constraint span added to
+# each side of the corpus envelope. 30% lets every parameter move
+# meaningfully outside the trodden corpus territory while staying clear
+# of the constraint edges. Compare to typical `--explore 5..10` for
+# modest exploration; reset is the "fundamentally different setup" knob.
+_RESET_WIDEN_PCT: float = 30.0
+
 
 def _pin_or_trust_bounds(
     *,
@@ -444,6 +468,7 @@ def _pin_or_trust_bounds(
     click_step: float = 0.0,
     empirical_range: float = 0.0,
     explore_pct: float = 0.0,
+    reset_mode: bool = False,
 ) -> tuple[tuple[float, float], bool]:
     """Decide search bounds for a single parameter.
 
@@ -475,6 +500,41 @@ def _pin_or_trust_bounds(
     """
     lo, hi = bound
     span = hi - lo
+    # `--reset` short-circuits: skip the corpus-density pin check (so
+    # parameters the driver held constant can still move) and skip the
+    # regime-driven trust-radius narrowing. The user has signalled the
+    # current setup is broken and wants a materially different setup.
+    # We DO still anchor on the observed envelope (clipped to the
+    # constraint bound) and widen it by `_RESET_WIDEN_PCT` of the
+    # constraint span on each side, clipped to legal bounds. This keeps
+    # the search grounded in territory the surrogate has been trained
+    # near rather than letting DE roam to the constraint edge for every
+    # parameter and produce a setup the model has no business predicting
+    # (e.g. heave 0->900 N/mm, sign-flipped pushrod offsets). Confidence
+    # is still downgraded at the recommendation level.
+    if reset_mode:
+        observed = (
+            [v for v in target_observed if lo <= v <= hi]
+            if target_observed
+            else []
+        )
+        if observed:
+            base_lo, base_hi = min(observed), max(observed)
+        elif empirical_range > 0.0:
+            base_lo = max(lo, baseline - empirical_range / 2.0)
+            base_hi = min(hi, baseline + empirical_range / 2.0)
+        else:
+            base_lo = base_hi = baseline
+        widen = span * (_RESET_WIDEN_PCT / 100.0) if span > 0.0 else 0.0
+        reset_lo = max(lo, base_lo - widen)
+        reset_hi = min(hi, base_hi + widen)
+        if reset_hi <= reset_lo:
+            margin = max(float(click_step), span * 0.01, 1e-6)
+            reset_lo = max(lo, reset_lo - margin)
+            reset_hi = min(hi, reset_lo + max(margin, 2e-6))
+            if reset_hi <= reset_lo:
+                reset_lo, reset_hi = lo, hi
+        return ((reset_lo, reset_hi), False)
     pin_denom = empirical_range if empirical_range > 0.0 else span
     if pin_denom > 0.0 and observed_std / pin_denom < _NEAR_CONSTANT_FRACTION:
         eps = max(span * _PIN_HALF_WIDTH_FRACTION, 1e-9)
