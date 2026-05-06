@@ -527,29 +527,19 @@ _CADILLAC_OVERRIDES: dict[str, ParameterSpec] = {
         dtype=float, units="Nm", family="diff", fittable=True,
     ),
     # Cadillac front uses torsion bars instead of coil springs at the
-    # corners. Per-side preload turns + outer-diameter selection are the
-    # actual user-input controls; the iRacing UI exposes 14 discrete OD
-    # values from 13.90..18.20 mm — DE searches the continuous envelope
-    # and the renderer snaps to the nearest legal diameter via
-    # `discrete_values`.
+    # corners. iRacing requires LF=RF symmetry (same hardware contract
+    # as rear spring rate on BMW), so we train ONE LF parameter per
+    # turns + OD; the renderer mirrors to RF via `_MIRRORED_LEAVES`.
+    # The iRacing UI exposes 14 discrete OD values from 13.90..18.20
+    # mm — DE searches the continuous envelope and the renderer snaps
+    # to the nearest legal diameter via `discrete_values`.
     "torsion_bar_turns_fl": ParameterSpec(
         json_path=("Chassis", "LeftFront", "TorsionBarTurns"),
         dtype=float, units="turns", family="torsion_bar",
         fittable=True, user_settable=True, step=0.001,
     ),
-    "torsion_bar_turns_fr": ParameterSpec(
-        json_path=("Chassis", "RightFront", "TorsionBarTurns"),
-        dtype=float, units="turns", family="torsion_bar",
-        fittable=True, user_settable=True, step=0.001,
-    ),
     "torsion_bar_od_fl_mm": ParameterSpec(
         json_path=("Chassis", "LeftFront", "TorsionBarOD"),
-        dtype=float, units="mm", family="torsion_bar",
-        fittable=True, user_settable=True,
-        discrete_values=_TORSION_BAR_OD_VALUES,
-    ),
-    "torsion_bar_od_fr_mm": ParameterSpec(
-        json_path=("Chassis", "RightFront", "TorsionBarOD"),
         dtype=float, units="mm", family="torsion_bar",
         fittable=True, user_settable=True,
         discrete_values=_TORSION_BAR_OD_VALUES,
@@ -573,26 +563,16 @@ _DIFF_CLUTCH_PLATES_VALUES: tuple[float, ...] = (2.0, 4.0, 6.0)
 _BMW_OVERRIDES: dict[str, ParameterSpec] = {
     # BMW M Hybrid V8 uses front torsion bars on the same pattern as
     # Cadillac (per BMWBounds.md lines 13–19). Identical YAML paths,
-    # identical bound envelope, identical 14-diameter OD list. Mirroring
-    # the Cadillac entries keeps the per-car schemas aligned.
+    # identical bound envelope, identical 14-diameter OD list. Same
+    # LF=RF iRacing-UI symmetry as Cadillac — train LF only and mirror
+    # to RF via the renderer.
     "torsion_bar_turns_fl": ParameterSpec(
         json_path=("Chassis", "LeftFront", "TorsionBarTurns"),
         dtype=float, units="turns", family="torsion_bar",
         fittable=True, user_settable=True, step=0.001,
     ),
-    "torsion_bar_turns_fr": ParameterSpec(
-        json_path=("Chassis", "RightFront", "TorsionBarTurns"),
-        dtype=float, units="turns", family="torsion_bar",
-        fittable=True, user_settable=True, step=0.001,
-    ),
     "torsion_bar_od_fl_mm": ParameterSpec(
         json_path=("Chassis", "LeftFront", "TorsionBarOD"),
-        dtype=float, units="mm", family="torsion_bar",
-        fittable=True, user_settable=True,
-        discrete_values=_TORSION_BAR_OD_VALUES,
-    ),
-    "torsion_bar_od_fr_mm": ParameterSpec(
-        json_path=("Chassis", "RightFront", "TorsionBarOD"),
         dtype=float, units="mm", family="torsion_bar",
         fittable=True, user_settable=True,
         discrete_values=_TORSION_BAR_OD_VALUES,
@@ -701,17 +681,15 @@ _FERRARI_OVERRIDES: dict[str, ParameterSpec] = {
         units="mm", family="perch_offset",
         fittable=True, user_settable=True, step=0.5,
     ),
-    # Front torsion bars — same path conventions as Cadillac, but OD is
-    # an integer INDEX (0..18) on Ferrari, not a discrete list of mm
-    # diameters. So no `discrete_values` here; DE searches a continuous
-    # 0..18 range and the renderer rounds to int.
+    # Torsion bars — Ferrari has them at all 4 corners (BMW/Cadillac
+    # only have front). iRacing requires LF=RF and LR=RR symmetry, so
+    # train ONE LF + ONE LR per turns + OD; the renderer mirrors RF
+    # and RR via `_MIRRORED_LEAVES`. OD is an integer INDEX (0..18) on
+    # Ferrari, not a discrete list of mm diameters — no
+    # `discrete_values` here, DE searches the continuous 0..18 range
+    # and the renderer rounds to int.
     "torsion_bar_turns_fl": ParameterSpec(
         json_path=("Chassis", "LeftFront", "TorsionBarTurns"),
-        dtype=float, units="turns", family="torsion_bar",
-        fittable=True, user_settable=True, step=0.125,
-    ),
-    "torsion_bar_turns_fr": ParameterSpec(
-        json_path=("Chassis", "RightFront", "TorsionBarTurns"),
         dtype=float, units="turns", family="torsion_bar",
         fittable=True, user_settable=True, step=0.125,
     ),
@@ -720,31 +698,13 @@ _FERRARI_OVERRIDES: dict[str, ParameterSpec] = {
         dtype=float, units="index", family="torsion_bar",
         fittable=True, user_settable=True, step=1.0,
     ),
-    "torsion_bar_od_fr_mm": ParameterSpec(
-        json_path=("Chassis", "RightFront", "TorsionBarOD"),
-        dtype=float, units="index", family="torsion_bar",
-        fittable=True, user_settable=True, step=1.0,
-    ),
-    # Rear torsion bars — Ferrari has them at all 4 corners, BMW/Cadillac
-    # only front. New parameter names `*_rl_*` / `*_rr_*` keep the
-    # per-corner naming scheme consistent with cambers/dampers.
     "torsion_bar_turns_rl": ParameterSpec(
         json_path=("Chassis", "LeftRear", "TorsionBarTurns"),
         dtype=float, units="turns", family="torsion_bar",
         fittable=True, user_settable=True, step=0.125,
     ),
-    "torsion_bar_turns_rr": ParameterSpec(
-        json_path=("Chassis", "RightRear", "TorsionBarTurns"),
-        dtype=float, units="turns", family="torsion_bar",
-        fittable=True, user_settable=True, step=0.125,
-    ),
     "torsion_bar_od_rl_mm": ParameterSpec(
         json_path=("Chassis", "LeftRear", "TorsionBarOD"),
-        dtype=float, units="index", family="torsion_bar",
-        fittable=True, user_settable=True, step=1.0,
-    ),
-    "torsion_bar_od_rr_mm": ParameterSpec(
-        json_path=("Chassis", "RightRear", "TorsionBarOD"),
         dtype=float, units="index", family="torsion_bar",
         fittable=True, user_settable=True, step=1.0,
     ),

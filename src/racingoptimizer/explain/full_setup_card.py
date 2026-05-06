@@ -88,12 +88,38 @@ _PANELS: tuple[tuple[str, str], ...] = (
 # Setup leaves whose iRacing UI value must mirror another corner.
 # {target_path: (source_path, parameter_name)} — when the renderer walks
 # `target_path`, it pulls the OPT value from `source_path`'s recommendation
-# and tags `[OPT mirror]`. Currently only the rear coil spring rate
-# (iRacing requires LR=RR; the optimizer trains LeftRear only).
+# and tags `[OPT mirror]`. Source param entries that don't exist for the
+# car at hand silently no-op (e.g. Ferrari has no rear coil spring, so
+# the SpringRate row resolves to source_match=None and falls through).
+#
+# Coverage:
+# * Rear coil spring rate (LR → RR): all cars that have a rear coil.
+# * Front torsion bar turns + OD (LF → RF): Cadillac, BMW, Ferrari.
+# * Rear torsion bar turns + OD (LR → RR): Ferrari (4-corner torsion).
+#
+# iRacing's UI keeps left/right pairs of these coupled; the optimizer
+# only trains the left side and the renderer mirrors so the user sees
+# matching values to enter.
 _MIRRORED_LEAVES: dict[tuple[str, ...], tuple[tuple[str, ...], str]] = {
     ("Chassis", "RightRear", "SpringRate"): (
         ("Chassis", "LeftRear", "SpringRate"),
         "rear_coil_spring_rate_n_per_mm",
+    ),
+    ("Chassis", "RightFront", "TorsionBarTurns"): (
+        ("Chassis", "LeftFront", "TorsionBarTurns"),
+        "torsion_bar_turns_fl",
+    ),
+    ("Chassis", "RightFront", "TorsionBarOD"): (
+        ("Chassis", "LeftFront", "TorsionBarOD"),
+        "torsion_bar_od_fl_mm",
+    ),
+    ("Chassis", "RightRear", "TorsionBarTurns"): (
+        ("Chassis", "LeftRear", "TorsionBarTurns"),
+        "torsion_bar_turns_rl",
+    ),
+    ("Chassis", "RightRear", "TorsionBarOD"): (
+        ("Chassis", "LeftRear", "TorsionBarOD"),
+        "torsion_bar_od_rl_mm",
     ),
 }
 
