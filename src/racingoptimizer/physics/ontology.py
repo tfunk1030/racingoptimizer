@@ -364,7 +364,14 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         # constraints.md (1..100 L envelope; quali min ~1 L is the
         # absolute floor, race max sits comfortably below tank cap).
         "fuel_level_l": ParameterSpec(
-            json_path=("Chassis", "Fuel", "FuelLevel"), dtype=float,
+            # iRacing GTP YAML carries this under the BrakesDriveUnit
+            # umbrella, NOT Chassis. Confirmed against BMW M Hybrid V8
+            # session blob 0a9321b5: BrakesDriveUnit.Fuel.FuelLevel =
+            # "58.0 L"; Chassis.Fuel does not exist. Cars with the diff
+            # under Systems.RearDiffSpec (Acura / Ferrari) likely also
+            # mirror their fuel under BrakesDriveUnit; verify when those
+            # join the per-car path.
+            json_path=("BrakesDriveUnit", "Fuel", "FuelLevel"), dtype=float,
             units="L", family="fuel", fittable=True, user_settable=True,
             step=1.0,
         ),
