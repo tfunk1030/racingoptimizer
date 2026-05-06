@@ -19,6 +19,7 @@ from pathlib import Path
 
 import click
 
+from racingoptimizer.cli.calibrate import calibrate_cmd
 from racingoptimizer.cli.recommend import (
     CANONICAL_CARS,
     compare_cmd,
@@ -56,6 +57,7 @@ main.add_command(learn_command)
 main.add_command(compare_cmd)
 main.add_command(status_cmd)
 main.add_command(recommend_cmd)
+main.add_command(calibrate_cmd)
 
 
 __all__ = ["main"]

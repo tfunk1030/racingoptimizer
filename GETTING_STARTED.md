@@ -34,7 +34,29 @@ The output has two parts:
 ```bash
 uv run optimize compare a.ibt b.ibt         # diff two setups corner-phase by corner-phase
 uv run optimize status cadillac           # what does the model know about this car?
+uv run optimize calibrate bmw spa           # propose probes that grow corpus coverage
+uv run optimize calibrate bmw spa --status  # just print the per-parameter coverage table
 ```
+
+## Active learning loop with `calibrate`
+
+`optimize calibrate` finds the parameters where you've driven only one (or two)
+distinct values on the target track and proposes a value in the largest unsampled
+gap of each one's legal range. The recommender can't learn slopes from a parameter
+you've held constant, so a deliberate probe-then-re-fit loop turns those `[OPT pin]`
+parameters into real fittable ones.
+
+```
+optimize calibrate bmw spa            # see status + 3 probes + a setup card
+# enter the probe values into the iRacing garage, drive a clean stint
+optimize learn ./ibtfiles             # ingest the new IBT
+optimize bmw spa                      # re-fit and recommend with fresh variance
+```
+
+Use `--status` when you want the coverage table without proposals (e.g. to decide
+whether more variance is the bottleneck on accuracy). `--targets N` sets how many
+probes to bundle into one stint; default 3 is a good balance between learning per
+session and keeping the changes feel-able and unconfounded.
 
 ## Useful options on `optimize <car> <track>`
 
