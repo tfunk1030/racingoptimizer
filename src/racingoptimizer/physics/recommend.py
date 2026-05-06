@@ -90,34 +90,25 @@ def recommend(
     # envelope (e.g. recommending heave_spring=25 N/mm when the driver
     # has only ever tried 30 or 50). v3 pickles return None and the cap
     # is a no-op.
-    target_observed: dict[str, tuple[float, ...]] = {}
-    # Global empirical range per parameter — aggregated across every track
-    # the driver has run for this car, used as the denominator in the pin
-    # check (see `_pin_or_trust_bounds`). The constraint span is the wrong
-    # denominator when constraints reflect the legal UI envelope rather
-    # than what the driver explored — wide envelopes would mask real
-    # corpus variation as "near constant".
+    # Global empirical range per parameter, aggregated across every track
+    # the driver has run for this car. Doubles as:
+    # 1. the pin denominator (see `_pin_or_trust_bounds`) — the constraint
+    #    span is the wrong denominator when constraints reflect the legal
+    #    UI envelope rather than what the driver explored;
+    # 2. the trust envelope passed to DE — the corpus is global, so the
+    #    search envelope is global. If Ferrari ran heave perch at -40 mm
+    #    on Algarve and the user is asking for a Spa setup, the optimizer
+    #    is allowed to recommend -40 at Spa even though Spa-specific data
+    #    has never tried it. Per-track strictness was the previous rule
+    #    (VISION §3 "no extrapolation") but it leaves good setups off the
+    #    table at every well-driven track that hasn't seen full sweeps.
     global_observed: dict[str, set[float]] = {}
-    # When the target track has zero sessions for this car (per-car v4 cold
-    # start, e.g. Ferrari @ Spa with all corpus at Hockenheim+Algarve), the
-    # per-track empirical envelope is empty. Without a fallback the trust
-    # radius opens to the FULL constraint envelope and DE picks setup
-    # values far outside anything the surrogate was trained near, producing
-    # garbage setup-readout predictions (e.g. predicted static front RH
-    # extrapolated 24 mm past the lowest perch in the entire corpus).
-    # `cross_track_fallback=True` substitutes the union of all of this
-    # car's other-track observations for `target_observed_values`, keeping
-    # the search inside corpus density even at a brand-new track.
-    cross_track_fallback = False
     if is_per_car:
         per_track = getattr(model, "per_track_parameter_observed", {}) or {}
-        target_observed = dict(per_track.get(track, {}) or {})
         for _track_params in per_track.values():
             for _name, _vals in (_track_params or {}).items():
                 if _vals:
                     global_observed.setdefault(_name, set()).update(_vals)
-        if not target_observed and global_observed:
-            cross_track_fallback = True
     weights = _cached_weights(model, track, schedule=schedule)
 
     fittable = [
@@ -161,13 +152,16 @@ def recommend(
             )
         regime = _median_regime(model, name)
         observed_std = float(observed_std_table.get(name, 0.0))
-        target_observed_values = tuple(target_observed.get(name, ()))
-        if not target_observed_values and cross_track_fallback:
-            cross_track_vals = global_observed.get(name)
-            if cross_track_vals:
-                target_observed_values = tuple(sorted(cross_track_vals))
-        target_step = _click_step_for(model, name, bound)
+        # Trust envelope = global corpus envelope (every value the user has
+        # ever run this car at, on any track). Per-track strictness was the
+        # previous rule but left good setups off the table at every track
+        # that hadn't seen full sweeps. The surrogate is trained globally
+        # too, so this stays inside training density.
         global_vals = global_observed.get(name)
+        target_observed_values = (
+            tuple(sorted(global_vals)) if global_vals else ()
+        )
+        target_step = _click_step_for(model, name, bound)
         empirical_range = (
             (max(global_vals) - min(global_vals))
             if global_vals and len(global_vals) > 1
@@ -497,15 +491,18 @@ def _pin_or_trust_bounds(
     radius logic applies (sparse → 30%, noisy → 50%, confident/dense → full).
 
     ``target_observed`` (per-car v4): the unique values the driver has
-    actually run on the TARGET track. When non-empty, the trust bound is
-    additionally capped to STRICTLY ``[min(target_observed),
-    max(target_observed)]`` clipped to the constraint bound — no extra
-    margin. The per-car recommender will not extrapolate outside the
-    empirical envelope; recommending a never-tried value would be guessing
-    against a confidence bracket the joint surrogate cannot honestly
-    estimate. ``click_step`` is kept in the signature for callers but is
-    used only to widen a degenerate single-value envelope into a window
-    DE can search (``click_step`` either side of the lone value).
+    ever run for this car on ANY track (the global corpus envelope). When
+    non-empty, the trust bound is additionally capped to STRICTLY
+    ``[min(target_observed), max(target_observed)]`` clipped to the
+    constraint bound — no extra margin. The recommender will not
+    extrapolate outside the corpus envelope; recommending a never-tried
+    value would be guessing against a confidence bracket the joint
+    surrogate cannot honestly estimate. NOTE: this used to be per-target-
+    track strict, but that left good setups off the table at every track
+    that hadn't seen full sweeps. ``click_step`` is kept in the signature
+    for callers but is used only to widen a degenerate single-value
+    envelope into a window DE can search (``click_step`` either side of
+    the lone value).
 
     ``empirical_range`` (per-car v4): the global ``max - min`` observed
     across every pooled session for this parameter. Used as the pin
