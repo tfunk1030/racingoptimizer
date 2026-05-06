@@ -24,12 +24,22 @@ from racingoptimizer.ingest.paths import (
 from racingoptimizer.ingest.writer import _now_iso, session_id_from_bytes, write_session
 
 
-def learn(path: Path | str, corpus_root: Path | str | None = None) -> list[str]:
+def learn(
+    path: Path | str,
+    corpus_root: Path | str | None = None,
+    *,
+    reparse: bool = False,
+) -> list[str]:
     """Ingest a .ibt file or every .ibt under a directory.
 
     Returns the list of session_ids for every file processed (existing or new),
     regardless of status. Caller can join against `sessions(...)` to inspect
     per-session outcomes.
+
+    ``reparse=True`` forces re-processing of sessions whose catalog row
+    is already ``status=ok``. Use this after a parser change to refresh
+    stale fields (e.g. ``recorded_at`` after the filename-derivation
+    fix); normal incremental ingest skips already-ok sessions.
     """
     root = resolve_corpus_root(Path(corpus_root) if corpus_root else None)
     db = catalog_path(root)
@@ -38,7 +48,7 @@ def learn(path: Path | str, corpus_root: Path | str | None = None) -> list[str]:
     out: list[str] = []
     with cat.open_catalog(db) as conn:
         for ibt in targets:
-            sid = _process_one(conn, root, ibt)
+            sid = _process_one(conn, root, ibt, reparse=reparse)
             out.append(sid)
     return out
 
@@ -171,7 +181,13 @@ def _record_failure(
     )
 
 
-def _process_one(conn: sqlite3.Connection, root: Path, ibt_path: Path) -> str:
+def _process_one(
+    conn: sqlite3.Connection,
+    root: Path,
+    ibt_path: Path,
+    *,
+    reparse: bool = False,
+) -> str:
     """Ingest one IBT, recording an outcome row no matter what.
 
     Status semantics (VISION §1 "use everything, lose nothing"):
@@ -204,7 +220,7 @@ def _process_one(conn: sqlite3.Connection, root: Path, ibt_path: Path) -> str:
 
     sid = session_id_from_bytes(raw)
     existing = cat.get_session(conn, sid)
-    if existing is not None and existing.status == "ok":
+    if existing is not None and existing.status == "ok" and not reparse:
         return sid
 
     # Stage 1: parse YAML header + channels. If this raises we have no
