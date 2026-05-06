@@ -99,6 +99,15 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
     ),
 )
 @click.option(
+    "--detailed", "detailed", is_flag=True, default=False,
+    help=(
+        "Render the legacy per-parameter block format (Helps/Hurts "
+        "with score deltas, ±1-click sensitivity, evidence) instead "
+        "of the default plain-English narrative. Useful for engineering "
+        "drill-downs and validator agents."
+    ),
+)
+@click.option(
     "--air-temp", type=float, default=None,
     help="Override training-data median air temperature (deg C).",
 )
@@ -145,6 +154,7 @@ def recommend_cmd(
     fuel: float | None,
     quali: bool,
     explore_pct: float,
+    detailed: bool,
     air_temp: float | None,
     track_temp: float | None,
     wind: float | None,
@@ -334,8 +344,8 @@ def recommend_cmd(
             # Legacy pickle predates predict_setup_readouts; fall back to
             # echoing past readouts.
             predicted_readouts = {}
-        rendered = (
-            render_recommendation_text(
+        if detailed:
+            briefing = render_recommendation_text(
                 rec, model,
                 justifications=justifications,
                 pinned=pinned_overrides,
@@ -343,6 +353,18 @@ def recommend_cmd(
                 track_display=track_slug,
                 quali=quali,
             )
+        else:
+            from racingoptimizer.explain.narrative import render_narrative
+            briefing = render_narrative(
+                rec, model, justifications,
+                most_recent_setup=most_recent_setup,
+                track_display=track_slug,
+                quali=quali,
+                pinned=pinned_overrides,
+                warnings=top_warnings,
+            )
+        rendered = (
+            briefing
             + "\n"
             + render_full_setup_card(
                 rec, car=car_key, most_recent_setup=most_recent_setup,
