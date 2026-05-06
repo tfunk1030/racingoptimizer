@@ -198,6 +198,26 @@ def _detect_sample_rate(ibt, info: dict) -> float:
     return DEFAULT_SAMPLE_RATE_HZ
 
 
+_IBT_FILENAME_DATETIME_RE = re.compile(
+    r"(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<time>\d{2}-\d{2}-\d{2})"
+)
+
+
+def _filename_recorded_at(path: Path) -> str | None:
+    """Extract an ISO recording timestamp from the IBT filename.
+
+    iRacing's exported telemetry filenames carry the actual recording
+    moment as ``YYYY-MM-DD HH-MM-SS`` (separator dashes, not colons).
+    Returns ``None`` when the filename doesn't match the expected
+    convention (caller falls back to the YAML's scheduled-event date).
+    """
+    m = _IBT_FILENAME_DATETIME_RE.search(path.name)
+    if m is None:
+        return None
+    time_iso = m.group("time").replace("-", ":")
+    return f"{m.group('date')}T{time_iso}"
+
+
 def parse_ibt(path: Path | str) -> ParseResult:
     """Parse one .ibt file via pyirsdk and return a ParseResult."""
     try:
@@ -205,6 +225,7 @@ def parse_ibt(path: Path | str) -> ParseResult:
     except ImportError:  # pragma: no cover
         import pyirsdk as irsdk  # type: ignore[import-not-found, no-redef]
 
+    path_obj = Path(path)
     ibt = irsdk.IBT()
     ibt.open(str(path))
     try:
@@ -212,7 +233,22 @@ def parse_ibt(path: Path | str) -> ParseResult:
         weekend = info.get("WeekendInfo", {}) or {}
         yaml_car = _player_car_path(info)
         yaml_track = str(weekend.get("TrackName", "") or "")
-        recorded_at = weekend.get("WeekendOptions", {}).get("Date") or None
+        # Recording timestamp resolution order:
+        #   1. IBT filename (`<car>_<track> YYYY-MM-DD HH-MM-SS.ibt`)
+        #      — iRacing names sessions with the literal recording
+        #      datetime, unique per session.
+        #   2. YAML `WeekendInfo.WeekendOptions.Date` — fallback for
+        #      files that don't follow the filename convention. NOTE:
+        #      this field is iRacing's SCHEDULED race date for series
+        #      events, identical across an entire weekend; using it as
+        #      the primary source caused every Spa session in one
+        #      weekend to share `recorded_at` and broke the
+        #      most-recent-session picker downstream.
+        recorded_at = (
+            _filename_recorded_at(path_obj)
+            or weekend.get("WeekendOptions", {}).get("Date")
+            or None
+        )
 
         setup = info.get("CarSetup", {}) or {}
         sample_rate_hz = _detect_sample_rate(ibt, info)

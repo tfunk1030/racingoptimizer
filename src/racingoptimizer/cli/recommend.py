@@ -567,10 +567,28 @@ def _most_recent_setup_for(sessions_df: pl.DataFrame) -> dict | str | None:
     """
     if sessions_df.height == 0 or "setup" not in sessions_df.columns:
         return None
+    # Sort by `recorded_at` (when the session was actually driven) and
+    # break ties on `ingested_at` (when it landed in the corpus). The
+    # tiebreaker matters when multiple IBTs share the same
+    # YAML-declared date — iRacing's `WeekendInfo.WeekendOptions.Date`
+    # was previously stored verbatim, and it carries the SCHEDULED
+    # race date for series events (identical across an entire weekend).
+    # The parser fix uses the per-IBT filename datetime, but already-
+    # ingested sessions still carry the bogus weekend date until
+    # they're re-ingested; the ingested_at fallback keeps the picker
+    # honest in the meantime.
+    sort_keys: list[str] = []
+    descending: list[bool] = []
     if "recorded_at" in sessions_df.columns:
-        ordered = sessions_df.sort("recorded_at", descending=True)
-    else:
-        ordered = sessions_df
+        sort_keys.append("recorded_at")
+        descending.append(True)
+    if "ingested_at" in sessions_df.columns:
+        sort_keys.append("ingested_at")
+        descending.append(True)
+    ordered = (
+        sessions_df.sort(sort_keys, descending=descending)
+        if sort_keys else sessions_df
+    )
     raw = ordered["setup"][0]
     return raw if raw else None
 
