@@ -937,6 +937,13 @@ def _model_cache_parts(car: str, session_ids: list[str]) -> list[str]:
     Folds session ids, ontology fingerprint, constraints.md content, and
     the fitters-package layout version. Caller appends any path-specific
     suffix (per-track schema vs per-car schema) before hashing.
+
+    Ontology fingerprint includes ``json_path`` because a path
+    correction (e.g. fuel_level_l moving from Chassis.Fuel to
+    BrakesDriveUnit.Fuel) changes which YAML field the fitter pulls
+    its training values from — without folding the path, a stale
+    pickle reuses the OLD training data even though the ontology now
+    reads a different leaf, masking the fix as a no-op.
     """
     from racingoptimizer.physics.fitters import FITTERS_LAYOUT_VERSION
     from racingoptimizer.physics.ontology import ontology_for
@@ -944,7 +951,8 @@ def _model_cache_parts(car: str, session_ids: list[str]) -> list[str]:
     parts = ["|".join(sorted(session_ids))]
     onto = ontology_for(car)
     onto_fingerprint = "|".join(
-        f"{name}:{spec.family}:{int(spec.fittable)}:{int(spec.user_settable)}"
+        f"{name}:{spec.family}:{int(spec.fittable)}:"
+        f"{int(spec.user_settable)}:path={'.'.join(spec.json_path)}"
         for name, spec in sorted(onto.items())
     )
     parts.append(f"onto={onto_fingerprint}")
