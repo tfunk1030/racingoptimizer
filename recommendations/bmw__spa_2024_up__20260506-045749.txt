@@ -1,0 +1,273 @@
+========================================================================
+ bmw @ spa_2024_up -- race (57.8 L fuel)
+ Conditions: 19 C ambient / 21 C track  |  Confidence: dense (median n=2674)
+========================================================================
+
+OVERALL DIRECTION
+  Raises car static ride height; stiffens platform stiffness; adjusts anti-roll stiffness (mixed direction); adjusts damping rate (mixed direction); more locked diff lockup; adjusts front platform stiffness (mixed direction); less negative camber; moves rearward brake bias.
+
+CHANGES (28 of 47 parameters moved)
+
+-- PLATFORM (springs / perches / pushrods / torsion bars) --
+Front pushrod offset: -32.5 -> -33.0 mm  (lowers car)
+  Helps: braking stability in T11, T12, T13, T15; mid-corner grip in T4
+  Watch: braking stability in T18; power-down traction in T6, T7, T15
+
+Rear third spring: 460 -> 490 N/mm  (stiffens)
+  Helps: braking stability in T13, T15, T17, T18; straight-line speed in T17
+  Watch: mid-corner grip in T7, T12, T15; straight-line speed in T18
+
+Rear third perch: 48.0 -> 47.5 mm  (raises car)
+  Helps: trail-brake balance in T0, T1; power-down traction in T1, T17; straight-line speed in T0
+  Watch: braking stability in T6, T8; straight-line speed in T1, T18
+
+Rear pushrod offset: -29.5 -> -31.5 mm  (lowers car)
+  Helps: braking stability in T11, T12; mid-corner grip in T18; power-down traction in T18; straight-line speed in T1
+  Watch: braking stability in T5, T19; mid-corner grip in T10; straight-line speed in T9
+
+Front heave perch: -21.5 -> -22.5 mm  (raises car)
+  Helps: mid-corner grip in T1, T5, T13, T14, T16
+  Watch: braking stability in T0, T8; mid-corner grip in T9; straight-line speed in T18
+
+Front torsion bar turns: 0.10 turns  (stiffens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T8, T16; trail-brake balance in T10; power-down traction in T9
+
+Rear spring perch: 33.5 -> 30.0 mm  (raises car)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T6, T8, T16
+
+Front torsion bar OD: 15.1 -> 14.8 mm  (softens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T6, T8, T16
+
+-- DAMPERS --
+Damper Hsr Fr: 7 -> 6 click  (softens)
+  Helps: braking stability in T11; mid-corner grip in T6, T14, T17; power-down traction in T1
+  Watch: braking stability in T6, T8, T16, T17
+
+Damper Lsc Rl: 8 -> 9 click  (stiffens)
+  Helps: braking stability in T13, T15, T19; power-down traction in T1, T18
+  Watch: braking stability in T6, T8, T16; mid-corner grip in T1
+
+Damper Lsr Fl: 7 -> 6 click  (softens)
+  Helps: braking stability in T6, T11, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T8; trail-brake balance in T5, T18
+
+Damper Hsr Fl: 7 -> 6 click  (softens)
+  Helps: mid-corner grip in T6, T11, T14, T16; power-down traction in T1
+  Watch: braking stability in T6, T8, T16; trail-brake balance in T1
+
+Damper Lsr Fr: 7 -> 6 click  (softens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T8; mid-corner grip in T0, T1, T17
+
+Damper Lsc Fl: 6 -> 8 click  (stiffens)
+  Helps: braking stability in T11, T13, T15, T18; power-down traction in T1
+  Watch: braking stability in T0, T6, T8, T16
+
+Damper Hsc Fr: 9 -> 8 click  (softens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T6, T8, T16
+
+Damper Hsc Slope Fl: 9 -> 10 click  (stiffens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T6, T8, T16
+
+Damper Hsr Rr: 7 -> 8 click  (stiffens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T6, T8, T16
+
+Damper Hsc Rr: 9 -> 8 click  (softens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T6, T8, T16
+
+Damper Hsr Rl: 7 -> 8 click  (stiffens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T5, T16, T17
+
+Damper Hsc Slope Fr: 9 -> 10 click  (stiffens)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T0, T6, T8, T16
+
+-- BALANCE (ARBs / camber / toe) --
+Rear ARB blade: 4.0 -> 2.0 click  (softens)
+  Helps: mid-corner grip in T8, T14; power-down traction in T0, T1, T8
+  Watch: braking stability in T8; mid-corner grip in T0, T18; power-down traction in T18
+
+Front toe: -0.8 -> -0.7 mm  (less negative)
+  Helps: braking stability in T11, T12, T13, T14; power-down traction in T1
+  Watch: braking stability in T6, T8, T16, T17
+
+Rear ARB size: Medium -> Stiff  (stiffens)
+  Helps: braking stability in T11, T13, T15; mid-corner grip in T5; power-down traction in T1
+  Watch: braking stability in T6, T7, T8, T16
+
+RR camber: -1.8 -> -1.9 deg  (more negative)
+  Helps: braking stability in T11, T13, T15, T18; power-down traction in T1
+  Watch: braking stability in T0, T8, T16; straight-line speed in T14
+
+FL camber: -2.9 -> -2.8 deg  (less negative)
+  Helps: braking stability in T11, T12, T13, T15; power-down traction in T1
+  Watch: braking stability in T8, T16; trail-brake balance in T8, T9
+
+-- BRAKES & DRIVETRAIN --
+Rear diff preload: 25.0 -> 35.0 Nm  (more locked)
+  Helps: braking stability in T11, T12, T13, T15; mid-corner grip in T14
+  Watch: braking stability in T8; trail-brake balance in T1, T18; straight-line speed in T4
+
+Brake bias: 47.0 -> 46.5 pct  (moves rearward)
+  Helps: braking stability in T11, T12, T13, T15, T18
+  Watch: braking stability in T0, T6, T8, T16
+
+Diff clutch plates: 4.0 plates  (more locked)
+  Helps: mid-corner grip in T4, T8, T11, T14; straight-line speed in T0
+  Watch: braking stability in T0, T6, T8, T16
+
+NOTES
+  Fuel level: pinned by user at 58 L
+  Front ARB size: corpus has only one value -- vary it next session for a recommendation
+  Untrained (constraints.md TODO): corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg
+  ! pinned to observed median (no per-session variation in training corpus, no learnable response surface): arb_size_front
+
+================================================================
+FULL SETUP CARD — bmw @ spa_2024_up
+================================================================
+Legend: [OPT] optimizer recommendation · [OPT pin] pinned to observed median · [OPT mirror] mirrored from per-axle parameter · [past] from your most recent session (no bounds yet) · [readout] calculated by iRacing — verify, don't enter · [predicted] readout the optimizer projects under the new inputs.
+
+-- TIRES & AERO ------------------------------------------------
+  [TireType]
+    Tire Type                                   Dry                [past]
+  [LeftFront]
+    Starting Pressure                     152.0 kPa                [OPT]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [LeftRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightFront]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [AeroSettings]
+    Rear Wing Angle                          16 deg                [OPT]
+  [AeroCalculator]
+    Front Rh At Speed                       15.0 mm                [readout]
+    Rear Rh At Speed                        45.0 mm                [readout]
+    Downforce Balance                        52.62%                [readout]
+    LD                                        3.763                [readout]
+
+-- CHASSIS -----------------------------------------------------
+  [Front]
+    Heave Spring                            60 N/mm                [OPT]
+    Heave Perch Offset                     -22.5 mm (was -21.5)    [OPT]
+    Heave Spring Defl                3.8 mm 87.3 mm                [readout]
+    Heave Slider Defl              29.9 mm 200.0 mm                [readout]
+    Arb Size                                   Soft                [OPT pin]
+    Arb Blades                              1 click                [OPT]
+    Toe In                                  -0.7 mm (was -0.8)     [OPT]
+    Pushrod Length Offset                  -33.0 mm (was -32.5)    [OPT]
+  [LeftFront]
+    Corner Weight                            2709 N                [readout]
+    Ride Height                             29.7 mm (was 30.0)     [predicted]
+    Shock Defl                     10.8 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        18.2 mm                [readout]
+    Torsion Bar Turns                    0.10 turns (was 0.1)      [OPT]
+    Torsion Bar OD                         14.76 mm (was 15.14)    [OPT]
+    Ls Comp Damping                         8 click (was 6)        [OPT]
+    Hs Comp Damping                         9 click                [OPT]
+    Hs Comp Damp Slope                     10 click (was 9)        [OPT]
+    Ls Rbd Damping                          6 click (was 7)        [OPT]
+    Hs Rbd Damping                          6 click (was 7)        [OPT]
+    Camber                                 -2.8 deg (was -2.9)     [OPT]
+  [LeftRear]
+    Corner Weight                            3035 N                [readout]
+    Ride Height                             43.2 mm (was 40.8)     [predicted]
+    Shock Defl                     23.6 mm 150.0 mm                [readout]
+    Spring Defl                     17.9 mm 79.7 mm                [readout]
+    Spring Perch Offset                     30.0 mm (was 33.5)     [OPT]
+    Spring Rate                            160 N/mm                [OPT]
+    Ls Comp Damping                         9 click (was 8)        [OPT]
+    Hs Comp Damping                         8 click                [OPT]
+    Hs Comp Damp Slope                     11 click                [OPT]
+    Ls Rbd Damping                          8 click                [OPT]
+    Hs Rbd Damping                          8 click (was 7)        [OPT]
+    Camber                                 -1.8 deg                [OPT]
+    Toe In                                   0.0 mm                [OPT]
+  [RightFront]
+    Corner Weight                            2709 N                [readout]
+    Ride Height                             29.7 mm (was 30.0)     [predicted]
+    Shock Defl                     10.8 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        18.2 mm                [readout]
+    Torsion Bar Turns                    0.10 turns (was 0.1)      [OPT mirror]
+    Torsion Bar OD                         14.76 mm (was 15.14)    [OPT mirror]
+    Ls Comp Damping                         6 click                [OPT]
+    Hs Comp Damping                         8 click (was 9)        [OPT]
+    Hs Comp Damp Slope                     10 click (was 9)        [OPT]
+    Ls Rbd Damping                          6 click (was 7)        [OPT]
+    Hs Rbd Damping                          6 click (was 7)        [OPT]
+    Camber                                 -2.9 deg                [OPT]
+  [RightRear]
+    Corner Weight                            3035 N                [readout]
+    Ride Height                             43.2 mm (was 40.8)     [predicted]
+    Shock Defl                     23.6 mm 150.0 mm                [readout]
+    Spring Defl                     17.9 mm 79.7 mm                [readout]
+    Spring Perch Offset                     33.5 mm                [past]
+    Spring Rate                            160 N/mm                [OPT mirror]
+    Ls Comp Damping                         8 click                [OPT]
+    Hs Comp Damping                         8 click (was 9)        [OPT]
+    Hs Comp Damp Slope                     11 click                [OPT]
+    Ls Rbd Damping                          8 click                [OPT]
+    Hs Rbd Damping                          8 click (was 7)        [OPT]
+    Camber                                 -1.9 deg (was -1.8)     [OPT]
+    Toe In                                   0.0 mm                [OPT mirror]
+  [Rear]
+    Third Spring                           490 N/mm (was 460)      [OPT]
+    Third Perch Offset                      47.5 mm (was 48)       [OPT]
+    Third Spring Defl                4.9 mm 50.1 mm                [readout]
+    Third Slider Defl              25.1 mm 150.0 mm                [readout]
+    Arb Size                                  Stiff (was Medium)   [OPT]
+    Arb Blades                              2 click (was 4)        [OPT]
+    Pushrod Length Offset                  -31.5 mm (was -29.5)    [OPT]
+    Cross Weight                              50.0%                [readout]
+
+-- BRAKES / DRIVETRAIN -----------------------------------------
+  [Lighting]
+    Roof Id Light Color                      Yellow                [past]
+  [BrakeSpec]
+    Pad Compound                                Low                [past]
+    Front Master Cyl                        17.8 mm                [past]
+    Rear Master Cyl                         19.1 mm                [past]
+    Brake Pressure Bias                      46 pct (was 47)       [OPT]
+    Brake Bias Target                             0                [past]
+    Brake Bias Migration                          0                [past]
+  [HybridConfig]
+    Hybrid Config                                 —                [past]
+  [Fuel]
+    Fuel Level                                 58 L                [OPT]
+    Fuel Low Warning                          8.0 L                [past]
+  [TractionControl]
+    Traction Control Gain                 3 (TCLAT)                [past]
+    Traction Control Slip                 5 (TCLON)                [past]
+  [GearRatios]
+    Gear Stack                                Short                [past]
+    Speed In First                       115.8 Km/h                [readout]
+    Speed In Second                      151.4 Km/h                [readout]
+    Speed In Third                       184.2 Km/h                [readout]
+    Speed In Fourth                      219.7 Km/h                [readout]
+    Speed In Fifth                       257.0 Km/h                [readout]
+    Speed In Sixth                       288.3 Km/h                [readout]
+    Speed In Seventh                     315.8 Km/h                [readout]
+  [RearDiffSpec]
+    Coast Drive Ramp Angles                   45/70                [OPT]
+    Clutch Friction Plates                 4 plates                [OPT]
+    Preload                                   35 Nm (was 25)       [OPT]

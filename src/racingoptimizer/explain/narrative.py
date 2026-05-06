@@ -53,27 +53,74 @@ _PHASE_THEME: dict[Phase, str] = {
 }
 
 
-# Per-family theme + (verb when value INCREASES, verb when value DECREASES).
-_FAMILY_THEME: dict[str, tuple[str, str, str]] = {
-    "spring_rate":   ("platform stiffness",          "stiffens",        "softens"),
-    "perch_offset":  ("static ride height",          "lowers car",      "raises car"),
-    "pushrod":       ("static ride height",          "raises car",      "lowers car"),
-    "heave_spring":  ("front heave compliance",      "stiffens",        "softens"),
-    "heave_slider":  ("front heave compliance",      "stiffens",        "softens"),
-    "damper":        ("damping rate",                "stiffens",        "softens"),
-    "rear_wing":     ("downforce vs drag",           "more downforce",  "less drag"),
-    "front_wing":    ("front downforce",             "more front",      "less front"),
-    "tyre_pressure": ("tire pressure",               "raises",          "lowers"),
-    "arb":           ("anti-roll stiffness",         "stiffens",        "softens"),
-    "ride_height":   ("static ride height",          "raises",          "lowers"),
-    # Camber + toe values are negative; +ve delta means LESS negative
-    # (less aggressive). -ve delta means MORE negative.
-    "camber":        ("camber",                      "less negative",   "more negative"),
-    "torsion_bar":   ("front platform stiffness",    "stiffens",        "softens"),
-    "brake_bias":    ("brake bias",                  "moves forward",   "moves rearward"),
-    "diff":          ("diff lockup",                 "more locked",     "freer"),
-    "fuel":          ("fuel mass",                   "heavier",         "lighter"),
-    "corner_weight": ("corner weight target",        "raises",          "lowers"),
+# Per-parameter (direction) tag inside parens on each CHANGES row.
+# Just the direction verb — the parameter label already names the
+# thing being adjusted. (verb_when_value_INCREASES, verb_when_DECREASES).
+# Camber + toe values are negative-by-convention; +ve delta = less
+# negative; -ve = more negative.
+_DIRECTION_VERB: dict[str, tuple[str, str]] = {
+    "spring_rate":   ("stiffens",        "softens"),
+    "heave_spring":  ("stiffens",        "softens"),
+    "heave_slider":  ("stiffens",        "softens"),
+    "damper":        ("stiffens",        "softens"),
+    "arb":           ("stiffens",        "softens"),
+    "torsion_bar":   ("stiffens",        "softens"),
+    "perch_offset":  ("lowers car",      "raises car"),
+    "pushrod":       ("raises car",      "lowers car"),
+    "ride_height":   ("raises",          "lowers"),
+    "camber":        ("less negative",   "more negative"),
+    "rear_wing":     ("more downforce",  "less drag"),
+    "front_wing":    ("more downforce",  "less front"),
+    "tyre_pressure": ("higher pressure", "lower pressure"),
+    "brake_bias":    ("bias forward",    "bias rearward"),
+    "diff":          ("tighter",         "freer"),
+    "fuel":          ("heavier",         "lighter"),
+    "corner_weight": ("higher",          "lower"),
+}
+
+
+# OVERALL DIRECTION sentence fragments per THEME. Multiple families
+# can share a theme (perches + pushrods both move "ride height"); the
+# theme dedup picks the net direction (up vs down delta count).
+# Stored as complete noun phrases that read fluently when joined with
+# "; ".
+_OVERALL_FRAGMENT: dict[str, tuple[str, str]] = {
+    "platform":       ("stiffer platform",          "softer platform"),
+    "front platform": ("stiffer front platform",    "softer front platform"),
+    "ride height":    ("higher ride height",        "lower ride height"),
+    "damping":        ("stiffer damping",           "softer damping"),
+    "anti-roll":      ("stiffer ARBs",              "softer ARBs"),
+    "downforce":      ("more downforce",            "less drag"),
+    "tire pressure":  ("higher tire pressure",      "lower tire pressure"),
+    "brake bias":     ("brake bias forward",        "brake bias rearward"),
+    "diff":           ("tighter diff",              "freer diff"),
+    "fuel":           ("more fuel",                 "less fuel"),
+    "camber":         ("less negative camber",      "more negative camber"),
+    "corner weight":  ("higher corner weight",      "lower corner weight"),
+}
+
+
+# Map ParameterSpec.family -> overall theme key. Many families collapse
+# into the same theme so the OVERALL paragraph doesn't fragment per
+# family (e.g. perches + pushrods are both "ride height").
+_FAMILY_TO_THEME: dict[str, str] = {
+    "spring_rate":   "platform",
+    "heave_spring":  "front platform",
+    "heave_slider":  "front platform",
+    "damper":        "damping",
+    "arb":           "anti-roll",
+    "torsion_bar":   "front platform",
+    "perch_offset":  "ride height",
+    "pushrod":       "ride height",
+    "ride_height":   "ride height",
+    "camber":        "camber",
+    "rear_wing":     "downforce",
+    "front_wing":    "downforce",
+    "tyre_pressure": "tire pressure",
+    "brake_bias":    "brake bias",
+    "diff":          "diff",
+    "fuel":          "fuel",
+    "corner_weight": "corner weight",
 }
 
 
@@ -302,8 +349,8 @@ def _snap(value: float, step: float | None, spec: ParameterSpec | None) -> float
 def _direction_word(family: str, delta: float) -> str:
     if abs(delta) < 1e-9:
         return "no change"
-    if family in _FAMILY_THEME:
-        _theme, up, down = _FAMILY_THEME[family]
+    if family in _DIRECTION_VERB:
+        up, down = _DIRECTION_VERB[family]
         return up if delta > 0 else down
     return "increases" if delta > 0 else "decreases"
 
@@ -336,11 +383,10 @@ def _overall_direction(
 ) -> list[str]:
     """One paragraph summarising the dominant direction per THEME.
 
-    Multiple families can share a theme (e.g. perches and pushrods are
-    both 'static ride height'); collapse on the theme so the paragraph
-    doesn't say 'lowers car ... raises car' when perches went down and
-    pushrods went up. The collapsed direction is the net (up vs down
-    delta count) per theme.
+    Multiple families share a theme (perches + pushrods both move
+    "ride height"); collapse on the theme so the paragraph doesn't
+    fragment. The displayed direction is the net (up vs down delta
+    count) per theme. Mixed-direction themes get a "mixed" annotation.
     """
     if not moved:
         return [
@@ -348,35 +394,36 @@ def _overall_direction(
             "  No changes from past setup -- already optimal in the model's view.",
         ]
     theme_dirs: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"up": 0, "down": 0, "up_word": "", "down_word": ""},
+        lambda: {"up": 0, "down": 0},
     )
     for j in moved:
         spec = onto.get(j.parameter)
         family = spec.family if spec else "other"
-        if family not in _FAMILY_THEME:
+        theme = _FAMILY_TO_THEME.get(family)
+        if theme is None:
             continue
-        theme, up_word, down_word = _FAMILY_THEME[family]
         past = past_value.get(j.parameter)
         if past is None:
             continue
-        bucket = theme_dirs[theme]
-        bucket["up_word"] = up_word
-        bucket["down_word"] = down_word
         if j.value > past:
-            bucket["up"] += 1
+            theme_dirs[theme]["up"] += 1
         else:
-            bucket["down"] += 1
+            theme_dirs[theme]["down"] += 1
 
     summaries: list[str] = []
     for theme, dirs in theme_dirs.items():
         up_n = dirs["up"]
         down_n = dirs["down"]
+        fragment = _OVERALL_FRAGMENT.get(theme)
+        if fragment is None:
+            continue
+        up_phrase, down_phrase = fragment
         if up_n > down_n:
-            summaries.append(f"{dirs['up_word']} {theme}")
+            summaries.append(up_phrase)
         elif down_n > up_n:
-            summaries.append(f"{dirs['down_word']} {theme}")
+            summaries.append(down_phrase)
         else:
-            summaries.append(f"adjusts {theme} (mixed direction)")
+            summaries.append(f"mixed {theme} adjustments")
 
     sentence = (
         "; ".join(summaries) + "."
@@ -485,6 +532,14 @@ def _moved(
     past_value: dict[str, float | None],
     onto: dict[str, ParameterSpec],
 ) -> bool:
+    """A parameter "moved" only if its STEP-SNAPPED value differs from past.
+
+    Compares the values the user would actually enter in the iRacing UI
+    (snapped to discrete_values or step), not the raw DE output. Without
+    this, a torsion-bar turn change of 0.108 -> 0.105 (delta 0.003 with
+    step 0.125) would render as "0.10 turns (stiffens)" — same displayed
+    value but a "stiffens" verb that contradicts the no-change display.
+    """
     if j.pinned:
         return False
     past = past_value.get(j.parameter)
@@ -492,7 +547,9 @@ def _moved(
         return False
     spec = onto.get(j.parameter)
     step = (spec.step if spec and spec.step else 0.5)
-    return abs(j.value - past) >= step / 2
+    snapped_new = _snap(j.value, step, spec)
+    snapped_past = _snap(past, step, spec)
+    return abs(snapped_new - snapped_past) > 1e-9
 
 
 def _param_sort_key(j: SetupJustification) -> tuple[int, str]:
