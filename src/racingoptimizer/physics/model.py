@@ -216,10 +216,12 @@ class PhysicsModel:
         *,
         schedule: list | None = None,
         quali: bool = False,
+        explore_pct: float = 0.0,
     ):
         from racingoptimizer.physics.recommend import recommend as _recommend
         return _recommend(
-            self, track, env, constraints, schedule=schedule, quali=quali,
+            self, track, env, constraints,
+            schedule=schedule, quali=quali, explore_pct=explore_pct,
         )
 
     def predict_setup_readouts(

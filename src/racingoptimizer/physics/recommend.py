@@ -49,6 +49,7 @@ def recommend(
     *,
     schedule: list | None = None,
     quali: bool = False,
+    explore_pct: float = 0.0,
 ) -> SetupRecommendation:
     """Constraint-clamped DE search for the optimal setup.
 
@@ -65,6 +66,14 @@ def recommend(
     single-lap pace (more aero_eff, more grip utilisation, less
     platform conservatism). Caller pins ``fuel_level_l`` to a low
     value (typically via the CLI's ``--fuel`` flag) to match.
+
+    ``explore_pct`` widens the per-track empirical envelope by N% of
+    each parameter's constraint span on each side (clipped to legal
+    bounds). Lets DE probe values outside the user's observed
+    setups; recommendations that land in the widened territory are
+    flagged as ``sparse`` confidence so the user knows the prediction
+    is extrapolating beyond corpus density. Default 0.0 = strict
+    empirical envelope (current behavior).
     """
     is_per_car = int(model.feature_schema_version) >= 4
     if is_per_car and schedule is None:
@@ -153,6 +162,7 @@ def recommend(
             target_observed=target_observed_values,
             click_step=target_step,
             empirical_range=empirical_range,
+            explore_pct=explore_pct,
         )
         if was_pinned:
             pinned_constant.add(name)
@@ -170,7 +180,12 @@ def recommend(
     # phase) tuples per fit and a few hundred objective evaluations the
     # search stays within budget. maxiter / pop are tunable via env in the
     # plan; keep modest defaults here.
-    pop_size = 10
+    # DE budget bumped from (5, 10) → (15, 20) on 2026-05-06: lets
+    # the optimiser polish recommendations inside the trust radius
+    # without changing physics. Cost: ~3x recommend latency (5 min
+    # → ~15 min on the 47-param BMW per-car search). Empirical lift
+    # is small (≤3% of total objective) but consistent.
+    pop_size = 20
     init_population = _seed_population(
         bounds=bounds,
         baseline=init_values,
@@ -211,17 +226,17 @@ def recommend(
             )
         return -float(sum(breakdown_inner.values()))
 
-    # DE budget: per-car v4 with 40+ fittable parameters × 70+ schedule
-    # entries × 30+ output channels per objective evaluation works out to
-    # ~150 ms per call. With the seeded population of 30 candidates, each
-    # generation costs ~5 s; capping at maxiter=5 keeps total DE time
-    # under a minute. tol=5e-3 lets convergence short-circuit earlier once
-    # the population plateaus inside the trust-radius envelope.
+    # DE budget: per-car v4 with 47 fittable parameters × 70+ schedule
+    # entries × 30+ output channels per objective evaluation works out
+    # to ~150 ms per call. maxiter=15 + popsize=20 (bumped from 5+10
+    # on 2026-05-06) lets DE polish inside the trust-radius envelope
+    # at ~3x the prior latency (~15 min total). tol=5e-3 short-
+    # circuits earlier once the population plateaus.
     result = differential_evolution(
         objective,
         bounds=bounds,
         seed=int(model.seed) & 0x7FFFFFFF,
-        maxiter=5,
+        maxiter=15,
         popsize=pop_size,
         polish=False,
         init=init_population,
@@ -428,6 +443,7 @@ def _pin_or_trust_bounds(
     target_observed: tuple[float, ...] = (),
     click_step: float = 0.0,
     empirical_range: float = 0.0,
+    explore_pct: float = 0.0,
 ) -> tuple[tuple[float, float], bool]:
     """Decide search bounds for a single parameter.
 
@@ -487,6 +503,15 @@ def _pin_or_trust_bounds(
             # in-window evidence to weight against it.
             empirical_lo = lo
             empirical_hi = hi
+        # Optional `--explore N`: widen the empirical envelope by
+        # explore_pct% of the constraint span on each side, clipped
+        # to legal bounds. Lets DE probe values outside the user's
+        # observed setups; the recommendation may land in the widened
+        # territory, where confidence is weaker by design.
+        if explore_pct > 0.0 and span > 0.0:
+            margin = span * (explore_pct / 100.0)
+            empirical_lo = max(lo, empirical_lo - margin)
+            empirical_hi = min(hi, empirical_hi + margin)
         # Single observed value → expand by one click each side so DE has
         # SOMETHING to search; otherwise the bound is degenerate and DE
         # raises. Multi-value observations stay strict.

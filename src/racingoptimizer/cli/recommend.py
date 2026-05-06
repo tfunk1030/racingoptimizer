@@ -88,6 +88,17 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
     ),
 )
 @click.option(
+    "--explore", "explore_pct", type=float, default=0.0,
+    help=(
+        "Widen the per-track empirical envelope by N%% of each "
+        "parameter's constraint span on each side (clipped to legal "
+        "bounds). Lets the optimizer probe values outside what you've "
+        "driven; recommendations in the widened territory carry weaker "
+        "confidence. Default 0 = strict empirical envelope. Try 5-10 "
+        "for modest exploration, 20-30 for aggressive."
+    ),
+)
+@click.option(
     "--air-temp", type=float, default=None,
     help="Override training-data median air temperature (deg C).",
 )
@@ -133,6 +144,7 @@ def recommend_cmd(
     wing: float | None,
     fuel: float | None,
     quali: bool,
+    explore_pct: float,
     air_temp: float | None,
     track_temp: float | None,
     wind: float | None,
@@ -234,7 +246,7 @@ def recommend_cmd(
         )
         rec = model.recommend(
             track_slug, env, pinned_constraints,
-            schedule=schedule, quali=quali,
+            schedule=schedule, quali=quali, explore_pct=explore_pct,
         )
     else:
         track_slug, donor_track = _resolve_track_or_extrapolate(
@@ -252,7 +264,10 @@ def recommend_cmd(
             wind=wind, wetness=wetness,
             corpus_root=root,
         )
-        rec = model.recommend(fit_track, env, pinned_constraints, quali=quali)
+        rec = model.recommend(
+            fit_track, env, pinned_constraints,
+            quali=quali, explore_pct=explore_pct,
+        )
         schedule = None  # v3 path: per-(car, track) keying owns the corners
 
     rec, clamp_warnings, top_warnings = _post_clamp(rec, model, constraints_table)
