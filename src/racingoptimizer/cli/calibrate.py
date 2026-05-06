@@ -159,12 +159,22 @@ def _formatted(value: float, *, step: float | None, units: str) -> str:
     "--corpus-root", type=click.Path(path_type=Path), default=None,
     help="Override corpus location.",
 )
+@click.option(
+    "--output-file", type=click.Path(path_type=Path), default=None,
+    help=(
+        "Write the briefing + (default mode only) the calibration "
+        "setup card to this file. Defaults to "
+        "`recommendations/<car>_<track>_calibrate[_status]_<YYYY-MM-DD>_"
+        "<HHMM>.txt`. Pass `-` to disable file output."
+    ),
+)
 def calibrate_cmd(
     car: str,
     track: str,
     status_only: bool,
     n_targets: int,
     corpus_root: Path | None,
+    output_file: Path | None,
 ) -> None:
     """Probe under-explored parameters to grow the model's coverage.
 
@@ -265,7 +275,9 @@ def calibrate_cmd(
     out_lines.append("")
 
     if status_only:
-        click.echo("\n".join(out_lines))
+        rendered = "\n".join(out_lines)
+        click.echo(rendered)
+        _maybe_save(rendered, output_file, car_key, track_slug, status=True)
         return
 
     targets = _pick_targets(
@@ -274,11 +286,13 @@ def calibrate_cmd(
     )
 
     if not targets:
-        click.echo("\n".join(out_lines))
-        click.echo(
+        out_lines.append(
             "No fittable parameters with thin variance found -- the model "
             "is already well-calibrated on this track.",
         )
+        rendered = "\n".join(out_lines)
+        click.echo(rendered)
+        _maybe_save(rendered, output_file, car_key, track_slug, status=False)
         return
 
     out_lines.append("CALIBRATION TARGETS")
@@ -324,7 +338,46 @@ def calibrate_cmd(
             ),
         )
 
-    click.echo("\n".join(out_lines))
+    rendered = "\n".join(out_lines)
+    click.echo(rendered)
+    _maybe_save(rendered, output_file, car_key, track_slug, status=False)
+
+
+def _maybe_save(
+    rendered: str,
+    output_file: Path | None,
+    car_key: str,
+    track_slug: str,
+    *,
+    status: bool,
+) -> None:
+    """Write the briefing to `recommendations/...` unless the caller opted out.
+
+    Default filename: ``<car>-<short-track>-cal[-status]-<MMDD>-<HHMM>.txt``.
+    Pass ``-`` as ``output_file`` to skip file output (e.g. when piping).
+    """
+    if str(output_file) == "-":
+        return
+    if output_file is None:
+        from datetime import datetime
+
+        from racingoptimizer.cli.recommend import _short_track
+
+        ts = datetime.now().strftime("%m%d-%H%M")
+        suffix = "cal-status" if status else "cal"
+        output_file = (
+            Path("recommendations")
+            / f"{car_key}-{_short_track(track_slug)}-{suffix}-{ts}.txt"
+        )
+    try:
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(rendered, encoding="utf-8")
+        click.echo(f"\n[saved to {output_file}]", err=True)
+    except OSError as exc:
+        click.echo(
+            f"\n[warning: could not write {output_file}: {exc}]",
+            err=True,
+        )
 
 
 def _build_coverage_rows(

@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import pickle
+import re
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -155,8 +156,8 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
     "--output-file", type=click.Path(path_type=Path), default=None,
     help=(
         "Write the full briefing + setup card to this file. Defaults to "
-        "`recommendations/<car>__<track>__<YYYYMMDD-HHMMSS>.txt` (or "
-        "`.json` with --json). Pass `-` to disable file output."
+        "`recommendations/<car>-<track>-<mode>[-<fuel>L]-<MMDD>-<HHMM>.txt` "
+        "(or `.json` with --json). Pass `-` to disable file output."
     ),
 )
 def recommend_cmd(
@@ -396,14 +397,31 @@ def recommend_cmd(
         click.echo(rendered)
 
     # File output. Always written unless the user passed `-` to opt out.
-    # Default path is `recommendations/<car>__<track>__<YYYYMMDD-HHMMSS>.txt`
-    # (or `.json` when --json) — the user can hand this file to a sim
-    # crew without the briefing being interleaved with command-line noise.
+    # Default path encodes the run's identity at a glance:
+    # ``recommendations/<car>_<track>_<mode>[_<fuel>L]_<YYYY-MM-DD>_<HHMM>``
+    # ``.txt`` (or ``.json`` when --json). Mode tag is one of
+    # ``race`` / ``quali`` / ``reset`` so the user can spot the run type
+    # without opening the file. Fuel suffix is rendered for quali stints
+    # (the load is the user's choice and varies per track); race mode
+    # auto-pins fuel and the suffix is omitted to keep names short.
     if output_file is None:
         from datetime import datetime
         ext = ".json" if as_json else ".txt"
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        output_file = Path("recommendations") / f"{car_key}__{track_slug}__{ts}{ext}"
+        ts = datetime.now().strftime("%m%d-%H%M")
+        if reset_mode:
+            mode_tag = "reset"
+        elif quali:
+            mode_tag = "quali"
+        else:
+            mode_tag = "race"
+        fuel_tag = ""
+        if quali and fuel is not None:
+            fuel_tag = f"-{int(round(fuel))}L"
+        output_file = (
+            Path("recommendations")
+            / f"{car_key}-{_short_track(track_slug)}-{mode_tag}{fuel_tag}-"
+            f"{ts}{ext}"
+        )
     if str(output_file) != "-":
         try:
             output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -594,6 +612,16 @@ def status_cmd(car: str, as_json: bool, corpus_root: Path | None) -> None:
 # --------------------------------------------------------------------------
 # helpers
 # --------------------------------------------------------------------------
+
+
+def _short_track(slug: str) -> str:
+    """Strip variant tokens from a catalog track slug for filename use.
+
+    Examples: ``spa_2024_up`` -> ``spa``, ``hockenheim_gp`` -> ``hockenheim``,
+    ``sebring_international`` -> ``sebring``, ``daytona_2011_road`` ->
+    ``daytona``. Idempotent for slugs that have no recognised variant.
+    """
+    return re.sub(r"_(gp|international|road|2\d{3}.*)$", "", slug)
 
 
 def _resolve_car_or_exit(raw: str) -> str:
