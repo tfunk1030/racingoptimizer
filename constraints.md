@@ -277,6 +277,18 @@ TODO until the units mismatch is resolved.
 | RL | <TODO: units mismatch> ° | <TODO: units mismatch> ° |
 | RR | <TODO: units mismatch> ° | <TODO: units mismatch> ° |
 
+### Fuel level
+Race fuel load (L). The iRacing GTP UI lets the user type any value
+between roughly 1 L (effective minimum to reach pit lane) and the
+tank cap. BMW M Hybrid V8 / Cadillac V-Series.R both run ~58 L for
+race start; quali stints are user-set per track (typically 5..15 L
+for 3 laps + reserve). The per-car constraint envelope here covers
+both regimes; the `--quali` CLI flag is what biases the optimizer
+toward an aggressive low-fuel setup and `--fuel N` pins the value.
+| min | max |
+| --- | --- |
+| 1.0 L | 100.0 L |
+
 ### Brake duct opening — front
 | min | max |
 | --- | --- |

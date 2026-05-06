@@ -69,6 +69,25 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw"})
 @click.argument("track", required=False, default=None)
 @click.option("--wing", type=float, default=None, help="Pin rear wing angle (degrees).")
 @click.option(
+    "--fuel", "fuel", type=float, default=None,
+    help=(
+        "Pin race-fuel level (L). Race default is the past-session value "
+        "(typically ~58 L on the BMW M Hybrid V8); a quali stint is "
+        "user-input depending on track length (commonly 5..15 L for 3 "
+        "laps + reserve). The optimizer treats fuel as a fittable input "
+        "so a low pin biases ride-height + balance predictions."
+    ),
+)
+@click.option(
+    "--quali", "quali", is_flag=True, default=False,
+    help=(
+        "Quali-stint mode: phase weights tilt toward outright single-lap "
+        "pace (more aero_eff, more grip utilisation, less platform "
+        "conservatism). Pair with `--fuel N` to pin the matching low "
+        "fuel load — the optimizer will not auto-pick a quali fuel."
+    ),
+)
+@click.option(
     "--air-temp", type=float, default=None,
     help="Override training-data median air temperature (deg C).",
 )
@@ -112,6 +131,8 @@ def recommend_cmd(
     car: str,
     track: str | None,
     wing: float | None,
+    fuel: float | None,
+    quali: bool,
     air_temp: float | None,
     track_temp: float | None,
     wind: float | None,
@@ -136,7 +157,15 @@ def recommend_cmd(
     root = resolve_corpus_root(corpus_root)
     catalog_sessions = _safe_sessions(car_key, corpus_root=root)
 
-    pinned_overrides = _parse_pins(pins, wing=wing)
+    if quali and fuel is None:
+        click.echo(
+            "--quali requires --fuel <liters>. Pick the fuel load that "
+            "covers your quali stint (commonly 5..15 L for 3 laps + "
+            "reserve depending on track length).",
+            err=True,
+        )
+        sys.exit(2)
+    pinned_overrides = _parse_pins(pins, wing=wing, fuel=fuel)
     constraints_table = load_constraints()
     pinned_constraints = _apply_pins_to_constraints(
         constraints_table, car_key, pinned_overrides,
@@ -165,7 +194,10 @@ def recommend_cmd(
             wind=wind, wetness=wetness,
             corpus_root=root,
         )
-        rec = model.recommend(track_slug, env, pinned_constraints, schedule=schedule)
+        rec = model.recommend(
+            track_slug, env, pinned_constraints,
+            schedule=schedule, quali=quali,
+        )
     else:
         track_slug, donor_track = _resolve_track_or_extrapolate(
             track, catalog_sessions, car_key,
@@ -182,7 +214,7 @@ def recommend_cmd(
             wind=wind, wetness=wetness,
             corpus_root=root,
         )
-        rec = model.recommend(fit_track, env, pinned_constraints)
+        rec = model.recommend(fit_track, env, pinned_constraints, quali=quali)
         schedule = None  # v3 path: per-(car, track) keying owns the corners
 
     rec, clamp_warnings, top_warnings = _post_clamp(rec, model, constraints_table)
@@ -256,6 +288,7 @@ def recommend_cmd(
                 pinned=pinned_overrides,
                 warnings=top_warnings,
                 track_display=track_slug,
+                quali=quali,
             )
             + "\n"
             + render_full_setup_card(
@@ -625,10 +658,17 @@ def _force_sparse_regime(rec, target_track: str):
     return replace(rec, track=target_track, parameters=new_params)
 
 
-def _parse_pins(pins: tuple[str, ...], *, wing: float | None) -> dict[str, float]:
+def _parse_pins(
+    pins: tuple[str, ...],
+    *,
+    wing: float | None,
+    fuel: float | None = None,
+) -> dict[str, float]:
     out: dict[str, float] = {}
     if wing is not None:
         out["rear_wing_angle_deg"] = float(wing)
+    if fuel is not None:
+        out["fuel_level_l"] = float(fuel)
     for raw in pins:
         if "=" not in raw:
             click.echo(

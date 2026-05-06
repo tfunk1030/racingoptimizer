@@ -36,6 +36,7 @@ Family = Literal[
     "pushrod",
     "camber",
     "torsion_bar",
+    "fuel",
 ]
 
 
@@ -347,6 +348,25 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         "corner_weight_rr_kg": ParameterSpec(
             json_path=("Chassis", "RightRear", "CornerWeight"), dtype=float,
             units="N", family="corner_weight", fittable=False,
+        ),
+        # Race fuel load. iRacing exposes this as a typed value the user
+        # picks pre-session (race default: ~58 L on the BMW M Hybrid V8;
+        # quali stints are user-input depending on track length, often
+        # 5-15 L for 3 laps + reserve). Fittable + user_settable so:
+        #   * the joint surrogate sees fuel weight in the per-(corner,
+        #     phase) feature row and can learn fuel→ride-height /
+        #     fuel→balance coupling without a textbook formula
+        #     (VISION §3 / §10);
+        #   * `--fuel N` pins it via the existing pin mechanism;
+        #   * `--quali` triggers a phase-weight swap toward outright
+        #     pace and the user supplies the matching low-fuel level.
+        # Step 1.0 L matches the iRacing UI's integer click. Bounds in
+        # constraints.md (1..100 L envelope; quali min ~1 L is the
+        # absolute floor, race max sits comfortably below tank cap).
+        "fuel_level_l": ParameterSpec(
+            json_path=("Chassis", "Fuel", "FuelLevel"), dtype=float,
+            units="L", family="fuel", fittable=True, user_settable=True,
+            step=1.0,
         ),
     }
 

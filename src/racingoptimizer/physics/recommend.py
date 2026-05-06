@@ -48,6 +48,7 @@ def recommend(
     constraints: ConstraintsTable,
     *,
     schedule: list | None = None,
+    quali: bool = False,
 ) -> SetupRecommendation:
     """Constraint-clamped DE search for the optimal setup.
 
@@ -58,6 +59,12 @@ def recommend(
     archetype features ride alongside each entry and are fed into
     ``PhysicsModel._predict_v4`` so the same per-car fitter can score the
     target corners.
+
+    ``quali=True`` swaps to the quali-stint phase-weight overlay
+    inside the DE objective so the search is biased toward outright
+    single-lap pace (more aero_eff, more grip utilisation, less
+    platform conservatism). Caller pins ``fuel_level_l`` to a low
+    value (typically via the CLI's ``--fuel`` flag) to match.
     """
     is_per_car = int(model.feature_schema_version) >= 4
     if is_per_car and schedule is None:
@@ -172,7 +179,16 @@ def recommend(
     )
 
     aero = _aero_surface_or_none(model)
-    baselines = model.resolved_baselines
+    # Wet-mode + quali-mode overlay: pick the right baselines + phase
+    # weights once before DE so the objective is consistent across
+    # every evaluation (the DE search is over the setup vector, not
+    # over the env or the stint mode). Mirrors the helper used by
+    # `score_setup` so race / wet / quali / wet-quali all flow through
+    # one decision point.
+    from racingoptimizer.physics.score import _conditions_adjusted_baselines
+    baselines, phase_weights_override = _conditions_adjusted_baselines(
+        model, env, quali=quali,
+    )
     if is_per_car:
         keys = None  # type: ignore[assignment]
     else:
@@ -186,10 +202,12 @@ def recommend(
         if is_per_car:
             breakdown_inner = _score_breakdown_per_car(
                 model, clamped, env, aero, schedule, weights, baselines,
+                phase_weights=phase_weights_override,
             )
         else:
             breakdown_inner = _score_breakdown(
                 model, clamped, env, aero, keys, weights, baselines,
+                phase_weights=phase_weights_override,
             )
         return -float(sum(breakdown_inner.values()))
 

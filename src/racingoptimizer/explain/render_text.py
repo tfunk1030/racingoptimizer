@@ -36,6 +36,7 @@ def render_recommendation_text(
     pinned: dict[str, float] | None = None,
     warnings: list[str] | None = None,
     track_display: str | None = None,
+    quali: bool = False,
 ) -> str:
     if justifications is None:
         from racingoptimizer.explain.justification import build_justifications
@@ -50,6 +51,7 @@ def render_recommendation_text(
     lines: list[str] = []
     track_label = track_display or _humanize_slug(rec.track)
     lines.append(f"{rec.car} @ {track_label} - recommended setup")
+    lines.append(_stint_line(rec, pinned, quali))
     lines.append(_conditions_line(rec))
 
     rolled = _roll_up_confidence(justifications)
@@ -136,6 +138,30 @@ def render_status_text(status: ModelStatus) -> str:
 
 
 # ---- internals -----------------------------------------------------------
+
+
+def _stint_line(
+    rec: SetupRecommendation,
+    pinned: dict[str, float] | None,
+    quali: bool,
+) -> str:
+    """Single header line summarising stint mode + fuel load.
+
+    Fuel resolution order:
+      1. user pin (`--fuel N` → `pinned['fuel_level_l']`)
+      2. optimizer-recommended value in `rec.parameters` (always
+         present once `fuel_level_l` is in the per-car ontology)
+      3. fall back to "?" if neither is set (legacy pickle pre-fuel)
+    """
+    pinned = pinned or {}
+    fuel_l: float | None = None
+    if "fuel_level_l" in pinned:
+        fuel_l = float(pinned["fuel_level_l"])
+    elif "fuel_level_l" in rec.parameters:
+        fuel_l = float(rec.parameters["fuel_level_l"][0])
+    fuel_str = f"{fuel_l:.1f} L" if fuel_l is not None else "?"
+    mode = "quali (3-lap stint)" if quali else "race"
+    return f"Stint: {mode} ({fuel_str} fuel)"
 
 
 def _conditions_line(rec: SetupRecommendation) -> str:

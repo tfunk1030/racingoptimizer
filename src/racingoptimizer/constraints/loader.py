@@ -168,6 +168,11 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
         return (f"brake_duct_{side}", None)
     if h.startswith("throttle") and "brake" in h and "mapping" in h:
         return ("throttle_brake_mapping", None)
+    # Fuel load (L). Fittable user-settable input; a quali-mode CLI flag
+    # pins it low (5..15 L typical for a 3-lap stint), race default is
+    # the per-car baseline (~58 L on BMW M Hybrid V8).
+    if h == "fuel level":
+        return ("fuel_level_l", None)
     return None
 
 

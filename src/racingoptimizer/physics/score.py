@@ -376,6 +376,7 @@ def score_setup(
     weights: dict[int, float] | None = None,
     strict: bool = False,
     schedule: list | None = None,
+    quali: bool = False,
 ) -> float:
     """Sum of per-(corner, phase) utilization * per-corner weight.
 
@@ -392,12 +393,20 @@ def score_setup(
     archetype features. The per-corner predict path then scores the target
     track's corners instead of the trained-track corners (which a per-car
     model has none of, by design).
+
+    ``quali=True`` swaps to the quali-stint phase-weight overlay
+    (``physics.quali_mode.quali_phase_weights``) so the optimizer
+    pushes for outright single-lap pace instead of race-distance
+    consistency. The caller is expected to also pin a low fuel value
+    via the recommendation pin mechanism.
     """
     setup = _clamped_or_raise(model, setup, strict=strict)
     if weights is None:
         weights = _resolve_weights(model, track, schedule=schedule)
     aero = _aero_surface_or_none(model)
-    baselines, phase_weights = _conditions_adjusted_baselines(model, env)
+    baselines, phase_weights = _conditions_adjusted_baselines(
+        model, env, quali=quali,
+    )
     if int(model.feature_schema_version) >= 4:
         if schedule is None:
             raise ValueError(
@@ -427,12 +436,15 @@ def score_breakdown(
     weights: dict[int, float] | None = None,
     strict: bool = False,
     schedule: list | None = None,
+    quali: bool = False,
 ) -> dict[CornerPhaseKey, float]:
     setup = _clamped_or_raise(model, setup, strict=strict)
     if weights is None:
         weights = _resolve_weights(model, track, schedule=schedule)
     aero = _aero_surface_or_none(model)
-    baselines, phase_weights = _conditions_adjusted_baselines(model, env)
+    baselines, phase_weights = _conditions_adjusted_baselines(
+        model, env, quali=quali,
+    )
     if int(model.feature_schema_version) >= 4:
         if schedule is None:
             raise ValueError(
@@ -453,20 +465,31 @@ def score_breakdown(
 
 
 def _conditions_adjusted_baselines(
-    model: PhysicsModel, env: EnvironmentFrame,
+    model: PhysicsModel,
+    env: EnvironmentFrame,
+    *,
+    quali: bool = False,
 ) -> tuple[CarBaselines, dict[Phase, dict[str, float]] | None]:
-    """Pick wet-aware baselines + phase weights for an env regime.
+    """Pick baselines + phase weights for the env regime and stint mode.
 
-    VISION §10: the same setup behaves differently in different
-    conditions. This wires `physics.wet_mode` into the score path —
-    classify the env into dry/damp/wet/full_rain, then return the
-    adjusted CarBaselines (lower max grip, lower aero baseline, more
-    wheelspin tolerance) and adjusted phase weights (away from aero_eff
-    toward platform/grip on wet).
+    Two orthogonal axes:
 
-    Dry returns the model's resolved baselines and ``None`` for the
-    phase-weight override (so the caller falls back to ``PHASE_WEIGHTS``).
+    * **Wet vs dry** (VISION §10): ``physics.wet_mode.classify_conditions``
+      reads ``env`` and chooses baselines / phase weights that reflect
+      the regime — lower grip + aero baseline on wet, more platform +
+      grip weight, less aero_eff weight.
+    * **Race vs quali** (VISION §4 / §5): when ``quali=True``, swap to
+      ``physics.quali_mode.quali_phase_weights`` so the optimizer
+      pushes for outright single-lap pace (more aero_eff, more grip
+      utilisation, less platform conservatism). Quali takes precedence
+      over wet's phase-weight pick — a wet quali still wants outright
+      one-lap pace, just on a wet-adjusted baseline.
+
+    Returns ``None`` for the phase-weight override only when both axes
+    are at their no-op default (race + dry); the caller then uses the
+    package-default ``PHASE_WEIGHTS``.
     """
+    from racingoptimizer.physics.quali_mode import quali_phase_weights
     from racingoptimizer.physics.wet_mode import (
         classify_conditions,
         wet_baselines,
@@ -474,9 +497,18 @@ def _conditions_adjusted_baselines(
     )
 
     regime = classify_conditions(env)
+    baselines = (
+        model.resolved_baselines if regime == "dry"
+        else wet_baselines(model.car, regime)
+    )
+    if quali:
+        # Quali wants outright pace regardless of conditions; the wet
+        # baseline still scales grip down so a wet quali setup is
+        # sensibly less aggressive than a dry one.
+        return baselines, quali_phase_weights()
     if regime == "dry":
-        return model.resolved_baselines, None
-    return wet_baselines(model.car, regime), wet_phase_weights(regime)
+        return baselines, None
+    return baselines, wet_phase_weights(regime)
 
 
 def _confidence_with_value(source: Confidence, value: float) -> Confidence:

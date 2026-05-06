@@ -202,10 +202,11 @@ class PhysicsModel:
         env: EnvironmentFrame,
         *,
         schedule: list | None = None,
+        quali: bool = False,
     ) -> float:
         # Local import sidesteps the module-graph cycle: score imports model.
         from racingoptimizer.physics.score import score_setup as _score
-        return _score(self, setup, track, env, schedule=schedule)
+        return _score(self, setup, track, env, schedule=schedule, quali=quali)
 
     def recommend(
         self,
@@ -214,9 +215,12 @@ class PhysicsModel:
         constraints: ConstraintsTable,
         *,
         schedule: list | None = None,
+        quali: bool = False,
     ):
         from racingoptimizer.physics.recommend import recommend as _recommend
-        return _recommend(self, track, env, constraints, schedule=schedule)
+        return _recommend(
+            self, track, env, constraints, schedule=schedule, quali=quali,
+        )
 
     def predict_setup_readouts(
         self,
