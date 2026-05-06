@@ -98,6 +98,17 @@ def recommend(
     # than what the driver explored — wide envelopes would mask real
     # corpus variation as "near constant".
     global_observed: dict[str, set[float]] = {}
+    # When the target track has zero sessions for this car (per-car v4 cold
+    # start, e.g. Ferrari @ Spa with all corpus at Hockenheim+Algarve), the
+    # per-track empirical envelope is empty. Without a fallback the trust
+    # radius opens to the FULL constraint envelope and DE picks setup
+    # values far outside anything the surrogate was trained near, producing
+    # garbage setup-readout predictions (e.g. predicted static front RH
+    # extrapolated 24 mm past the lowest perch in the entire corpus).
+    # `cross_track_fallback=True` substitutes the union of all of this
+    # car's other-track observations for `target_observed_values`, keeping
+    # the search inside corpus density even at a brand-new track.
+    cross_track_fallback = False
     if is_per_car:
         per_track = getattr(model, "per_track_parameter_observed", {}) or {}
         target_observed = dict(per_track.get(track, {}) or {})
@@ -105,6 +116,8 @@ def recommend(
             for _name, _vals in (_track_params or {}).items():
                 if _vals:
                     global_observed.setdefault(_name, set()).update(_vals)
+        if not target_observed and global_observed:
+            cross_track_fallback = True
     weights = _cached_weights(model, track, schedule=schedule)
 
     fittable = [
@@ -149,6 +162,10 @@ def recommend(
         regime = _median_regime(model, name)
         observed_std = float(observed_std_table.get(name, 0.0))
         target_observed_values = tuple(target_observed.get(name, ()))
+        if not target_observed_values and cross_track_fallback:
+            cross_track_vals = global_observed.get(name)
+            if cross_track_vals:
+                target_observed_values = tuple(sorted(cross_track_vals))
         target_step = _click_step_for(model, name, bound)
         global_vals = global_observed.get(name)
         empirical_range = (
