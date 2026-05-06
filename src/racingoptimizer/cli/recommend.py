@@ -176,7 +176,21 @@ def recommend_cmd(
     # (already enforced above) and skips this auto-pin.
     if not quali and "fuel_level_l" not in pinned_overrides:
         from racingoptimizer.physics.ontology import setup_value
-        past_setup = _most_recent_setup_for(catalog_sessions)
+        # Filter to the TARGET track first. Without this, the picker
+        # selected the most-recent recorded BMW session across all
+        # tracks — and legacy IBT files with no filename datetime
+        # default to the YAML's WeekendOptions.Date (currently a
+        # future "2026-05-09"), so they win the sort over today's
+        # actual on-target Spa sessions. Legacy files may also carry
+        # a different car schema (M4 GT3 vs M Hybrid V8) where
+        # `BrakesDriveUnit.Fuel.FuelLevel` doesn't resolve. Restrict
+        # to the target-track subset; fall back to all sessions only
+        # if the target track has none.
+        target_slug = slugify_track(track.strip().lower()) or track.strip().lower()
+        target_subset = catalog_sessions.filter(pl.col("track") == target_slug)
+        if target_subset.height == 0:
+            target_subset = catalog_sessions
+        past_setup = _most_recent_setup_for(target_subset)
         if past_setup is not None:
             try:
                 past_fuel = setup_value(car_key, "fuel_level_l", past_setup)

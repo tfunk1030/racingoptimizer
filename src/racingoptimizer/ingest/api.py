@@ -69,6 +69,7 @@ def sessions(
             "car": [r.car for r in rows],
             "track": [r.track for r in rows],
             "recorded_at": [r.recorded_at for r in rows],
+            "ingested_at": [r.ingested_at for r in rows],
             "duration_s": [r.duration_s for r in rows],
             "lap_count": [r.lap_count for r in rows],
             "weather_summary": [r.weather_summary for r in rows],
