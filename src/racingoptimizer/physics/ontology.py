@@ -424,7 +424,7 @@ def _damper_paths(
     return out
 
 
-# BMW / Cadillac / Ferrari inline per-corner damper clicks under Chassis.<corner>.
+# BMW / Cadillac inline per-corner damper clicks under Chassis.<corner>.
 _INLINE_DAMPERS = _damper_paths(
     (
         ("fl", ("Chassis", "LeftFront")),
@@ -443,6 +443,20 @@ _SPLIT_DAMPERS = _damper_paths(
         ("fr", ("Dampers", "FrontHeave")),
         ("rl", ("Dampers", "RearHeave")),
         ("rr", ("Dampers", "RearHeave")),
+    )
+)
+# Ferrari 499P keeps per-corner damper clicks under a top-level
+# ``Dampers`` section but with one block PER corner (LeftFrontDamper /
+# RightFrontDamper / LeftRearDamper / RightRearDamper) — confirmed
+# against an ingested Ferrari setup blob. Damper click range is also
+# wider than the BMW/Cadillac default (0..40 vs 0..11); per-car
+# constraint overrides in `constraints.md` carry the wider envelope.
+_FERRARI_DAMPERS = _damper_paths(
+    (
+        ("fl", ("Dampers", "LeftFrontDamper")),
+        ("fr", ("Dampers", "RightFrontDamper")),
+        ("rl", ("Dampers", "LeftRearDamper")),
+        ("rr", ("Dampers", "RightRearDamper")),
     )
 )
 
@@ -617,38 +631,147 @@ _BMW_OVERRIDES: dict[str, ParameterSpec] = {
     ),
 }
 
+# Ferrari 499P exposes its torsion bar OD as an integer index (0..18),
+# not the 14-discrete-mm list Cadillac/BMW use. Same channel name
+# (`TorsionBarOD`) but radically different value space. Treated as a
+# continuous integer here so DE searches the index range; renderer
+# rounds to nearest int.
+_FERRARI_ARB_SIZE_CHOICES: tuple[str, ...] = (
+    "Disconnected", "A", "B", "C", "D", "E",
+)
+
+
 _FERRARI_OVERRIDES: dict[str, ParameterSpec] = {
+    # Pushrod delta (per-axle, mm) — already named PushrodLengthDelta in
+    # Ferrari YAML, distinct from the *Offset path other cars use.
     "pushrod_length_offset_front_mm": ParameterSpec(
         json_path=_PUSHROD_DELTA_F, dtype=float, units="mm",
-        family="pushrod", fittable=True, user_settable=True,
+        family="pushrod", fittable=True, user_settable=True, step=0.5,
     ),
     "pushrod_length_offset_rear_mm": ParameterSpec(
         json_path=_PUSHROD_DELTA_R, dtype=float, units="mm",
-        family="pushrod", fittable=True, user_settable=True,
+        family="pushrod", fittable=True, user_settable=True, step=0.5,
     ),
     "brake_bias_pct": ParameterSpec(
         json_path=("Systems", "BrakeSpec", "BrakePressureBias"),
         dtype=float, units="pct", family="brake_bias", fittable=True,
+        step=0.5,
     ),
+    # Rear differential preload — same units as default but path is
+    # under Systems instead of BrakesDriveUnit.
     "diff_preload_nm": ParameterSpec(
         json_path=("Systems", "RearDiffSpec", "Preload"),
-        dtype=float, units="Nm", family="diff", fittable=True,
+        dtype=float, units="Nm", family="diff", fittable=True, step=5.0,
     ),
-    # Ferrari stores heave/torsion controls as UI indices, not N/mm values.
-    # Leave them known but blocked until Ferrari-specific legal ranges are captured.
+    # Front differential preload — Ferrari has a separate front diff
+    # (most other GTPs do not). Bound -50..+50 Nm per Ferraribounds.md.
+    "front_diff_preload_nm": ParameterSpec(
+        json_path=("Systems", "FrontDiffSpec", "Preload"),
+        dtype=float, units="Nm", family="diff", fittable=True, step=5.0,
+    ),
+    # Heave springs — Ferrari stores BOTH front and rear as integer
+    # indices, not N/mm. Front 0..8, rear 0..9. Reuses the existing
+    # heave/third spring slot names so the per-axle "set this value"
+    # row in the briefing still finds the right row, but units flip
+    # to "index" so the renderer formats without N/mm.
     "heave_spring_rate_n_per_mm": ParameterSpec(
         json_path=_HEAVE_SPRING_RATE_F, dtype=float, units="index",
-        family="spring_rate", fittable=False, user_settable=True,
+        family="spring_rate", fittable=True, user_settable=True, step=1.0,
     ),
     "third_spring_rate_n_per_mm": ParameterSpec(
-        json_path=("Chassis", "Rear", "HeaveSpring"), dtype=float, units="index",
-        family="spring_rate", fittable=False, user_settable=True,
+        json_path=("Chassis", "Rear", "HeaveSpring"), dtype=float,
+        units="index", family="spring_rate",
+        fittable=True, user_settable=True, step=1.0,
     ),
+    # Ferrari has no rear coil spring or rear coil-spring perch — the
+    # rear ride is controlled by torsion bars + heave spring + heave
+    # perch. Block the inherited entries so the optimizer doesn't
+    # search a parameter that doesn't exist.
     "rear_coil_spring_rate_n_per_mm": _blocked_like(
         _common_bounded()["rear_coil_spring_rate_n_per_mm"],
     ),
-    "spring_perch_offset_rear_mm": _blocked_like(_common_bounded()["spring_perch_offset_rear_mm"]),
-    "third_perch_offset_rear_mm": _blocked_like(_common_bounded()["third_perch_offset_rear_mm"]),
+    "spring_perch_offset_rear_mm": _blocked_like(
+        _common_bounded()["spring_perch_offset_rear_mm"],
+    ),
+    # The "third perch offset" slot maps to Ferrari's REAR HEAVE PERCH
+    # (the rear-axle equivalent of HeavePerchOffset). Wider envelope
+    # than BMW/Cadillac (-150..+100 mm per Ferraribounds.md).
+    "third_perch_offset_rear_mm": ParameterSpec(
+        json_path=("Chassis", "Rear", "HeavePerchOffset"), dtype=float,
+        units="mm", family="perch_offset",
+        fittable=True, user_settable=True, step=0.5,
+    ),
+    # Front torsion bars — same path conventions as Cadillac, but OD is
+    # an integer INDEX (0..18) on Ferrari, not a discrete list of mm
+    # diameters. So no `discrete_values` here; DE searches a continuous
+    # 0..18 range and the renderer rounds to int.
+    "torsion_bar_turns_fl": ParameterSpec(
+        json_path=("Chassis", "LeftFront", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.125,
+    ),
+    "torsion_bar_turns_fr": ParameterSpec(
+        json_path=("Chassis", "RightFront", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.125,
+    ),
+    "torsion_bar_od_fl_mm": ParameterSpec(
+        json_path=("Chassis", "LeftFront", "TorsionBarOD"),
+        dtype=float, units="index", family="torsion_bar",
+        fittable=True, user_settable=True, step=1.0,
+    ),
+    "torsion_bar_od_fr_mm": ParameterSpec(
+        json_path=("Chassis", "RightFront", "TorsionBarOD"),
+        dtype=float, units="index", family="torsion_bar",
+        fittable=True, user_settable=True, step=1.0,
+    ),
+    # Rear torsion bars — Ferrari has them at all 4 corners, BMW/Cadillac
+    # only front. New parameter names `*_rl_*` / `*_rr_*` keep the
+    # per-corner naming scheme consistent with cambers/dampers.
+    "torsion_bar_turns_rl": ParameterSpec(
+        json_path=("Chassis", "LeftRear", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.125,
+    ),
+    "torsion_bar_turns_rr": ParameterSpec(
+        json_path=("Chassis", "RightRear", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.125,
+    ),
+    "torsion_bar_od_rl_mm": ParameterSpec(
+        json_path=("Chassis", "LeftRear", "TorsionBarOD"),
+        dtype=float, units="index", family="torsion_bar",
+        fittable=True, user_settable=True, step=1.0,
+    ),
+    "torsion_bar_od_rr_mm": ParameterSpec(
+        json_path=("Chassis", "RightRear", "TorsionBarOD"),
+        dtype=float, units="index", family="torsion_bar",
+        fittable=True, user_settable=True, step=1.0,
+    ),
+    # ARB Size — Ferrari uses letter labels (Disconnected, A, B, C, D, E)
+    # at both axles, where BMW uses Disconnect/Soft/Medium/Stiff. Wholly
+    # different choice list; the ordinal still ascends in stiffness
+    # (Disconnected = 0 = softest, E = 5 = stiffest).
+    "arb_size_front": ParameterSpec(
+        json_path=("Chassis", "Front", "ArbSize"),
+        dtype=float, units="", family="arb",
+        fittable=True, user_settable=True, is_discrete=True,
+        choices=_FERRARI_ARB_SIZE_CHOICES,
+    ),
+    "arb_size_rear": ParameterSpec(
+        json_path=("Chassis", "Rear", "ArbSize"),
+        dtype=float, units="", family="arb",
+        fittable=True, user_settable=True, is_discrete=True,
+        choices=_FERRARI_ARB_SIZE_CHOICES,
+    ),
+    # Ferrari fuel YAML carries the canonical value at Systems.Fuel
+    # (also mirrored at Chassis.Rear.FuelLevel). Use the Systems path
+    # for the optimizer.
+    "fuel_level_l": ParameterSpec(
+        json_path=("Systems", "Fuel", "FuelLevel"), dtype=float,
+        units="L", family="fuel", fittable=True, user_settable=True,
+        step=1.0,
+    ),
 }
 
 _PORSCHE_OVERRIDES: dict[str, ParameterSpec] = {
@@ -665,7 +788,7 @@ _PORSCHE_OVERRIDES: dict[str, ParameterSpec] = {
 ACURA: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_ACURA_OVERRIDES)
 BMW: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_BMW_OVERRIDES)
 CADILLAC: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_CADILLAC_OVERRIDES)
-FERRARI: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_FERRARI_OVERRIDES)
+FERRARI: dict[str, ParameterSpec] = _build(_FERRARI_DAMPERS, **_FERRARI_OVERRIDES)
 PORSCHE: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_PORSCHE_OVERRIDES)
 
 _BY_CAR: dict[str, dict[str, ParameterSpec]] = {

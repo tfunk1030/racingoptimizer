@@ -33,7 +33,10 @@ def test_clamp_below_default_min() -> None:
 
 
 def test_clamp_unbounded_parameter() -> None:
-    r = clamp(2000.0, "damper_lsc_fl", "bmw")
+    # Damper LSC was previously TODO; now bounded 0..11 by default. Use
+    # a parameter that is genuinely still TODO in `constraints.md` (the
+    # corner-weight target rows).
+    r = clamp(2000.0, "corner_weight_fl_kg", "bmw")
     assert r.value == 2000.0
     assert r.was_clamped is False
     assert r.bound is None

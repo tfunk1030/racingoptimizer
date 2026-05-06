@@ -181,13 +181,17 @@ damper transitions from low-speed to high-speed compression behaviour.
 
 ### Torsion bar turns
 Per-side preload turn count on the front torsion bars. Cadillac and BMW
-M Hybrid V8 expose this control on the same envelope per BMWBounds.md /
-Cadillacbounds.md; other cars use coil springs at the front and ignore
-this section. 0.001 turn step.
+M Hybrid V8 expose this control on the front axle per BMWBounds.md /
+Cadillacbounds.md; Ferrari has torsion bars at all 4 corners (RL/RR
+rows below). Other cars use coil springs and ignore this section.
+0.001 turn step on Cadillac/BMW; 0.125 turn step on Ferrari (per-car
+override below).
 | corner | min | max |
 | --- | --- | --- |
 | FL | -0.250 | 0.250 |
 | FR | -0.250 | 0.250 |
+| RL | -0.250 | 0.250 |
+| RR | -0.250 | 0.250 |
 
 ### Torsion bar OD
 Per-side outer-diameter selection on the front torsion bars (Cadillac
@@ -195,10 +199,14 @@ and BMW M Hybrid V8 expose the same 14-value list per BMWBounds.md /
 Cadillacbounds.md). The garage UI's fixed list runs from 13.90 to 18.20
 mm; the recommender clamps to the continuous envelope and the renderer
 picks the nearest legal value via `ParameterSpec.discrete_values`.
+Ferrari uses an integer index (0..18) instead of mm — bounded by the
+per-car override below.
 | corner | min | max |
 | --- | --- | --- |
 | FL | 13.90 | 18.20 |
 | FR | 13.90 | 18.20 |
+| RL | 13.90 | 18.20 |
+| RR | 13.90 | 18.20 |
 
 ### Corner weight (target)
 | corner | min | max |
@@ -224,6 +232,15 @@ Preload is a single Nm scalar shared across the GTPs.
 | preload     | Nm | 0.0  | 150.0 |
 | coast ratio | %  | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
 | power ratio | %  | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+
+### Front differential preload
+Ferrari 499P has a front diff in addition to the rear (most other GTPs
+do not). Bound -50..+50 Nm per Ferraribounds.md, 5 Nm step. Cars
+without a front diff don't list this parameter in their ontology, so
+this default constraint is harmless dead-letter for them.
+| min | max |
+| --- | --- |
+| -50.0 Nm | 50.0 Nm |
 
 ### Anti-roll bar size — front
 Categorical iRacing UI selection. The ontology
@@ -329,6 +346,29 @@ Discrete iRacing setting; structure varies per car (curve preset, shape index, o
 - **Rear coil spring rate:** 105.0 – 280.0 N/mm
 - **Spring perch offset rear:** -100.0 – 100.0 mm
 - **Third perch offset rear:** -100.0 – 100.0 mm
+
+### ferrari
+Ferrari 499P diverges from BMW/Cadillac in several places per
+Ferraribounds.md: indexed heave springs (front 0..8 / rear 0..9), wider
+damper click range (0..40), wider perch envelopes (-150..+100 mm),
+front diff in addition to rear, torsion bars at all 4 corners with a
+0.125-turn step, and torsion bar OD as an integer index (0..18) instead
+of the BMW/Cadillac 14-discrete-mm list.
+- **Heave spring rate:** 0.0 – 8.0 index
+- **Rear third spring rate:** 0.0 – 9.0 index
+- **Heave perch offset front:** -150.0 – 100.0 mm
+- **Third perch offset rear:** -150.0 – 100.0 mm
+- **Damper Low Speed Compression:** 0 – 40 clicks
+- **Damper High Speed Compression:** 0 – 40 clicks
+- **Damper Low Speed Rebound:** 0 – 40 clicks
+- **Damper High Speed Rebound:** 0 – 40 clicks
+- **Torsion bar OD FL:** 0.0 – 18.0 index
+- **Torsion bar OD FR:** 0.0 – 18.0 index
+- **Torsion bar OD RL:** 0.0 – 18.0 index
+- **Torsion bar OD RR:** 0.0 – 18.0 index
+- **Anti-roll bar size front:** 0 – 5 index
+- **Anti-roll bar size rear:** 0 – 5 index
+- **Front differential preload:** -50.0 – 50.0 Nm
 
 ### porsche
 - **Heave spring rate:** 150.0 – 600.0 N/mm

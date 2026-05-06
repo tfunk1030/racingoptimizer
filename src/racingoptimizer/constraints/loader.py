@@ -134,6 +134,12 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
         return (f"anti_roll_bar_{side}", None)
     if h.startswith("damper"):
         body = h.split("—", 1)[1].strip() if "—" in h else h
+        # Per-car override headings often omit the em-dash separator
+        # ("Damper Low Speed Compression" instead of the default
+        # "Damper — Low Speed Compression"); strip the leading
+        # "damper" word so the same suffix table resolves both shapes.
+        if body.startswith("damper"):
+            body = body[len("damper"):].strip()
         body = re.sub(r"\(.*\)", "", body).strip()
         suffix = DAMPER_SUFFIX.get(body)
         if suffix is None:
@@ -151,6 +157,12 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
         return ("brake_bias", "pct")
     if h == "differential":
         return ("diff", None)
+    # Ferrari has a separate front differential preload (most other
+    # GTPs only have a rear diff). Bound -50..+50 Nm per
+    # Ferraribounds.md; lives in defaults so the loader can resolve
+    # the override under per-car blocks.
+    if h == "front differential preload":
+        return ("front_diff_preload", "nm")
     # Diff categoricals (RearDiffSpec). Ontology carries the labels via
     # `ParameterSpec.choices` (coast/drive ramps) or the legal numeric
     # values via `discrete_values` (clutch plates); the constraint table
@@ -159,6 +171,14 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
         return ("diff_coast_drive_ramps", None)
     if h == "differential clutch friction plates":
         return ("diff_clutch_friction_plates", None)
+    # ARB Size letter labels — Ferrari has 6 (Disconnected, A..E).
+    # Section name mirrors the BMW-style "anti-roll bar size" matcher
+    # below, but per-car overrides may want different bounds for the
+    # index range (BMW 0..3, Ferrari 0..5).
+    if h == "anti-roll bar size front":
+        return ("arb_size_front", None)
+    if h == "anti-roll bar size rear":
+        return ("arb_size_rear", None)
     if h == "camber":
         return ("camber", "deg")
     if h == "toe":
@@ -244,6 +264,54 @@ _OVERRIDE_RE = re.compile(
     r"(?P<hi>-?\d+(?:\.\d+)?)"
 )
 
+# Per-corner damper families. When a per-car override line resolves to
+# one of these axle-level base keys, the loader fans out the same bound
+# to all four corner-suffixed keys (`damper_<mode>_<corner>`).
+_DAMPER_BASE_FAMILIES: frozenset[str] = frozenset({
+    "damper_lsc",
+    "damper_hsc",
+    "damper_lsr",
+    "damper_hsr",
+    "damper_hsc_slope",
+})
+
+# Recognised corner suffixes on per-car override headings. Order
+# matters: FL/FR/RL/RR before front/rear so the longer match wins.
+_CORNER_SUFFIXES: tuple[str, ...] = ("fl", "fr", "rl", "rr", "front", "rear")
+
+
+def _split_corner_suffix(text: str) -> tuple[str, str | None]:
+    """Strip a trailing corner / axle suffix from an override heading.
+
+    Returns ``(base_heading, corner_suffix)`` where ``corner_suffix`` is
+    one of ``fl|fr|rl|rr|front|rear`` (lowercased) or ``None`` when no
+    suffix is present. Lets per-car blocks write
+    ``- **Torsion bar OD FL:** 0 - 18`` and have it resolve to the
+    ontology key ``torsion_bar_od_fl_mm`` instead of the axle-level
+    ``torsion_bar_od_mm``.
+    """
+    parts = text.strip().split()
+    if not parts:
+        return text, None
+    last = parts[-1].lower()
+    if last in _CORNER_SUFFIXES:
+        return " ".join(parts[:-1]), last
+    return text, None
+
+
+def _inject_corner_suffix(
+    base: str, corner: str, default_unit: str | None,
+) -> str:
+    """Re-attach a corner suffix to a base key, before any unit suffix.
+
+    Example: ``base="torsion_bar_od"``, ``corner="fl"``, ``default_unit="mm"``
+    → ``"torsion_bar_od_fl_mm"`` (matches ``_compose_corner_key`` for
+    default-table parsing).
+    """
+    if default_unit is None:
+        return f"{base}_{corner}"
+    return f"{base}_{corner}_{default_unit}"
+
 
 def load_constraints(path: Path | None = None) -> ConstraintsTable:
     p = Path(path) if path is not None else _default_constraints_path()
@@ -309,11 +377,39 @@ def load_constraints(path: Path | None = None) -> ConstraintsTable:
             if current_car is not None:
                 m = _OVERRIDE_RE.match(line)
                 if m:
-                    resolved = _section_to_param_base(m.group("param"))
+                    raw_param = m.group("param")
+                    lo, hi = float(m["lo"]), float(m["hi"])
+                    # Resolve the full heading first ("Third perch
+                    # offset rear" must NOT be stripped to
+                    # "Third perch offset" + "rear"; "rear" is
+                    # part of the section name). Only fall back to
+                    # the corner-suffix split when the full name
+                    # doesn't resolve.
+                    resolved = _section_to_param_base(raw_param)
+                    corner_suffix: str | None = None
+                    if resolved is None:
+                        base_text, corner_suffix = _split_corner_suffix(raw_param)
+                        if corner_suffix is not None:
+                            resolved = _section_to_param_base(base_text)
+                            if resolved is None:
+                                corner_suffix = None
                     if resolved is not None:
                         base, default_unit = resolved
                         key = base if default_unit is None else f"{base}_{default_unit}"
-                        by_car[current_car][key] = (float(m["lo"]), float(m["hi"]))
+                        # Per-car damper overrides without an explicit
+                        # corner suffix fan out to all four corners.
+                        # Per-corner overrides (`Torsion bar OD FL`)
+                        # use the suffix directly.
+                        if corner_suffix is not None:
+                            corner_key = _inject_corner_suffix(
+                                base, corner_suffix, default_unit,
+                            )
+                            by_car[current_car][corner_key] = (lo, hi)
+                        elif key in _DAMPER_BASE_FAMILIES:
+                            for corner in ("fl", "fr", "rl", "rr"):
+                                by_car[current_car][f"{key}_{corner}"] = (lo, hi)
+                        else:
+                            by_car[current_car][key] = (lo, hi)
             i += 1
             continue
 

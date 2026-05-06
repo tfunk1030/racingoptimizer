@@ -53,7 +53,7 @@ CANONICAL_CARS = ("acura", "bmw", "cadillac", "ferrari", "porsche")
 # constraints.md mirrors BMWBounds.md and a fresh BMW@Spa session has been
 # captured. Other cars stay on the per-(car, track) v3 path until each is
 # validated.
-PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw"})
+PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
 
 
 # --------------------------------------------------------------------------
@@ -775,15 +775,30 @@ def _build_per_car_pipeline(
             sys.exit(2)
 
     if track_slug is None:
-        click.echo(
-            f"per-car {car_key} has no sessions on track {track!r}; "
-            f"available: {', '.join(available) or '(none)'}. Run "
-            f"`optimize learn <ibt>` to ingest a session on this track first.",
-            err=True,
+        # Per-car has no sessions on the requested track. Before bailing,
+        # see whether ANY OTHER car has been driven there — the corner
+        # schedule is pure track geometry (braking / apex / exit
+        # positions + archetype features), so borrowing BMW@Spa's
+        # schedule to score a Ferrari@Spa setup is sensible. The
+        # per-car FITTER still trains on Ferrari sessions only; only
+        # the corner schedule is borrowed.
+        track_slug, sessions_for_target = _maybe_borrow_cross_car_track(
+            track, car_key, root,
         )
-        sys.exit(2)
-
-    sessions_for_target = catalog_sessions.filter(pl.col("track") == track_slug)
+        if track_slug is None:
+            click.echo(
+                f"per-car {car_key} has no sessions on track {track!r}, "
+                f"and no other car has either; "
+                f"available for {car_key}: {', '.join(available) or '(none)'}. "
+                f"Run `optimize learn <ibt>` to ingest a session on this "
+                f"track first.",
+                err=True,
+            )
+            sys.exit(2)
+    else:
+        sessions_for_target = catalog_sessions.filter(
+            pl.col("track") == track_slug
+        )
     target_sids = sorted(sessions_for_target["session_id"].to_list())
     schedule = build_corner_schedule(target_sids, corpus_root=root)
     if not schedule:
@@ -799,6 +814,49 @@ def _build_per_car_pipeline(
         car_key, pooled_sids, root, no_cache=no_cache,
     )
     return track_slug, sessions_for_target, schedule, model
+
+
+def _maybe_borrow_cross_car_track(
+    track: str, requested_car: str, root: Path,
+) -> tuple[str | None, pl.DataFrame]:
+    """Find a track slug + session list from ANY car on the requested track.
+
+    Used when the per-car path needs a corner schedule for a track the
+    requested car has never been driven on (e.g. Ferrari@Spa with no
+    Ferrari Spa IBTs but BMW + Cadillac have plenty). Returns
+    ``(track_slug, sessions_df)`` keyed to the *donor* car's sessions,
+    or ``(None, empty_df)`` if no car has been driven on that track.
+
+    The schedule built from these sessions feeds the per-car fitter at
+    predict time as `corner_archetype` features — corner geometry, not
+    car-specific physics. The fitter itself still trains exclusively on
+    `requested_car` sessions.
+    """
+    raw = track.strip().lower()
+    needle = slugify_track(raw) or raw
+    bare = needle.replace("_", "")
+    for other_car in ("bmw", "cadillac", "ferrari", "porsche", "acura"):
+        if other_car == requested_car:
+            continue
+        other_sessions = _safe_sessions(other_car, corpus_root=root)
+        if other_sessions.is_empty():
+            continue
+        other_tracks = sorted(set(other_sessions["track"].to_list()))
+        match: str | None = None
+        if needle in other_tracks:
+            match = needle
+        elif bare in other_tracks:
+            match = bare
+        else:
+            candidates = [
+                slug for slug in other_tracks
+                if needle in slug or bare in slug.replace("_", "")
+            ]
+            if len(candidates) == 1:
+                match = candidates[0]
+        if match is not None:
+            return match, other_sessions.filter(pl.col("track") == match)
+    return None, pl.DataFrame()
 
 
 def _build_or_load_per_car_model(

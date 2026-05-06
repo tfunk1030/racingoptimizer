@@ -71,10 +71,17 @@ _CALCULATED_LEAF_NAMES: frozenset[str] = frozenset({
 
 # Top-level YAML keys → garage panel display name. Iteration order here
 # defines section order in the rendered card.
+#
+# `Dampers` and `Systems` are Ferrari/Acura/Porsche tops; BMW/Cadillac
+# carry the equivalent fields under `BrakesDriveUnit`. Listing all of
+# them here is harmless when a car doesn't have the YAML key (the
+# walk-block call returns an empty list and the panel is skipped).
 _PANELS: tuple[tuple[str, str], ...] = (
     ("TiresAero", "TIRES & AERO"),
     ("Chassis", "CHASSIS"),
+    ("Dampers", "DAMPERS"),
     ("BrakesDriveUnit", "BRAKES / DRIVETRAIN"),
+    ("Systems", "SYSTEMS"),
 )
 
 

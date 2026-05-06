@@ -59,7 +59,9 @@ def test_todo_placeholders_return_none(table: ConstraintsTable) -> None:
     UI capture invalidates an estimate, edit `constraints.md` accordingly —
     do NOT add the row back to this test list.
     """
-    assert table.bounds("default", "damper_lsc_fl") is None
+    # Damper LSC was previously TODO; estimated 0..11 click bounds
+    # landed alongside the per-corner damper tables, so this row now
+    # has real bounds and must NOT be in the TODO list.
     assert table.bounds("default", "diff_coast_ratio_pct") is None
     assert table.bounds("default", "diff_power_ratio_pct") is None
     # Toe is in mm but the loader's "Toe" section is degree-based — kept TODO
