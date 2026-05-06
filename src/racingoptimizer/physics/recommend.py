@@ -470,8 +470,23 @@ def _pin_or_trust_bounds(
         return ((pinned_lo, pinned_hi), True)
     trust_lo, trust_hi = _trust_bounds(bound, baseline, regime)
     if target_observed:
-        empirical_lo = max(lo, min(target_observed))
-        empirical_hi = min(hi, max(target_observed))
+        # Clip the observed values to the constraint envelope FIRST.
+        # Without this, a constraint pin (e.g. ``--fuel 8`` collapses
+        # the constraint to ``(8, 8)``) combined with a target-track
+        # observed value far outside the pin (corpus only has 58 L on
+        # Spa) would build empirical_lo=58, empirical_hi=8 — lo > hi —
+        # and the downstream DE seed rejects with "high - low < 0".
+        clipped = [v for v in target_observed if lo <= v <= hi]
+        if clipped:
+            empirical_lo = min(clipped)
+            empirical_hi = max(clipped)
+        else:
+            # No observed value lies inside the (possibly user-pinned)
+            # constraint window. Trust the constraint bound directly —
+            # the user explicitly narrowed the search and we have no
+            # in-window evidence to weight against it.
+            empirical_lo = lo
+            empirical_hi = hi
         # Single observed value → expand by one click each side so DE has
         # SOMETHING to search; otherwise the bound is degenerate and DE
         # raises. Multi-value observations stay strict.
@@ -492,6 +507,12 @@ def _pin_or_trust_bounds(
             # driver ran on the target track). Trust the empirical
             # envelope — it's the only ground truth we have.
             trust_lo, trust_hi = empirical_lo, empirical_hi
+    # Final defensive clamp: DE requires lo <= hi. If anything above
+    # produced an inverted range (constraint pin + out-of-pin empirical
+    # data + trust radius interaction), fall back to the constraint
+    # bound itself.
+    if trust_hi < trust_lo:
+        trust_lo, trust_hi = lo, hi
     return ((trust_lo, trust_hi), False)
 
 

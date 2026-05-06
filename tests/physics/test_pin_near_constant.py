@@ -121,6 +121,37 @@ def test_pin_when_empirical_range_is_zero_falls_back_to_span() -> None:
     assert was_pinned is True
 
 
+def test_user_pin_outside_target_observed_does_not_invert() -> None:
+    """User constraint-pin must override an out-of-window empirical envelope.
+
+    Regression: ``--fuel 8`` collapses the fuel constraint to ``(8, 8)``,
+    but the BMW Spa training corpus only has 58 L observed. The old logic
+    built ``empirical_lo = max(8, 58) = 58`` and ``empirical_hi =
+    min(8, 58) = 8``, then expanded the degenerate single value by a
+    click, producing ``(57, 8)`` — lo > hi — which DE's seed_population
+    rejected with ``ValueError: high - low < 0`` and crashed the entire
+    recommend run.
+
+    The fix clips ``target_observed`` to the constraint envelope FIRST so
+    out-of-window observations are dropped instead of inverting the bound.
+    """
+    bound = (8.0, 8.0)  # constraint-pinned to 8 L by --fuel 8
+    target_observed = (58.0,)  # BMW Spa corpus only has 58 L
+    sub_bounds, was_pinned = _pin_or_trust_bounds(
+        bound=bound, baseline=8.0, regime="confident",
+        observed_std=0.0, target_observed=target_observed,
+        click_step=1.0, empirical_range=0.0,
+    )
+    lo, hi = sub_bounds
+    assert lo <= hi, (
+        f"DE requires lo<=hi but got ({lo}, {hi}); "
+        "constraint pin + out-of-window empirical envelope inverted bound"
+    )
+    # Should land inside the constraint window (i.e. 8 L) regardless of
+    # which branch resolved it — the user pinned it for a reason.
+    assert 8.0 - 1e-6 <= lo <= hi <= 8.0 + 1e-6
+
+
 def test_pin_with_zero_span_bound_is_safe() -> None:
     """Degenerate constraint (lo == hi) should not crash."""
     bound = (10.0, 10.0)
