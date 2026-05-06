@@ -182,7 +182,12 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
     if h == "camber":
         return ("camber", "deg")
     if h == "toe":
-        return ("toe", "deg")
+        # iRacing GTP toe-in is in mm per wheel (NOT degrees). Front
+        # is an axle-level scalar (`Chassis.Front.ToeIn`); rear is
+        # per-corner with iRacing-UI L=R symmetry — the ontology
+        # trains LR only and the renderer mirrors RR via
+        # `_MIRRORED_LEAVES`.
+        return ("toe", "mm")
     if h.startswith("brake duct opening"):
         side = h.split("—", 1)[1].strip() if "—" in h else h.rsplit(maxsplit=1)[-1]
         return (f"brake_duct_{side}", None)

@@ -375,6 +375,23 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
             units="L", family="fuel", fittable=True, user_settable=True,
             step=1.0,
         ),
+        # Toe-in (mm). Front is an axle-level scalar
+        # (Chassis.Front.ToeIn); rear is per-corner with iRacing-UI
+        # L=R symmetry — only the LR side is fittable here, the RR
+        # YAML leaf gets the LR value mirrored at render time via
+        # `_MIRRORED_LEAVES`. Cars with axle-level rear toe (none in
+        # the current GTP fleet) would override `toe_rl_mm` to the
+        # axle path; per-corner is the GTP norm.
+        "toe_front_mm": ParameterSpec(
+            json_path=("Chassis", "Front", "ToeIn"), dtype=float,
+            units="mm", family="camber",
+            fittable=True, user_settable=True, step=0.1,
+        ),
+        "toe_rl_mm": ParameterSpec(
+            json_path=("Chassis", "LeftRear", "ToeIn"), dtype=float,
+            units="mm", family="camber",
+            fittable=True, user_settable=True, step=0.1,
+        ),
     }
 
 
@@ -561,6 +578,15 @@ _DIFF_CLUTCH_PLATES_VALUES: tuple[float, ...] = (2.0, 4.0, 6.0)
 
 
 _BMW_OVERRIDES: dict[str, ParameterSpec] = {
+    # BMW M Hybrid V8 front heave spring steps in 10 N/mm increments
+    # in the iRacing UI (per BMWBounds.md "0-900 10n/mm intervals"),
+    # not the global 5 N/mm default. Same path, same legal envelope —
+    # only the render-time snap step changes.
+    "heave_spring_rate_n_per_mm": ParameterSpec(
+        json_path=_HEAVE_SPRING_RATE_F, dtype=float, units="N/mm",
+        family="spring_rate", fittable=True, user_settable=True,
+        step=10.0,
+    ),
     # BMW M Hybrid V8 uses front torsion bars on the same pattern as
     # Cadillac (per BMWBounds.md lines 13–19). Identical YAML paths,
     # identical bound envelope, identical 14-diameter OD list. Same

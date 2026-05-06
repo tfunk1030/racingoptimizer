@@ -97,7 +97,10 @@ def test_parameters_includes_bounded_and_todo(table: ConstraintsTable) -> None:
         "diff_coast_ratio_pct",
         "diff_power_ratio_pct",
         "camber_fl_deg",
-        "toe_fl_deg",
+        # Toe was previously degree-based and TODO; switched to mm,
+        # axle-level front + per-corner rear (with LR=RR mirror).
+        "toe_front_mm",
+        "toe_rl_mm",
         "brake_duct_front",
         "brake_duct_rear",
         "corner_weight_fl_kg",

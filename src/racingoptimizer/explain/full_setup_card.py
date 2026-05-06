@@ -121,6 +121,10 @@ _MIRRORED_LEAVES: dict[tuple[str, ...], tuple[tuple[str, ...], str]] = {
         ("Chassis", "LeftRear", "TorsionBarOD"),
         "torsion_bar_od_rl_mm",
     ),
+    ("Chassis", "RightRear", "ToeIn"): (
+        ("Chassis", "LeftRear", "ToeIn"),
+        "toe_rl_mm",
+    ),
 }
 
 

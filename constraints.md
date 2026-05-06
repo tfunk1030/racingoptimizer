@@ -284,15 +284,18 @@ Negative values only (top of wheel inboard). Front spans wider than rear.
 | RR | -1.9 ° | 0.0 ° |
 
 ### Toe
-iRacing exposes toe in mm (per wheel) for the GTPs, not degrees, but the
-constraints loader's "Toe" section is currently degree-based — kept
-TODO until the units mismatch is resolved.
+Per-axle front (single scalar at `Chassis.Front.ToeIn`) and per-corner
+rear (`Chassis.{Left,Right}Rear.ToeIn`) static toe in mm. The
+optimizer trains the front + LR sides; iRacing UI requires LR=RR so
+the renderer mirrors RR via `_MIRRORED_LEAVES`. Bounds per
+Ferraribounds.md (BMWBounds.md just says "infinite", so same envelope
+applies — the optimizer's confidence regime caps over-aggressive
+extrapolation when the corpus has thin variance).
 | corner | min | max |
 | --- | --- | --- |
-| FL | <TODO: units mismatch> ° | <TODO: units mismatch> ° |
-| FR | <TODO: units mismatch> ° | <TODO: units mismatch> ° |
-| RL | <TODO: units mismatch> ° | <TODO: units mismatch> ° |
-| RR | <TODO: units mismatch> ° | <TODO: units mismatch> ° |
+| front | -3.0 mm | 3.0 mm |
+| RL | -2.0 mm | 3.0 mm |
+| RR | -2.0 mm | 3.0 mm |
 
 ### Fuel level
 Race fuel load (L). The iRacing GTP UI lets the user type any value
