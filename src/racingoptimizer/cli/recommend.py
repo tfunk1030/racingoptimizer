@@ -195,11 +195,11 @@ def recommend_cmd(
         # future "2026-05-09"), so they win the sort over today's
         # actual on-target Spa sessions. Legacy files may also carry
         # a different car schema (M4 GT3 vs M Hybrid V8) where
-        # `BrakesDriveUnit.Fuel.FuelLevel` doesn't resolve. Restrict
-        # to the target-track subset; fall back to all sessions only
-        # if the target track has none.
-        target_slug = slugify_track(track.strip().lower()) or track.strip().lower()
-        target_subset = catalog_sessions.filter(pl.col("track") == target_slug)
+        # `BrakesDriveUnit.Fuel.FuelLevel` doesn't resolve. Substring-
+        # match the user-typed track against the catalog (so "spa"
+        # matches stored slug "spa_2024_up"); fall back to all
+        # sessions only if the target track has none.
+        target_subset = _filter_to_target_track(catalog_sessions, track)
         if target_subset.height == 0:
             target_subset = catalog_sessions
         past_setup = _most_recent_setup_for(target_subset)
@@ -608,6 +608,36 @@ def _resolve_car_track_or_exit(
         )
         sys.exit(2)
     return _resolve_car_or_exit(car_or_path), track
+
+
+def _filter_to_target_track(
+    sessions_df: pl.DataFrame, raw_track: str,
+) -> pl.DataFrame:
+    """Return rows of `sessions_df` whose `track` matches `raw_track`.
+
+    Mirrors the substring matching used by `_resolve_track_or_extrapolate`
+    so user input like "spa" lines up with catalog slugs like
+    "spa_2024_up". Returns an empty frame when no track matches; caller
+    decides whether to fall back to the full session set.
+    """
+    raw = raw_track.strip().lower()
+    needle = slugify_track(raw) or raw
+    bare = needle.replace("_", "")
+    available = sorted(set(sessions_df["track"].to_list()))
+    if needle in available:
+        match = needle
+    elif bare in available:
+        match = bare
+    else:
+        candidates = sorted({
+            slug for slug in available
+            if needle in slug or bare in slug.replace("_", "")
+        })
+        if len(candidates) == 1:
+            match = candidates[0]
+        else:
+            return sessions_df.head(0)
+    return sessions_df.filter(pl.col("track") == match)
 
 
 def _most_recent_setup_for(sessions_df: pl.DataFrame) -> dict | str | None:
