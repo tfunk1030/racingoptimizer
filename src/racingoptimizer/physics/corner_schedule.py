@@ -22,16 +22,15 @@ median across whatever (session, lap) rows exist.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import polars as pl
 
 from racingoptimizer.corner import corner_phase_states
 from racingoptimizer.ingest import api as ingest_api
 from racingoptimizer.ingest.paths import resolve_corpus_root
-
 
 # Keys carried in the archetype dict — same order/names as
 # `racingoptimizer.physics.fitter.CORNER_ARCHETYPE_COLUMNS` so the

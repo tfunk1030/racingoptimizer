@@ -38,7 +38,10 @@ from racingoptimizer.ingest.paths import catalog_path, resolve_corpus_root
 from racingoptimizer.physics.baselines import derive_baselines
 from racingoptimizer.physics.exceptions import InsufficientDataError
 from racingoptimizer.physics.fitters import (
-    FitterBase, ForestFitter, GPFitter, RidgeFitter,
+    FitterBase,
+    ForestFitter,
+    GPFitter,
+    RidgeFitter,
 )
 from racingoptimizer.physics.io_log import append_accuracy_log
 from racingoptimizer.physics.model import FitRecord, PhysicsModel

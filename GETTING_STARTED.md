@@ -20,11 +20,11 @@ uv run optimize ./my_session.ibt            # OR drop in any .ibt — auto-detec
 
 The output has two parts:
 
-1. **Engineering briefing** — every parameter the optimizer changed, with the corners it helps, the corners it hurts, and ±1-click sensitivity. The header line tells you the stint mode (race vs quali), fuel load, and conditions (AirTemp, TrackTemp, AirDensity, Wind, Wetness).
+1. **Plain-English briefing** (default) — every parameter that moved, written in handling vocabulary (pitch, roll, understeer, oversteer, turn-in, throttle traction, kerb compliance), grouped by family (PLATFORM / DAMPERS / BALANCE / BRAKES & DRIVETRAIN / AERO). Each change shows what it does (Effect), what it costs (Trade), and the single corner-phase where you'll feel it most. Header gives you mode (race vs quali), fuel load, conditions, and overall confidence. Use `--detailed` to swap to the legacy per-parameter block format with raw score deltas + ±1-click sensitivity.
 2. **Full setup card** — every garage parameter for the car, ready to enter, tagged:
    * `[OPT]` — value the optimizer chose.
    * `[OPT pin]` — pinned to your observed median (the model has no signal to deviate, e.g. you ran the same value every session).
-   * `[OPT mirror]` — value mirrored from the per-axle parameter on the opposite corner (currently only rear coil spring rate, since iRacing requires LR=RR).
+   * `[OPT mirror]` — value mirrored from the per-axle parameter on the opposite corner. iRacing UI requires LR=RR for: rear coil spring rate, front + rear torsion bar turns, front + rear torsion bar OD, rear toe-in.
    * `[past]` — copied from your most recent session (no constraint bounds yet).
    * `[readout]` — calculated by iRacing using your last session (you don't enter this).
    * `[predicted]` — calculated readout the optimizer projects under the new setup (e.g. predicted static ride heights at the new perch / pushrod / spring values; this is what iRacing will display *after* you enter the `[OPT]` numbers).
@@ -39,21 +39,34 @@ uv run optimize status cadillac           # what does the model know about this 
 ## Useful options on `optimize <car> <track>`
 
 * `--json` — machine-readable JSON instead of text.
+* `--detailed` — legacy per-parameter block format (Helps/Hurts with score deltas, ±1-click sensitivity, evidence) instead of the default plain-English narrative. Useful for engineering drill-downs.
 * `--wing 17` — pin the rear wing angle.
-* `--fuel 8` — pin race-fuel level (L). Race default is the past-session value (~58 L on BMW M Hybrid V8); quali stints are user-input depending on track length (commonly 5..15 L for 3 laps + reserve). The optimizer treats fuel as a fittable input so a low pin influences ride-height and balance predictions.
+* `--fuel 8` — pin race-fuel level (L). Race default is the past-session value at the target track (~58 L on BMW M Hybrid V8); quali stints are user-input depending on track length (commonly 5..15 L for 3 laps + reserve). The optimizer treats fuel as a fittable input so a low pin influences ride-height and balance predictions.
 * `--quali` — quali-stint mode: phase weights tilt toward outright single-lap pace (more aero efficiency, more grip utilisation, less platform conservatism). Pair with `--fuel N` to pin the matching low fuel load — the optimizer will not auto-pick a quali fuel.
+* `--explore N` — widen the empirical envelope by N% of each parameter's constraint span on each side, clipped to legal bounds. Lets the optimizer probe values outside what you've actually driven; recommendations in the widened territory carry weaker confidence by design. Try 5–10 for modest exploration, 20–30 for aggressive "what if I tried something different".
 * `--wetness 0.0` — override conditions (also `--air-temp`, `--track-temp`, `--wind`). Wet track triggers `wet_mode` baselines + phase weights automatically.
 * `--no-cache` — refit from scratch (use after changing `constraints.md` or recovering from a stale pickle).
 * `--corpus-root ./somewhere` — non-default corpus location.
+
+## `optimize learn` flags
+
+* `--reparse` — force re-processing of already-ingested sessions. Use after a parser change to refresh stale catalog fields (e.g. `recorded_at` after the filename-derived parser fix). Normal `learn` skips sessions whose `status="ok"` to avoid redundant work.
+* `--corpus-root ./somewhere` — same as recommend.
 
 ## Stint modes
 
 The optimizer has two stint objectives:
 
-* **Race** (default) — phase weights favor platform consistency, aero efficiency averaged across many laps, conservative grip utilisation. Fuel defaults to the past-session value (typically 58 L on the BMW).
+* **Race** (default) — phase weights favor platform consistency, aero efficiency averaged across many laps, conservative grip utilisation. Fuel auto-pinned to your most-recent past session at the target track (typically ~58 L on the BMW); you'll see a `Race fuel auto-pinned to past-session value: X L` notice on stderr explaining the pick.
 * **Quali** (`--quali --fuel N`) — phase weights tilt toward outright single-lap pace. You must pin the fuel load explicitly (per-track choice; longer tracks need more for 3 laps + reserve). Wet-mode still applies if conditions warrant it (a wet quali = wet baselines + quali phase weights).
 
 The Stint header on the briefing tells you which mode + fuel produced the recommendation.
+
+## Per-car vs cross-car
+
+`bmw`, `cadillac`, `ferrari` use the per-car path: one model trained on every session of that car across every track, with corner-geometry archetype features that let the same model score any track. Ferrari at a track it's never been driven on (e.g. Spa) borrows the corner schedule from BMW/Cadillac data on that track — the model is still Ferrari, only the geometry is borrowed.
+
+`acura` and `porsche` use the per-(car, track) path: one model per (car, track) pair, with donor-track extrapolation when the target is unseen.
 
 ## What lives where
 

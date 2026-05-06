@@ -1,5 +1,79 @@
 # VISION.md Compliance Report
 
+> **Currency note (2026-05-06):** the per-clause scorecard below is from
+> the 2026-05-01 second-pass audit. The summary at the top of this file
+> has been refreshed with every change landed since (per-car v4 enabled
+> for BMW/Ferrari, narrative renderer, race-fuel auto-pin, --explore,
+> --reparse, --detailed, picker fix, torsion bar L/R symmetry, toe-in
+> mm, BMW heave step, DE budget bump, wet/wind wiring, etc.). The
+> per-clause scorecard sections preserve the historical evidence.
+
+## 2026-05-06 follow-up audit (post-2026-05-01 second-pass)
+
+Since the second-pass audit, the following VISION clauses gained
+materially stronger evidence or had follow-up work landed. Every
+change below sits on `master` as of `7e3c172` (2026-05-06).
+
+### §1 Data Ingestion
+- Filename-derived `recorded_at` (`ingest/parser.py::_filename_recorded_at`) replaces the YAML's `WeekendInfo.WeekendOptions.Date` which was iRacing's scheduled-event date and identical across an entire weekend, breaking the most-recent-session picker. YAML fallback retained for legacy filenames.
+- `optimize learn --reparse` flag (`ingest/cli.py`, `ingest/api.py`) forces re-processing of `status="ok"` sessions after parser changes.
+- `api.sessions()` DataFrame now exposes the `ingested_at` column so picker tiebreaker code in `cli/recommend.py::_most_recent_setup_for` actually has the column to sort on.
+
+### §2 Corner-Phase Decomposition
+- `_MIRRORED_LEAVES` in the renderer covers iRacing's required-symmetric pairs: rear coil spring rate, front + rear torsion bar turns, front + rear torsion bar OD, rear toe-in. The optimizer trains the LEFT side only; the renderer mirrors the right.
+
+### §3 Physics Model
+- BMW per-car path enabled (`PER_CAR_MODEL_CARS` = `{"cadillac", "bmw", "ferrari"}`).
+- Ferrari per-car ontology lands the architecture's biggest divergence: indexed heave springs (front 0–8 / rear 0–9), 4-corner torsion bars, ARB letter labels (Disconnected/A..E), `Dampers.<Corner>Damper.*` paths, front+rear diffs, wider damper range (0–40), in `physics/ontology.py::_FERRARI_OVERRIDES`.
+- Cross-car schedule fallback (`cli/recommend.py::_maybe_borrow_cross_car_track`) lets Ferrari@Spa work even though Ferrari has no Spa IBTs — borrows corner geometry from BMW/Cadillac on that track. Fitter still trains on Ferrari sessions only.
+- Toe-in modeled in mm (`Chassis.Front.ToeIn` axle-level + `Chassis.<Rear>.ToeIn` per-corner with LR=RR mirror). The "toe units mismatch TODO" is closed.
+- Per-corner damper override fan-out (`constraints/loader.py`) lets a single per-car line apply to all 4 corners without writing 20 lines.
+- Per-corner override syntax (`Torsion bar OD FL: 0 - 18`) for non-fan-out cases.
+
+### §4 Setup Evaluation
+- `physics/quali_mode.py::quali_phase_weights` overlay tilts toward outright single-lap pace (grip × 1.15, aero_eff × 1.20, platform × 0.55). Composes with wet-mode in `_conditions_adjusted_baselines`.
+- DE budget bumped from `(maxiter=5, popsize=10)` to `(15, 20)` for tighter polish inside the trust radius.
+
+### §5 Optimization
+- `_pin_or_trust_bounds` denominator switched from constraint span to empirical training range (`physics/recommend.py:417`). Wide legal envelopes per BMWBounds.md no longer mask real corpus variation as "near constant" (regression test `test_no_pin_when_empirical_range_dominates_wide_constraint`).
+- `target_observed` clipped to constraint envelope BEFORE the empirical-window math, so a user constraint pin (`--fuel 8` collapses to `(8, 8)`) outside the in-corpus values doesn't produce an inverted bound that crashes DE (`test_user_pin_outside_target_observed_does_not_invert`).
+- `--explore N` flag widens the empirical envelope by N% of constraint span on each side. Lets the optimizer probe outside corpus density; recommendations in widened territory carry weaker confidence.
+- Race-mode auto-pin: without `--quali` AND without `--fuel`, the CLI anchors fuel to the most-recent past-session value at the target track. Substring-matches the user-typed track to catalog slug.
+
+### §6 Learning
+- `physics/io_log::_fit_quality_from_noise_ratio` reformulated as `signal/(signal+cv_residual)` instead of `max(0, 1 - noise_ratio)`. The old formula saturated to 0 for Stage-3 joint fits at small per-fitter `n_samples`, killing the §6 "track accuracy improves" surface in `optimize status`.
+- `_data_density_regime` renamed from `_coverage_regime` with docstring distinguishing it from `Confidence.regime` (residual-driven). The status table's `regime` column is now explicitly the data-density regime, not the fit-quality regime.
+- `append_accuracy_log` failures emit `RuntimeWarning` instead of being silently swallowed in `physics/fitter.py`.
+- Per-car model cache key folds: session_ids, ontology fingerprint with `json_path`, `constraints.md` content hash, `FITTERS_LAYOUT_VERSION`, feature-schema version. Editing constraints / renaming a fitter module / fixing an ontology path now invalidates stale pickles correctly.
+
+### §7 Output
+- **Plain-English narrative is now the DEFAULT briefing** (`explain/narrative.py`). Every parameter that moved gets a 2–3 line summary in handling vocabulary (pitch / roll / understeer / oversteer / aero stall / bottoming / turn-in / throttle traction). `--detailed` brings back the legacy block format with score deltas + ±1-click sensitivity for engineering drill-down + the `setup-justifier` validator agent.
+- New setup-card tags: `[OPT mirror]` for per-axle symmetric pairs, `[predicted]` for setup-readout fitter projections at the new setup vector. Replaces stale `[readout]` for static ride heights.
+- `predict_setup_readouts` method on PhysicsModel evaluates setup-readout ridge regressors at the recommended setup vector.
+- Conditions header carries both `AirTemp` and `TrackTemp` — the prior version mislabeled track surface temp as ambient.
+- JSON renderer emits all 12 EnvironmentFrame channels (was 5).
+- BMW heave spring step changed to 10 N/mm per BMWBounds.md (was 5).
+- Torsion bar turns render at 3 decimals (was 2 — flattening to `0.10` instead of `0.105`).
+
+### §8 User Experience
+- New CLI flags on `optimize <car> <track>`: `--quali`, `--fuel N`, `--explore N`, `--detailed`. `--reparse` on `optimize learn`.
+
+### §10 Weather & Track Conditions
+- `physics/wet_mode.py` (`classify_conditions / wet_baselines / wet_phase_weights`) **wired into the score path** via `physics/score._conditions_adjusted_baselines`. Was previously dead code.
+- `physics/wind.py::aero_wind_modifier` wired into `aero_eff` as a magnitude downforce penalty (treats `wind_vel_ms` as a tailwind worst case). Directional decomposition still pending — needs per-corner heading data.
+
+### Cross-cutting
+- `EnvironmentFrame` exposes all 12 channels in JSON renderer (was dropping 7).
+- Pin warnings + clamp warnings continue to surface in the briefing's `Warnings:` section.
+
+### Known regressions / gaps (still open)
+- `optimize <car> <track> --json` — JSON test fails because `[saved to ...]` stderr line bleeds into stdout via Click's `CliRunner.mix_stderr`. Text smoke test passes (the merge gate).
+- 4 corner_weight targets still `<TODO>` in `constraints.md`; render as `[past]` and appear in `untrained_parameters`.
+- Wind directional decomposition deferred (needs per-corner heading data).
+- Driver-input output channels (throttle, brake, damper velocity) plateau at fit_quality ~0.50 (signal == noise) — structural ceiling for channels driver-controlled more than setup-controlled.
+
+---
+
 > **Superseded audit note (2026-05-01):** this file contains historical
 > compliance claims and some stale green-only assertions. Use
 > `docs/VISION_ADHERENCE_REPORT.md` as the current post-parameter-wiring and

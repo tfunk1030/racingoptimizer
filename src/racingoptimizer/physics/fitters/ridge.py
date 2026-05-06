@@ -31,7 +31,6 @@ from sklearn.linear_model import Ridge
 
 from racingoptimizer.physics.fitters.base import FitterBase
 
-
 # Ridge regularisation strength. Small values (favour fit) suit setup-
 # readout targets because the underlying mapping is deterministic — we
 # expect the corpus-observed (setup → readout) pairs to fall almost

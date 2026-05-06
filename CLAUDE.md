@@ -12,13 +12,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 uv venv && uv pip install -e ".[dev]"
 
 uv run optimize learn ./ibtfiles            # ingest a directory of .ibt files
+uv run optimize learn ./ibtfiles --reparse  # force re-parse already-ok sessions
 uv run optimize bmw sebring                 # recommend by (car, track) — race default
 uv run optimize bmw spa --quali --fuel 8    # quali stint, 8 L pinned
+uv run optimize bmw spa --explore 10        # widen empirical envelope by 10% per side
+uv run optimize bmw spa --detailed          # legacy per-param block format (vs default narrative)
 uv run optimize ./my_session.ibt            # recommend by IBT path (auto-detect)
 uv run optimize compare a.ibt b.ibt         # diff two setups per (corner, phase)
 uv run optimize status bmw                  # coverage + fit-quality trend
 
-uv run pytest -q                            # full suite (568 tests, ~15 min)
+uv run pytest -q                            # full suite (~15 min)
 uv run pytest -q -m "not slow"              # fast suite (~2 min)
 uv run ruff check src tests                 # lint (must stay clean)
 ```
@@ -29,8 +32,8 @@ VISION.md is decomposed into six slices plus three cross-cutting modules. Status
 
 **Two recommend code paths.** `optimize <car> <track>` routes by `PER_CAR_MODEL_CARS` (`src/racingoptimizer/cli/recommend.py:54`):
 
-- **v4 (per-car, track-agnostic)** — currently `{"cadillac", "bmw"}`. `fit_per_car()` pools every session for the car across every track into one fitter; cache key folds the session-id set + ontology fingerprint. Cache file: `corpus/models/<car>__per-car__<digest>.pickle`. Adding a car requires (a) BMWBounds/CadillacBounds-style per-car overrides in `constraints.md`, (b) the car key added to `PER_CAR_MODEL_CARS`, (c) at least one ingested session on the target track for corner-schedule extraction.
-- **v3 (per-(car, track))** — every other car. Trains per pair, uses donor-track extrapolation when target is unseen.
+- **v4 (per-car, track-agnostic)** — currently `{"cadillac", "bmw", "ferrari"}`. `fit_per_car()` pools every session for the car across every track into one fitter; cache file `corpus/models/<car>__per-car__<digest>.pickle`. Adding a car requires (a) per-car constraint overrides in `constraints.md` (BMWBounds.md / Cadillacbounds.md / Ferraribounds.md as the source of truth), (b) car key added to `PER_CAR_MODEL_CARS`, (c) for tracks the car has never been driven on, the CLI's cross-car schedule fallback (`_maybe_borrow_cross_car_track`) borrows corner geometry from any other car's sessions on that track — so Ferrari@Spa works even though Ferrari has no Spa IBTs.
+- **v3 (per-(car, track))** — Acura + Porsche. Trains per pair, uses donor-track extrapolation when target is unseen.
 
 | Slice | Module | Code merged | Per-car verification scope |
 |---|---|---|---|
@@ -62,9 +65,19 @@ Cross-cutting modules (master-plan §2) — all merged:
 Two orthogonal axes feed `physics.score._conditions_adjusted_baselines`:
 
 - **Dry vs wet** (VISION §10): `physics.wet_mode.classify_conditions(env)` returns `dry / damp / wet / full_rain` from `track_wetness` + `weather_declared_wet` + `precip_type`. Non-dry regimes swap baselines (lower max grip + aero baseline, higher wheelspin tolerance) **and** phase weights (less aero_eff, more platform + grip).
-- **Race vs quali** (VISION §4 / §5): `--quali` swaps to `physics.quali_mode.quali_phase_weights` — `grip` x1.15, `aero_eff` x1.20, `platform` x0.55 (re-normalised so each phase still sums to 1.0). Quali takes precedence over the wet phase-weight pick (a wet quali still wants outright pace, just on a wet-adjusted baseline). The user must pin `--fuel N` alongside `--quali` (no auto fuel; quali fuel is per-track).
+- **Race vs quali** (VISION §4 / §5): `--quali` swaps to `physics.quali_mode.quali_phase_weights` — `grip` x1.15, `aero_eff` x1.20, `platform` x0.55 (re-normalised so each phase still sums to 1.0). Quali takes precedence over the wet phase-weight pick (a wet quali still wants outright pace on a wet-adjusted baseline). Quali requires `--fuel N` (no auto fuel; quali fuel is per-track).
 
-Wind enters `physics.score.aero_eff` via `physics.wind.aero_wind_modifier` as a *magnitude* downforce penalty (treats `wind_vel_ms` as a tailwind worst case). Directional decomposition is documented as Stage 5 polish — needs per-corner heading data the corner schedule doesn't carry yet.
+**Race-mode fuel auto-pin** (`cli/recommend.py:160+`): without `--quali` AND without `--fuel`, the CLI anchors `fuel_level_l` to the most-recent past-session value for the target track (typically ~58 L on the BMW M Hybrid V8). Substring-matches the user-typed track to the catalog slug (so `optimize bmw spa` finds `spa_2024_up`); falls back to all-car sessions only when the target track has none. Without this, the optimizer would treat fuel as a freely-fittable input and minimize mass for one-lap pace — recommending fuel loads that won't cover a race.
+
+Wind enters `physics.score.aero_eff` via `physics.wind.aero_wind_modifier` as a *magnitude* downforce penalty (treats `wind_vel_ms` as a tailwind worst case). Directional decomposition is deferred per `physics/wind.py` docstring — needs per-corner heading data the corner schedule doesn't carry yet.
+
+## Trust radius + `--explore N` (`physics/recommend.py::_pin_or_trust_bounds`)
+
+Per-car DE search is clipped to `[min(target_observed), max(target_observed)]` — never extrapolates outside the values the driver has actually tried on the target track (VISION §3 honesty rule). `--explore N` widens that envelope by N% of each parameter's constraint span on each side, clipped to legal bounds. `0` (default) is strict empirical; 5–10 is modest exploration; 20–30 is aggressive. Recommendations landing in the widened territory carry weaker confidence by design.
+
+Pin denominator uses the **empirical training range** (max−min observed across all pooled sessions), not the constraint span. Wide legal envelopes per BMWBounds.md (e.g. heave 0..900 N/mm) would otherwise mask real corpus variation as "near constant" and pin everything (regression test in `tests/physics/test_pin_near_constant.py`). Defensive guard: `target_observed` is clipped to the constraint envelope BEFORE the empirical-window math, so a user constraint pin (e.g. `--fuel 8` collapses to `(8, 8)`) outside the in-corpus values doesn't produce an inverted bound that crashes DE.
+
+DE budget: `maxiter=15, popsize=20` (bumped from 5/10 on 2026-05-06). ~15 min per run on the 47-param BMW per-car search.
 
 ## Per-car model cache key (`cli/recommend.py::_model_cache_parts`)
 
@@ -75,6 +88,14 @@ Cache files at `corpus/models/<car>__per-car__<digest>.pickle` (or `<car>__<trac
 3. `constraints.md` content hash — bounds are baked into the pickle at fit time; editing them must invalidate the cache so DE doesn't search against stale bounds.
 4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`).
 5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4).
+
+## IBT picker fields (`ingest/parser.py::_filename_recorded_at`)
+
+`recorded_at` is parsed from the IBT filename (`<car>_<track> YYYY-MM-DD HH-MM-SS.ibt`), with the YAML's `WeekendInfo.WeekendOptions.Date` as fallback. The YAML field is iRacing's SCHEDULED race date for series events — identical across an entire weekend — so using it as a per-session timestamp made the most-recent-setup picker pick arbitrary winners. Filename-derived datetimes are unique per session.
+
+Already-ingested sessions short-circuit on `status="ok"`. Use `optimize learn --reparse` to force re-processing after a parser change to refresh stale `recorded_at` / setup fields without manual catalog surgery.
+
+The `_most_recent_setup_for(sessions_df)` picker sorts by `recorded_at desc`, with `ingested_at desc` as tiebreaker. Picker also drives the `(was X)` deltas in the renderer — wrong picker = misleading deltas.
 
 ## Pin denominator (`physics/recommend.py::_pin_or_trust_bounds`)
 
@@ -90,28 +111,60 @@ Every garage line carries one tag. The set is closed:
 |---|---|
 | `[OPT]` | Optimizer recommendation, post-clamp, rounded to iRacing UI step. |
 | `[OPT pin]` | Optimizer pinned to observed median (no per-session variance to learn from). |
-| `[OPT mirror]` | Per-axle parameter mirrored onto the symmetric corner (currently only rear coil spring rate; iRacing requires LR=RR). |
+| `[OPT mirror]` | Per-axle parameter mirrored onto the symmetric corner. iRacing UI requires LR=RR for: rear coil spring rate, front + rear torsion bar turns, front + rear torsion bar OD, rear toe-in. |
 | `[past]` | Most-recent session value; no constraint bounds yet to optimize against. |
 | `[readout]` | iRacing-calculated, past-session value. Driver cannot type these. |
 | `[predicted]` | Same readout but evaluated by `PhysicsModel.predict_setup_readouts()` at the new setup vector — what iRacing will display after the user enters the `[OPT]` values. |
 
 Static ride heights, corner weights, deflections, and the `AeroCalculator` block are all readouts; the `[predicted]` path covers `setup_static_*_ride_height_mm` and falls back to `[readout]` for the rest.
 
-Per-axle mirroring lives in `_MIRRORED_LEAVES`; predicted-readout path mapping in `_PREDICTED_READOUT_PATHS`. Add to either dict to extend coverage.
+Per-axle mirroring lives in `_MIRRORED_LEAVES` (5 entries today); predicted-readout path mapping in `_PREDICTED_READOUT_PATHS`. Add to either dict to extend coverage. The renderer also snaps `[OPT]` numeric values to either the parameter's uniform `step` OR the non-uniform `discrete_values` list (torsion bar OD's 14 diameters; clutch plates {2, 4, 6}).
+
+## Plain-English narrative (`explain/narrative.py`)
+
+DEFAULT briefing renderer since 2026-05-06. Replaces the legacy per-parameter `Helps:`/`Hurts:`/score-delta blocks with a 2–3 line summary per change in handling vocabulary (pitch / roll / understeer / oversteer / aero stall / bottoming / turn-in / throttle traction). Per change:
+
+```
+Front heave spring: 60 -> 50 N/mm  (softens)
+  Effect: More front compliance over kerbs; better front grip
+    retention through bumpy entries; smoother brake-release.
+  Trade:  More pitch dive under heavy braking; slower turn-in;
+    aero platform less stable on Kemmel compression.
+  Watch most: T9 mid-corner
+```
+
+OVERALL DIRECTION at the top aggregates moves by THEME (perches + pushrods both → "ride height"; spring_rate + heave_spring → "platform stiffness"), with `(mixed direction)` annotation when a theme has both up and down moves.
+
+`--detailed` reverts to the legacy block format for engineering drill-down + the `setup-justifier` validator agent. Translation tables: `_DIRECTION_VERB` (per-row terse verb), `_OVERALL_FRAGMENT` (fluent OVERALL phrase per theme), `_CAR_FEEL` (Effect + Trade per `(family, mode, axis, direction)`). New parameter families need entries in all three (and a label in `_PARAM_LABEL`) to render the full vocabulary; missing families fall through to a phase-themed `Helps:`/`Watch:` corner-list line.
+
+Output is ASCII-only (Windows cp1252 console can't encode Unicode arrows / em-dashes). Use `->`, `--`, `!`, `+/-`, etc.
 
 Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/`. Read the active slice's spec before touching its code.
 
-`constraints.md` covers the bounded subset (wing, tyre pressure, heave spring/slider, static ride heights, plus today's additions: BMW per-car overrides per BMWBounds.md, fuel level, ARB size F/R, diff coast/drive ramps, diff clutch friction plates). Corner weights, brake ducts, throttle/brake mapping, and toe-in are still `<TODO: from iRacing UI>` placeholders. Slice E's `fit` gracefully degrades — lists CE-gated unbounded parameters in `untrained_parameters` and does not refuse to run.
+`constraints.md` covers most legal-range parameters:
+- Wing, tyre pressure, heave spring/slider, static ride heights (shared defaults)
+- BMW per-car overrides per BMWBounds.md (heave 0–900, third 0–900, coil 105–280, ±100 mm rear perches)
+- Cadillac, Ferrari, Acura, Porsche per-car overrides similarly grounded in their respective bounds files
+- Fuel level (1–100 L, fittable, with race auto-pin in CLI)
+- ARB Size front + rear (categorical, BMW = Disconnect/Soft/Medium/Stiff, Ferrari = Disconnected/A..E)
+- Diff coast/drive ramps + clutch friction plates (categorical / discrete numeric)
+- Front diff preload (Ferrari only; -50..+50 Nm)
+- Toe-in, mm-based (front axle scalar, rear per-corner with LR=RR mirror)
+- Per-corner damper bounds with per-car-override fan-out (Ferrari overrides global 0–11 to 0–40)
+- Per-corner torsion bar turns + OD (BMW/Cadillac front; Ferrari all 4)
 
-Categorical params (ARB size, diff coast/drive ramps, clutch plates) are encoded as ordinal indices via `ParameterSpec.choices`; the renderer maps the rounded index back to the label. Non-uniform numeric discrete sets (torsion bar OD's 14 diameters, clutch's `{2, 4, 6}`) use `ParameterSpec.discrete_values` and snap to the nearest legal value at render time.
+Still `<TODO: from iRacing UI>`: corner weights (4 of them) and brake duct openings. Slice E's `fit` gracefully degrades — lists CE-gated unbounded parameters in `untrained_parameters` and does not refuse to run.
+
+Categorical params (ARB size, diff coast/drive ramps) are encoded as ordinal indices via `ParameterSpec.choices`; the renderer maps the rounded index back to the label. Non-uniform numeric discrete sets (torsion bar OD's 14 diameters on BMW/Cadillac; clutch's `{2, 4, 6}`) use `ParameterSpec.discrete_values` and snap to the nearest legal value at render time.
 
 **Known regressions / gaps:**
 
 - `optimize <car> <track> --json` emits valid JSON to stdout, then a trailing `\n[saved to recommendations\<...>.txt]` to stderr. Click's `CliRunner` mixes stderr into `result.output` by default, so `tests/cli/test_per_car_smoke.py::test_recommend_per_car_json` fails JSON-decoding the combined stream. The text smoke test (the merge gate) passes. Fix: either suppress the auto-save stderr line under `--json`, or set `mix_stderr=False` in the test.
-- Toe-in still TODO at `constraints.md:235` — units mismatch (iRacing UI is mm per wheel, the loader expects degrees).
 - Corner weights still `<TODO>` in `constraints.md`; render as `[past]` and appear in `untrained_parameters`.
 - Wind decomposition uses tailwind-worst-case magnitude only; per-corner directional headwind/crosswind correction needs heading data the corner schedule doesn't carry yet (deferred per `physics/wind.py` docstring).
-- `fuel_level_l` is fittable per-car but BMW corpus has thin fuel variance (most sessions ran race 58 L); `predict_setup_readouts` learns whatever pattern exists in the corpus, which may not be physically pure fuel→RH.
+- `fuel_level_l` is fittable but most cars' corpora have thin fuel variance — `predict_setup_readouts` learns whatever pattern exists, which may not be physically pure fuel→RH.
+- Driver-input output channels (throttle, brake, damper velocity) plateau at fit_quality ~0.50 (signal == noise). Structural ceiling — the model can't fully resolve channels that depend more on driver input than setup.
+- BMW corpus is Sebring-dominated (37/53 sessions). Spa-specific predictions (11 sessions) are weaker than Sebring's by design.
 
 ## Project automations (`.claude/`)
 

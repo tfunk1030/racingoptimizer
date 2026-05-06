@@ -17,6 +17,10 @@ All six VISION slices and three cross-cutting modules are merged. Each
 slice has per-car test coverage (BMW M Hybrid V8, Porsche 963, Cadillac
 V-Series.R, Acura ARX-06, Ferrari 499P).
 
+**Per-car v4 path** (track-agnostic model + cross-car schedule fallback):
+BMW, Cadillac, Ferrari. Acura + Porsche stay on the per-(car, track) v3
+path until each is validated.
+
 | Slice | Module | Per-car verification |
 |---|---|---|
 | A — IBT ingestion | `racingoptimizer.ingest` | car/track detect ✓ all 5; per-car parser/end-to-end ✓ all 5 (`tests/test_parser_per_car.py`) |

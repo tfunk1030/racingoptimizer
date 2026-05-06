@@ -37,7 +37,6 @@ import polars as pl
 from racingoptimizer.ingest import api as ingest_api
 from racingoptimizer.ingest.paths import resolve_corpus_root
 
-
 # Channels emitted as session-invariant columns. Same naming convention as
 # the setup readouts (`setup_aero_*_rh_at_speed_mm`) but the values are
 # pulled from real telemetry rather than the iRacing calculator. Order

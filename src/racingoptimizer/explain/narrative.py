@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from racingoptimizer.corner import Phase
+from racingoptimizer.corner import CornerPhaseKey, Phase
 from racingoptimizer.explain.justification import (
     CornerPhaseImpact,
     SetupJustification,
@@ -667,6 +667,7 @@ def render_narrative(
     quali: bool = False,
     pinned: dict[str, float] | None = None,
     warnings: list[str] | None = None,
+    schedule: list | None = None,
 ) -> str:
     """Plain-English briefing -- every parameter that moved, with helps + watch."""
     pinned = pinned or {}
@@ -674,6 +675,10 @@ def render_narrative(
     onto = ontology_for(model.car)
 
     past_value = _resolve_past_values(justifications, onto, most_recent_setup)
+    # Telemetry-evidence cache: predicted output-channel values at the
+    # past-setup counterfactual for each (parameter, dominant Helps
+    # cpkey) tuple. Computed lazily inside _render_change.
+    rec_setup = {name: float(v) for name, (v, _c) in rec.parameters.items()}
 
     lines: list[str] = []
     lines.append("=" * 72)
@@ -718,13 +723,19 @@ def render_narrative(
             continue
         lines.append(f"-- {group_label} --")
         for j in sorted(by_group[group_label], key=_param_sort_key):
-            lines.extend(_render_change(j, past_value.get(j.parameter), onto))
+            lines.extend(_render_change(
+                j, past_value.get(j.parameter), onto,
+                model=model, rec_setup=rec_setup, env=rec.env, schedule=schedule,
+            ))
             lines.append("")
 
     if "OTHER" in by_group:
         lines.append("-- OTHER --")
         for j in sorted(by_group["OTHER"], key=_param_sort_key):
-            lines.extend(_render_change(j, past_value.get(j.parameter), onto))
+            lines.extend(_render_change(
+                j, past_value.get(j.parameter), onto,
+                model=model, rec_setup=rec_setup, env=rec.env, schedule=schedule,
+            ))
             lines.append("")
 
     # ---- NOTES (pins / sparse-corpus warnings / untrained / clamp) ----
@@ -745,6 +756,11 @@ def _render_change(
     j: SetupJustification,
     past: float | None,
     onto: dict[str, ParameterSpec],
+    *,
+    model: PhysicsModel | None = None,
+    rec_setup: dict[str, float] | None = None,
+    env=None,
+    schedule: list | None = None,
 ) -> list[str]:
     spec = onto.get(j.parameter)
     label = _PARAM_LABEL.get(j.parameter, _humanize(j.parameter))
@@ -754,6 +770,18 @@ def _render_change(
 
     change_str = _format_value_delta(j, spec, past)
     body: list[str] = [f"{label}: {change_str}  ({direction})"]
+
+    # Telemetry-backed "Why" line. Queries the model for what the
+    # dominant evidence channel for this parameter family read at the
+    # past setup, with a concrete number from the corpus. Only fires
+    # when the call site supplied model + rec_setup + env (i.e.
+    # full-fledged briefing, not unit-test scaffolding).
+    if model is not None and rec_setup is not None and env is not None and past is not None:
+        why = _telemetry_why(
+            j, family, past, model, rec_setup, env, schedule,
+        )
+        if why:
+            body.append(f"  Why:    {why}")
 
     # Car-feel narrative: Effect + Trade in handling vocabulary
     # (pitch / roll / understeer / oversteer / aero stall / bottoming
@@ -781,6 +809,204 @@ def _render_change(
         if not helps and not hurts:
             body.append("  (no per-corner trade-off -- model held this at training baseline)")
     return body
+
+
+# ---------------------------------------------------------------------------
+# Telemetry-evidence Why line
+# ---------------------------------------------------------------------------
+
+
+# Per-(family[, axis]) ordered list of (channel, friendly_label, unit,
+# threshold_hint). The first channel whose past-setup prediction is
+# numeric (not None) seeds the Why line. Threshold hint adds a brief
+# qualitative anchor when the value is in a known concerning range.
+_EVIDENCE_CHANNELS: dict[tuple, list[tuple[str, str, str, str]]] = {
+    ("heave_spring", "front"): [
+        ("lf_shock_defl_p99_mm", "front-left shock peak compression", "mm", ""),
+        ("setup_static_lf_ride_height_mm", "front static ride height", "mm", ""),
+        ("understeer_angle_mean_rad", "mid-corner understeer angle", "rad", ""),
+    ],
+    ("torsion_bar", "front"): [
+        ("lf_shock_defl_p99_mm", "front-left shock peak compression", "mm", ""),
+        ("understeer_angle_mean_rad", "mid-corner understeer angle", "rad", ""),
+    ],
+    ("torsion_bar", "rear"): [
+        ("lr_shock_defl_p99_mm", "rear-left shock peak compression", "mm", ""),
+    ],
+    ("spring_rate", "rear"): [
+        ("lr_shock_defl_p99_mm", "rear-left shock peak compression", "mm", ""),
+        ("setup_static_lr_ride_height_mm", "rear static ride height", "mm", ""),
+        ("dynamic_rear_rh_at_speed_mm", "rear ride height at speed", "mm", ""),
+    ],
+    ("spring_rate", "rear-third"): [
+        ("dynamic_rear_rh_at_speed_mm", "rear ride height at speed", "mm", ""),
+        ("lr_shock_defl_p99_mm", "rear shock peak compression", "mm", ""),
+    ],
+    ("perch_offset", "front"): [
+        ("setup_static_lf_ride_height_mm", "front static ride height", "mm", ""),
+        ("dynamic_front_rh_at_speed_mm", "front ride height at speed", "mm", ""),
+    ],
+    ("perch_offset", "rear"): [
+        ("setup_static_lr_ride_height_mm", "rear static ride height", "mm", ""),
+        ("dynamic_rear_rh_at_speed_mm", "rear ride height at speed", "mm", ""),
+    ],
+    ("pushrod", "front"): [
+        ("setup_static_lf_ride_height_mm", "front static ride height", "mm", ""),
+    ],
+    ("pushrod", "rear"): [
+        ("setup_static_lr_ride_height_mm", "rear static ride height", "mm", ""),
+    ],
+    ("damper", "front"): [
+        ("damper_velocity_p99_mms", "front damper peak velocity", "mm/s", ""),
+        ("lf_shock_defl_p99_mm", "front-left shock peak compression", "mm", ""),
+    ],
+    ("damper", "rear"): [
+        ("damper_velocity_p99_mms", "rear damper peak velocity", "mm/s", ""),
+        ("lr_shock_defl_p99_mm", "rear-left shock peak compression", "mm", ""),
+    ],
+    ("arb", "front"): [
+        ("understeer_angle_mean_rad", "mid-corner understeer angle", "rad", ""),
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+    ],
+    ("arb", "rear"): [
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+        ("throttle_max", "throttle application", "", ""),
+    ],
+    ("camber", "front"): [
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+        ("understeer_angle_mean_rad", "understeer angle", "rad", ""),
+    ],
+    ("camber", "rear"): [
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+        ("throttle_max", "throttle on exit", "", ""),
+    ],
+    ("camber", "toe-front"): [
+        ("steering_max_rad", "peak steering input", "rad", ""),
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+    ],
+    ("camber", "toe-rear"): [
+        ("understeer_angle_mean_rad", "understeer angle", "rad", ""),
+    ],
+    ("rear_wing", None): [
+        ("dynamic_rear_rh_at_speed_mm", "rear ride height at speed", "mm", ""),
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+    ],
+    ("tyre_pressure", None): [
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+    ],
+    ("brake_bias", None): [
+        ("brake_max", "peak brake pressure", "", ""),
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+    ],
+    ("diff", "preload"): [
+        ("throttle_max", "throttle application on exit", "", ""),
+        ("accel_lat_g_max", "peak lateral G", "g", ""),
+    ],
+    ("diff", "ramps"): [
+        ("throttle_max", "throttle application on exit", "", ""),
+    ],
+    ("diff", "plates"): [
+        ("throttle_max", "throttle application on exit", "", ""),
+    ],
+    ("fuel", None): [
+        ("setup_static_lf_ride_height_mm", "front static ride height", "mm", ""),
+        ("setup_static_lr_ride_height_mm", "rear static ride height", "mm", ""),
+    ],
+}
+
+
+def _telemetry_why(
+    j: SetupJustification,
+    family: str,
+    past_param_value: float,
+    model: PhysicsModel,
+    rec_setup: dict[str, float],
+    env,
+    schedule: list | None,
+) -> str:
+    """Predict telemetry channel value at the parameter's past setup.
+
+    Builds a counterfactual where every parameter is at the optimised
+    value EXCEPT the one in question — that one stays at the past
+    value. Queries the model at the dominant Helps corner-phase and
+    reports the value of the family's primary evidence channel.
+    Reads as: "at T11 mid-corner, predicted front shock p99 was 17.4 mm
+    -- close to bottoming."
+    """
+    name = j.parameter
+    axis = _param_axis(name)
+    sub = _param_subtype(family, name)
+
+    # Select the evidence channel list. Try most-specific match first.
+    channels: list[tuple[str, str, str, str]] | None = None
+    for key in (
+        (family, sub),
+        (family, axis),
+        (family, None),
+    ):
+        if key in _EVIDENCE_CHANNELS:
+            channels = _EVIDENCE_CHANNELS[key]
+            break
+    if channels is None:
+        return ""
+
+    # Dominant Helps corner-phase — where this parameter does the most
+    # work. Falls back to the worst Hurts when there are no helps.
+    impacts = list(j.corners_helped) or list(j.corners_hurt)
+    if not impacts:
+        return ""
+    top = max(impacts, key=lambda i: abs(i.score_delta))
+
+    # Counterfactual setup: rec values everywhere except this param.
+    counterfactual = dict(rec_setup)
+    counterfactual[name] = float(past_param_value)
+
+    cpkey = CornerPhaseKey(
+        session_id="<narrative-counterfactual>",
+        lap_index=0,
+        corner_id=int(top.corner_id),
+        phase=top.phase,
+    )
+
+    archetype = _archetype_for(schedule, top.corner_id)
+    try:
+        if int(model.feature_schema_version) >= 4 and archetype is not None:
+            state = model.predict(counterfactual, env, cpkey, corner_archetype=archetype)
+        else:
+            state = model.predict(counterfactual, env, cpkey)
+    except Exception:
+        return ""
+
+    states = getattr(state, "states", {}) or {}
+    for channel, label, unit, _hint in channels:
+        conf = states.get(channel)
+        if conf is None:
+            continue
+        value = float(conf.value)
+        unit_s = f" {unit}" if unit else ""
+        phase_label = _PHASE_LABEL.get(top.phase, top.phase.value)
+        # Friendly value formatting per channel range.
+        if abs(value) >= 100:
+            v_s = f"{value:.0f}"
+        elif abs(value) >= 10:
+            v_s = f"{value:.1f}"
+        else:
+            v_s = f"{value:.2f}"
+        return (
+            f"At T{top.corner_id} {phase_label}, predicted {label} "
+            f"was {v_s}{unit_s} under the past setup."
+        )
+    return ""
+
+
+def _archetype_for(schedule: list | None, corner_id: int) -> dict | None:
+    """Pull the corner_archetype dict for a given corner_id from the schedule."""
+    if not schedule:
+        return None
+    for entry in schedule:
+        if int(getattr(entry, "corner_id", -1)) == int(corner_id):
+            return getattr(entry, "archetype", None)
+    return None
 
 
 def _dominant_impact_corner(j: SetupJustification) -> str:
