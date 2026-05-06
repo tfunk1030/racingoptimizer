@@ -6,7 +6,9 @@
 uv venv
 uv pip install -e ".[dev]"
 uv run optimize learn ./ibtfiles
-uv run optimize bmw sebring          # or: uv run optimize ./my_session.ibt
+uv run optimize bmw sebring                  # race setup
+uv run optimize bmw spa --quali --fuel 8     # quali-stint setup, 8 L pinned
+uv run optimize ./my_session.ibt             # auto-detect car/track from IBT path
 ```
 
 ## Status
