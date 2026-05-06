@@ -40,6 +40,19 @@ _PHASE_LABEL: dict[Phase, str] = {
 }
 
 
+# What gets OPTIMIZED at each phase, based on which sub-utilities
+# dominate the phase-weight table. Used to phrase helps/watch in
+# telemetry terms ("braking stability", "mid-corner grip") instead of
+# raw corner-phase strings.
+_PHASE_THEME: dict[Phase, str] = {
+    Phase.BRAKING: "braking stability",
+    Phase.TRAIL_BRAKE: "trail-brake balance",
+    Phase.MID_CORNER: "mid-corner grip",
+    Phase.EXIT: "power-down traction",
+    Phase.STRAIGHT: "straight-line speed",
+}
+
+
 # Per-family theme + (verb when value INCREASES, verb when value DECREASES).
 _FAMILY_THEME: dict[str, tuple[str, str, str]] = {
     "spring_rate":   ("platform stiffness",          "stiffens",        "softens"),
@@ -53,7 +66,9 @@ _FAMILY_THEME: dict[str, tuple[str, str, str]] = {
     "tyre_pressure": ("tire pressure",               "raises",          "lowers"),
     "arb":           ("anti-roll stiffness",         "stiffens",        "softens"),
     "ride_height":   ("static ride height",          "raises",          "lowers"),
-    "camber":        ("camber",                      "more negative",   "less negative"),
+    # Camber + toe values are negative; +ve delta means LESS negative
+    # (less aggressive). -ve delta means MORE negative.
+    "camber":        ("camber",                      "less negative",   "more negative"),
     "torsion_bar":   ("front platform stiffness",    "stiffens",        "softens"),
     "brake_bias":    ("brake bias",                  "moves forward",   "moves rearward"),
     "diff":          ("diff lockup",                 "more locked",     "freer"),
@@ -237,7 +252,12 @@ def _render_change(
 def _format_value_delta(
     j: SetupJustification, spec: ParameterSpec | None, past: float | None,
 ) -> str:
-    """`50 -> 60 N/mm` or `Soft -> Medium` or `60 N/mm` (no past)."""
+    """`50 -> 60 N/mm` or `Soft -> Medium` or `60 N/mm` (no past).
+
+    Numeric values are SNAPPED to the parameter's iRacing UI click
+    step so a continuous DE result of 487.4 N/mm displays as 490
+    when step=10 (matches the setup-card rendering).
+    """
     units = (spec.units if spec else j.unit) or ""
     if spec and spec.choices:
         idx = max(0, min(len(spec.choices) - 1, int(round(j.value))))
@@ -251,6 +271,8 @@ def _format_value_delta(
         return new_label
 
     step = (spec.step if spec and spec.step else 0.5)
+    snapped_val = _snap(j.value, step, spec)
+    snapped_past = _snap(past, step, spec) if past is not None else None
     if step >= 1.0:
         fmt = lambda v: f"{v:.0f}"  # noqa: E731
     elif step >= 0.1:
@@ -258,14 +280,23 @@ def _format_value_delta(
     else:
         fmt = lambda v: f"{v:.2f}"  # noqa: E731
 
-    val_s = fmt(j.value).rstrip()
+    val_s = fmt(snapped_val).rstrip()
     unit_s = f" {units}" if units else ""
-    if past is None:
+    if snapped_past is None:
         return f"{val_s}{unit_s}"
-    past_s = fmt(past).rstrip()
+    past_s = fmt(snapped_past).rstrip()
     if past_s == val_s:
         return f"{val_s}{unit_s}"
     return f"{past_s} -> {val_s}{unit_s}"
+
+
+def _snap(value: float, step: float | None, spec: ParameterSpec | None) -> float:
+    """Snap to non-uniform discrete_values if set, else uniform step."""
+    if spec and spec.discrete_values:
+        return min(spec.discrete_values, key=lambda c: abs(c - value))
+    if step is None or step <= 0.0:
+        return value
+    return round(value / step) * step
 
 
 def _direction_word(family: str, delta: float) -> str:
@@ -278,7 +309,7 @@ def _direction_word(family: str, delta: float) -> str:
 
 
 def _phase_phrase(impacts: tuple[CornerPhaseImpact, ...]) -> str:
-    """`T9, T13 mid-corner; T3 under braking`"""
+    """Telemetry-themed phrase: `mid-corner grip in T9, T13; braking stability in T3`."""
     if not impacts:
         return ""
     by_phase: dict[Phase, list[int]] = defaultdict(list)
@@ -293,7 +324,8 @@ def _phase_phrase(impacts: tuple[CornerPhaseImpact, ...]) -> str:
             continue
         corners = sorted(set(by_phase[phase]))
         corner_str = ", ".join(f"T{c}" for c in corners)
-        parts.append(f"{corner_str} {_PHASE_LABEL.get(phase, phase.value)}")
+        theme = _PHASE_THEME.get(phase, phase.value)
+        parts.append(f"{theme} in {corner_str}")
     return "; ".join(parts)
 
 
@@ -302,42 +334,55 @@ def _overall_direction(
     past_value: dict[str, float | None],
     onto: dict[str, ParameterSpec],
 ) -> list[str]:
-    """One paragraph summarising the dominant direction per family."""
+    """One paragraph summarising the dominant direction per THEME.
+
+    Multiple families can share a theme (e.g. perches and pushrods are
+    both 'static ride height'); collapse on the theme so the paragraph
+    doesn't say 'lowers car ... raises car' when perches went down and
+    pushrods went up. The collapsed direction is the net (up vs down
+    delta count) per theme.
+    """
     if not moved:
         return [
             "OVERALL DIRECTION",
             "  No changes from past setup -- already optimal in the model's view.",
         ]
-    family_dirs: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"up": 0, "down": 0},
+    theme_dirs: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"up": 0, "down": 0, "up_word": "", "down_word": ""},
     )
     for j in moved:
         spec = onto.get(j.parameter)
         family = spec.family if spec else "other"
+        if family not in _FAMILY_THEME:
+            continue
+        theme, up_word, down_word = _FAMILY_THEME[family]
         past = past_value.get(j.parameter)
         if past is None:
             continue
+        bucket = theme_dirs[theme]
+        bucket["up_word"] = up_word
+        bucket["down_word"] = down_word
         if j.value > past:
-            family_dirs[family]["up"] += 1
+            bucket["up"] += 1
         else:
-            family_dirs[family]["down"] += 1
+            bucket["down"] += 1
 
     summaries: list[str] = []
-    for family, dirs in family_dirs.items():
-        if family not in _FAMILY_THEME:
-            continue
-        theme, up, down = _FAMILY_THEME[family]
-        if dirs["up"] > dirs["down"]:
-            summaries.append(f"{up} {theme}")
-        elif dirs["down"] > dirs["up"]:
-            summaries.append(f"{down} {theme}")
+    for theme, dirs in theme_dirs.items():
+        up_n = dirs["up"]
+        down_n = dirs["down"]
+        if up_n > down_n:
+            summaries.append(f"{dirs['up_word']} {theme}")
+        elif down_n > up_n:
+            summaries.append(f"{dirs['down_word']} {theme}")
         else:
-            summaries.append(f"adjusts {theme}")
+            summaries.append(f"adjusts {theme} (mixed direction)")
 
-    if not summaries:
-        sentence = f"Adjusts {len(moved)} parameter(s) without a single dominant theme."
-    else:
-        sentence = "; ".join(summaries) + "."
+    sentence = (
+        "; ".join(summaries) + "."
+        if summaries
+        else f"Adjusts {len(moved)} parameter(s) without a single dominant theme."
+    )
     return [
         "OVERALL DIRECTION",
         f"  {sentence[0].upper()}{sentence[1:]}",
