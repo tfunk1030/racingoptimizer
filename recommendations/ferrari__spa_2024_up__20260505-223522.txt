@@ -1,0 +1,856 @@
+ferrari @ spa_2024_up - recommended setup
+Stint: race (49.6 L fuel)
+Conditions: AirTemp 19.3 C  TrackTemp 20.6 C  AirDensity 1.149 kg/m^3  Wind 3.0 m/s  Wetness 0.00
+Confidence: confident (n=902 backing samples for the dominant confident parameter, 48 parameters reported)
+
+Pushrod Length Offset Front Mm: -5.54 mm   [confidence: confident]
+    +1 click: -0.000 score    -1 click: +0.001 score
+    Helps:
+           T8-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T1-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T5-mid_corner (mid-corner score gain 0.001, score +0.001)
+    Hurts:
+           T12-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T13-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T18-trail_brake (trail-brake score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [0.778, 3.222]
+
+Heave Perch Offset Front Mm: -63.81 mm   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T1-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T8-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T17-mid_corner (mid-corner score gain 0.001, score +0.001)
+    Hurts:
+           T6-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T17-braking (braking score cost 0.000, score -0.000)
+           T4-straight (straight score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-9.472, -7.028]
+
+Fuel Level L: 49.58 L   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T14-braking (braking score gain 0.001, score +0.001)
+           T13-braking (braking score gain 0.001, score +0.001)
+           T5-braking (braking score gain 0.001, score +0.001)
+    Hurts:
+           T0-exit (exit score cost 0.000, score -0.000)
+           T15-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T7-mid_corner (mid-corner score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [56.778, 59.222]
+
+Pushrod Length Offset Rear Mm: 2.00 mm   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T1-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T4-braking (braking score cost 0.000, score -0.000)
+           T6-straight (straight score cost 0.000, score -0.000)
+           T6-mid_corner (mid-corner score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [16.778, 19.222]
+
+Torsion Bar Turns Fl: 0.05 turns   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T1-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T17-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T8-mid_corner (mid-corner score gain 0.001, score +0.001)
+    Hurts:
+           T1-braking (braking score cost 0.000, score -0.000)
+           T6-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-1.122, 1.322]
+
+Camber Fl Deg: -2.57 deg   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T0-exit (exit score gain 0.000, score +0.000)
+           T6-trail_brake (trail-brake score gain 0.000, score +0.000)
+    Hurts:
+           T5-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T16-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T4-mid_corner (mid-corner score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-4.122, -1.678]
+
+Third Perch Offset Rear Mm: -109.13 mm   [confidence: confident]
+    +1 click: -0.001 score    -1 click: +0.000 score
+    Helps:
+           T1-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T16-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T14-trail_brake (trail-brake score cost 0.000, score -0.000)
+           T15-straight (straight score cost 0.000, score -0.000)
+           T12-straight (straight score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-105.222, -102.778]
+
+Torsion Bar Turns Rl: 0.03 turns   [confidence: confident]
+    +1 click: -0.000 score    -1 click: +0.000 score
+    Helps:
+           T14-exit (exit score gain 0.000, score +0.000)
+           T6-exit (exit score gain 0.000, score +0.000)
+           T17-exit (exit score gain 0.000, score +0.000)
+    Hurts:
+           T18-exit (exit score cost 0.000, score -0.000)
+           T6-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-1.174, 1.270]
+
+Damper Hsc Fl: 24.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T17-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T8-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T1-mid_corner (mid-corner score gain 0.001, score +0.001)
+    Hurts:
+           T14-straight (straight score cost 0.000, score -0.000)
+           T3-straight (straight score cost 0.000, score -0.000)
+           T6-mid_corner (mid-corner score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 24.331 to 24 (legal range 0..40)
+      - observed in training [13.778, 16.222]
+
+Torsion Bar Od Rr Mm: 6.08 index   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T1-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T16-exit (exit score cost 0.000, score -0.000)
+           T5-exit (exit score cost 0.000, score -0.000)
+           T8-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [0.778, 3.222]
+
+Camber Fr Deg: -2.62 deg   [confidence: confident]
+    +1 click: -0.000 score    -1 click: +0.000 score
+    Helps:
+           T6-straight (straight score gain 0.000, score +0.000)
+           T16-braking (braking score gain 0.000, score +0.000)
+           T0-exit (exit score gain 0.000, score +0.000)
+    Hurts:
+           T5-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+           T4-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-4.122, -1.678]
+
+Damper Lsc Rr: 14.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T5-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T16-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T4-mid_corner (mid-corner score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 14.286 to 14 (legal range 0..40)
+      - observed in training [19.778, 22.222]
+
+Damper Lsc Fr: 12.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T17-mid_corner (mid-corner score gain 0.001, score +0.001)
+           T17-braking (braking score gain 0.000, score +0.000)
+           T10-braking (braking score gain 0.000, score +0.000)
+    Hurts:
+           T6-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 12.319 to 12 (legal range 0..40)
+      - observed in training [17.778, 20.222]
+
+Heave Spring Rate N Per Mm: 1.77 index   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-trail_brake (trail-brake score gain 0.000, score +0.000)
+           T14-trail_brake (trail-brake score gain 0.000, score +0.000)
+    Hurts:
+           T5-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T16-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T17-mid_corner (mid-corner score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [1.778, 4.222]
+
+Torsion Bar Od Rl Mm: 6.17 index   [confidence: confident]
+    +1 click: +0.000 score    -1 click: -0.000 score
+    Helps:
+           T1-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T16-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T14-straight (straight score cost 0.000, score -0.000)
+           T1-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [0.778, 3.222]
+
+Brake Bias Pct: 54.81 pct   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T1-braking (braking score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+           T12-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T16-exit (exit score cost 0.000, score -0.000)
+           T5-exit (exit score cost 0.000, score -0.000)
+           T8-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [49.028, 51.472]
+
+Damper Lsr Fr: 17.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T18-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T6-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T8-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 17.296 to 17 (legal range 0..40)
+      - observed in training [9.778, 12.222]
+
+Damper Hsc Slope Rl: 8.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T9-trail_brake (trail-brake score gain 0.000, score +0.000)
+           T3-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T10-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T6-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 8.015 to 8 (legal range 0..11)
+      - observed in training [8.778, 11.222]
+
+Damper Lsc Fl: 21.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T1-braking (braking score gain 0.000, score +0.000)
+           T18-exit (exit score gain 0.000, score +0.000)
+    Hurts:
+           T17-straight (straight score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 20.809 to 21 (legal range 0..40)
+      - observed in training [17.778, 20.222]
+
+Camber Rr Deg: -1.69 deg   [confidence: confident]
+    +1 click: +0.000 score    -1 click: -0.000 score
+    Helps:
+           T2-braking (braking score gain 0.000, score +0.000)
+           T18-trail_brake (trail-brake score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T6-braking (braking score cost 0.000, score -0.000)
+           T5-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-3.022, -0.578]
+
+Third Spring Rate N Per Mm: 7.05 index   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-braking (braking score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T4-braking (braking score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+           T5-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [4.278, 6.722]
+
+Torsion Bar Turns Fr: 0.11 turns   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T14-exit (exit score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-braking (braking score gain 0.000, score +0.000)
+    Hurts:
+           T8-exit (exit score cost 0.000, score -0.000)
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-1.122, 1.322]
+
+Damper Hsr Fr: 7.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T9-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T0-trail_brake (trail-brake score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T16-exit (exit score cost 0.000, score -0.000)
+           T5-exit (exit score cost 0.000, score -0.000)
+           T1-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 6.600 to 7 (legal range 0..40)
+      - observed in training [13.778, 16.222]
+
+Arb Size Front: 1.00    [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-trail_brake (trail-brake score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T14-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T1-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 1.494 to 1 (legal range 0..5)
+      - observed in training [0.778, 3.222]
+
+Diff Preload Nm: 23.00 Nm   [confidence: confident]
+    +1 click: +0.000 score    -1 click: -0.000 score
+    Helps:
+           T17-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T8-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [18.778, 21.222]
+
+Damper Hsc Rl: 36.00 click   [confidence: confident]
+    +1 click: -0.000 score    -1 click: +0.000 score
+    Helps:
+           T18-straight (straight score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-trail_brake (trail-brake score gain 0.000, score +0.000)
+    Hurts:
+           T13-braking (braking score cost 0.000, score -0.000)
+           T12-braking (braking score cost 0.000, score -0.000)
+           T16-braking (braking score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 36.134 to 36 (legal range 0..40)
+      - observed in training [38.778, 41.222]
+
+Damper Hsc Rr: 34.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T0-mid_corner (mid-corner score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T8-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 33.785 to 34 (legal range 0..40)
+      - observed in training [38.778, 41.222]
+
+Damper Hsr Fl: 21.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T2-braking (braking score gain 0.000, score +0.000)
+           T9-braking (braking score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 21.074 to 21 (legal range 0..40)
+      - observed in training [13.778, 16.222]
+
+Front Diff Preload Nm: 19.83 Nm   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-1.222, 1.222]
+
+Damper Hsc Slope Fl: 6.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 5.509 to 6 (legal range 0..11)
+      - observed in training [6.778, 9.222]
+
+Damper Lsr Rl: 27.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T1-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T16-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T5-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 27.194 to 27 (legal range 0..40)
+      - observed in training [32.778, 35.222]
+
+Camber Rl Deg: -1.83 deg   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-3.022, -0.578]
+
+Damper Hsr Rl: 21.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 21.261 to 21 (legal range 0..40)
+      - observed in training [28.778, 31.222]
+
+Anti Roll Bar Front: 1.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 1.000 to 1 (legal range 1..5)
+      - observed in training [-0.222, 2.222]
+
+Anti Roll Bar Rear: 1.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 1.151 to 1 (legal range 1..5)
+      - observed in training [-0.222, 2.222]
+
+Arb Size Rear: 3.00    [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 2.588 to 3 (legal range 0..5)
+      - observed in training [1.778, 4.222]
+
+Damper Hsc Slope Fr: 8.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 7.924 to 8 (legal range 0..11)
+      - observed in training [6.778, 9.222]
+
+Damper Hsr Rr: 29.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 28.712 to 29 (legal range 0..40)
+      - observed in training [28.778, 31.222]
+
+Damper Lsc Rl: 23.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 23.191 to 23 (legal range 0..40)
+      - observed in training [19.778, 22.222]
+
+Damper Lsr Fl: 10.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 10.369 to 10 (legal range 0..40)
+      - observed in training [9.778, 12.222]
+
+Damper Lsr Rr: 33.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 32.655 to 33 (legal range 0..40)
+      - observed in training [32.778, 35.222]
+
+Rear Wing Angle: 17.00 deg   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [15.778, 18.222]
+
+Torsion Bar Od Fl Mm: 1.91 index   [confidence: confident]
+    +1 click: -0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [0.778, 3.222]
+
+Torsion Bar Od Fr Mm: 1.76 index   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [0.778, 3.222]
+
+Torsion Bar Turns Rr: 0.11 turns   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [-1.174, 1.270]
+
+Tyre Cold Pressure: 152.00 kPa   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - observed in training [150.778, 153.222]
+
+Damper Hsc Slope Rr: 10.00 click   [confidence: confident]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T8-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 9.671 to 10 (legal range 0..11)
+      - observed in training [8.778, 11.222]
+
+Damper Hsc Fr: 10.00 click   [confidence: confident]
+    +1 click: -0.000 score    -1 click: +0.000 score
+    Helps:
+           T11-straight (straight score gain 0.000, score +0.000)
+           T18-straight (straight score gain 0.000, score +0.000)
+           T9-mid_corner (mid-corner score gain 0.000, score +0.000)
+    Hurts:
+           T1-exit (exit score cost 0.000, score -0.000)
+           T17-exit (exit score cost 0.000, score -0.000)
+           T16-exit (exit score cost 0.000, score -0.000)
+    Evidence:
+      - confident confidence backed by 902 samples
+      - discrete-click value rounded from 10.467 to 10 (legal range 0..40)
+      - observed in training [13.778, 16.222]
+
+Warnings:
+  - pinned to observed median (no per-session variation in training corpus, no learnable response surface): anti_roll_bar_front, rear_wing_angle_deg, tyre_cold_pressure_kpa
+  - untrained_parameters: corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg, rear_coil_spring_rate_n_per_mm, spring_perch_offset_rear_mm (skipped — bounds not in constraints.md)
+
+================================================================
+FULL SETUP CARD — ferrari @ spa_2024_up
+================================================================
+Legend: [OPT] optimizer recommendation · [OPT pin] pinned to observed median · [OPT mirror] mirrored from per-axle parameter · [past] from your most recent session (no bounds yet) · [readout] calculated by iRacing — verify, don't enter · [predicted] readout the optimizer projects under the new inputs.
+
+-- TIRES & AERO ------------------------------------------------
+  [TireType]
+    Tire Type                                   Dry                [past]
+  [LeftFront]
+    Starting Pressure                     152.0 kPa                [OPT pin]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [LeftRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightFront]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [AeroSettings]
+    Rear Wing Angle                          17 deg                [OPT pin]
+  [AeroCalculator]
+    Front Rh At Speed                       15.0 mm                [readout]
+    Rear Rh At Speed                        40.0 mm                [readout]
+    Downforce Balance                        48.98%                [readout]
+    LD                                        3.855                [readout]
+
+-- CHASSIS -----------------------------------------------------
+  [Front]
+    Heave Spring                            2 index                [OPT]
+    Heave Perch Offset                     -64.0 mm (was -40.5)    [OPT]
+    Heave Spring Defl               22.8 mm 82.3 mm                [readout]
+    Heave Slider Defl              29.9 mm 200.0 mm                [readout]
+    Arb Size                                      A                [OPT]
+    Arb Blades                              1 click                [OPT pin]
+    Pushrod Length Delta                    -5.5 mm (was -11.5)    [OPT]
+    Toe In                                  -0.2 mm                [past]
+  [LeftFront]
+    Corner Weight                            2669 N                [readout]
+    Ride Height                             33.8 mm (was 30.0)     [predicted]
+    Shock Defl                     11.5 mm 100.0 mm                [readout]
+    Torsion Bar Defl                         5.3 mm                [readout]
+    Torsion Bar Turns                     0.0 turns (was 0.088)    [OPT]
+    Torsion Bar OD                          2 index (was 1)        [OPT]
+    Camber                                 -2.6 deg (was -2.9)     [OPT]
+  [LeftRear]
+    Corner Weight                            2938 N                [readout]
+    Ride Height                             44.8 mm (was 48.6)     [predicted]
+    Shock Defl                     18.3 mm 150.0 mm                [readout]
+    Torsion Bar Defl                         2.7 mm                [readout]
+    Torsion Bar Turns                     0.0 turns                [OPT]
+    Torsion Bar OD                          6 index                [OPT]
+    Camber                                 -1.8 deg (was -1.9)     [OPT]
+    Toe In                                  -0.0 mm                [past]
+  [Rear]
+    Heave Spring                            7 index (was 6)        [OPT]
+    Heave Perch Offset                    -109.0 mm (was -112.5)   [OPT]
+    Heave Spring Defl               14.6 mm 63.3 mm                [readout]
+    Heave Slider Defl              24.3 mm 300.0 mm                [readout]
+    Arb Size                                      C (was B)        [OPT]
+    Arb Blades                              1 click (was 5)        [OPT]
+    Pushrod Length Delta                     2.0 mm (was 17)       [OPT]
+    Fuel Level                               58.0 L                [past]
+  [RightFront]
+    Corner Weight                            2669 N                [readout]
+    Ride Height                             33.8 mm (was 30.0)     [predicted]
+    Shock Defl                     11.5 mm 100.0 mm                [readout]
+    Torsion Bar Defl                         5.3 mm                [readout]
+    Torsion Bar Turns                     0.1 turns                [OPT]
+    Torsion Bar OD                          2 index (was 1)        [OPT]
+    Camber                                 -2.6 deg (was -2.9)     [OPT]
+  [RightRear]
+    Corner Weight                            2938 N                [readout]
+    Ride Height                             44.8 mm (was 48.6)     [predicted]
+    Shock Defl                     18.3 mm 150.0 mm                [readout]
+    Torsion Bar Defl                         2.7 mm                [readout]
+    Torsion Bar Turns                     0.1 turns (was 0.029)    [OPT]
+    Torsion Bar OD                          6 index                [OPT]
+    Camber                                 -1.7 deg (was -1.9)     [OPT]
+    Toe In                                  -0.0 mm                [past]
+
+-- DAMPERS -----------------------------------------------------
+  [LeftFrontDamper]
+    Ls Comp Damping                        21 click (was 9)        [OPT]
+    Hs Comp Damping                        24 click (was 23)       [OPT]
+    Hs Comp Damp Slope                      6 click (was 8)        [OPT]
+    Ls Rbd Damping                         10 click (was 14)       [OPT]
+    Hs Rbd Damping                         21 click (was 12)       [OPT]
+  [LeftRearDamper]
+    Ls Comp Damping                        23 click (was 33)       [OPT]
+    Hs Comp Damping                        36 click (was 23)       [OPT]
+    Hs Comp Damp Slope                      8 click (was 9)        [OPT]
+    Ls Rbd Damping                         27 click (was 23)       [OPT]
+    Hs Rbd Damping                         21 click (was 13)       [OPT]
+  [RightFrontDamper]
+    Ls Comp Damping                        12 click (was 9)        [OPT]
+    Hs Comp Damping                        10 click (was 23)       [OPT]
+    Hs Comp Damp Slope                      8 click                [OPT]
+    Ls Rbd Damping                         17 click (was 14)       [OPT]
+    Hs Rbd Damping                          7 click (was 12)       [OPT]
+  [RightRearDamper]
+    Ls Comp Damping                        14 click (was 33)       [OPT]
+    Hs Comp Damping                        34 click (was 22)       [OPT]
+    Hs Comp Damp Slope                     10 click (was 9)        [OPT]
+    Ls Rbd Damping                         33 click (was 23)       [OPT]
+    Hs Rbd Damping                         29 click (was 13)       [OPT]
+
+-- SYSTEMS -----------------------------------------------------
+  [Lighting]
+    Roof Id Light Color                      Purple                [past]
+  [HybridConfig]
+    Hybrid Rear Drive Enabled                   yes                [past]
+    Hybrid Rear Drive Corner Pct                90%                [past]
+  [BrakeSpec]
+    Pad Compound                                Low                [past]
+    Front Master Cyl                        19.1 mm                [past]
+    Rear Master Cyl                         19.1 mm                [past]
+    Brake Pressure Bias                    55.0 pct (was 53)       [OPT]
+    Bias Migration                                1                [past]
+    Bias Migration Gain                           0                [past]
+  [TractionControl]
+    Traction Control Gain                   4 (TC2)                [past]
+    Traction Control Slip                   4 (TC1)                [past]
+  [Fuel]
+    Fuel Level                                 50 L (was 58)       [OPT]
+    Fuel Target                              2.22 L                [past]
+    Fuel Low Warning                          3.5 L                [past]
+  [GearRatios]
+    Gear Stack                                Short                [past]
+    Speed In First                       121.7 Km/h                [readout]
+    Speed In Second                      157.5 Km/h                [readout]
+    Speed In Third                       190.0 Km/h                [readout]
+    Speed In Fourth                      222.7 Km/h                [readout]
+    Speed In Fifth                       256.6 Km/h                [readout]
+    Speed In Sixth                       291.0 Km/h                [readout]
+    Speed In Seventh                     329.2 Km/h                [readout]
+  [FrontDiffSpec]
+    Preload                                   20 Nm (was -50)      [OPT]
+  [RearDiffSpec]
+    Coast Drive Ramp Options           More Locking                [past]
+    Clutch Friction Plates                        6                [past]
+    Preload                                   25 Nm (was 20)       [OPT]
