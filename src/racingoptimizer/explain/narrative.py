@@ -100,6 +100,475 @@ _OVERALL_FRAGMENT: dict[str, tuple[str, str]] = {
 }
 
 
+# Car-feel narrative per (family[/mode][/axis], direction).
+# Each entry is (effect_sentence, trade_sentence). Speaks in handling
+# vocabulary (pitch / roll / understeer / oversteer / aero stall /
+# bottoming / turn-in / throttle traction) instead of phase-aggregated
+# corner lists. Matched in this order at lookup time:
+#   1. (family, mode, axis, direction)   — most specific (dampers)
+#   2. (family, axis, direction)          — front-vs-rear families
+#   3. (family, direction)                — axle-agnostic
+# A miss falls through to the terse (verb) format.
+_CAR_FEEL: dict[tuple, tuple[str, str]] = {
+
+    # --- Springs (front platform) ---
+    ("heave_spring", "front", "+"): (
+        "Less front pitch on brake apply; sharper turn-in; aero "
+        "platform held flatter through Eau Rouge / Pouhon compression.",
+        "Harsher over kerbs (T3 chicane, T16). Mid-corner front grip "
+        "can drop if oversprung — watch for understeer in T9, T13.",
+    ),
+    ("heave_spring", "front", "-"): (
+        "More front compliance over kerbs and bumps; better front "
+        "grip retention through bumpy entries; smoother brake-release.",
+        "More pitch dive under heavy braking; slower turn-in; aero "
+        "platform less stable on Kemmel compression.",
+    ),
+
+    # Front torsion bars behave like front springs for pitch / roll,
+    # but with a per-corner anti-roll component; both turns and OD
+    # share the same effect axis (stiffer = stiffer).
+    ("torsion_bar", "front", "+"): (
+        "Stiffer front platform: less roll through fast corners, less "
+        "pitch under braking, sharper transient response.",
+        "Less single-wheel compliance on one-sided kerbs; "
+        "mid-corner understeer risk if rear isn't matched.",
+    ),
+    ("torsion_bar", "front", "-"): (
+        "Softer front platform: more roll compliance, gentler weight "
+        "transfer, more front mechanical grip.",
+        "More pitch dive on entry; slower turn-in; aero platform "
+        "wanders more on bumpy entries.",
+    ),
+
+    # --- Springs (rear platform) ---
+    ("spring_rate", "rear", "+"): (
+        "Less rear squat under throttle; faster on-throttle response; "
+        "rear platform settles less deep on Kemmel exit.",
+        "Snap-oversteer risk if rear grip is exceeded on power exit; "
+        "harsher over rear kerbs (T8, T15).",
+    ),
+    ("spring_rate", "rear", "-"): (
+        "More rear compliance; smoother throttle pickup; better "
+        "low-speed traction off slow corners.",
+        "Rear platform settles deeper on power; bottoming risk on "
+        "long throttle commits; rotation can feel lazy on entry.",
+    ),
+    # Rear third spring acts like a heave at the rear axle.
+    ("spring_rate", "rear-third", "+"): (
+        "Stiffer rear-axle heave: less rear pitch in compression, "
+        "sharper rotation through high-speed corners.",
+        "Less rear traction over kerbs; can promote oversteer on "
+        "throttle if rear is too stiff overall.",
+    ),
+    ("spring_rate", "rear-third", "-"): (
+        "More rear-heave compliance; better mechanical grip in "
+        "low-speed corners; smoother power-down.",
+        "Rear platform less stable in high-speed compression; "
+        "aero-platform yaw on Kemmel exit.",
+    ),
+
+    # --- Perches (ride height direction; iRacing convention: -ve perch
+    #     offset RAISES the car, +ve LOWERS). Same vocabulary front + rear.
+    ("perch_offset", "front", "+"): (
+        "Lower front static ride height: more downforce up front, "
+        "stiffer aero platform.",
+        "Bottoming risk on Kemmel compression / Eau Rouge entry; "
+        "harsh over big kerbs (T3, T16).",
+    ),
+    ("perch_offset", "front", "-"): (
+        "Higher front static ride height: more bump clearance, "
+        "less aero load.",
+        "Less front downforce in fast corners; more pitch sensitivity.",
+    ),
+    ("perch_offset", "rear", "+"): (
+        "Lower rear static ride height: more rear downforce, more "
+        "stable rear aero platform.",
+        "Bottoming risk on T1 exit / Kemmel; rear can stall over "
+        "large kerbs.",
+    ),
+    ("perch_offset", "rear", "-"): (
+        "Higher rear static ride height: more rear compliance, "
+        "less rear downforce, more rotation under throttle.",
+        "Rear aero stall risk in high-speed corners; less rear "
+        "stability on Kemmel compression.",
+    ),
+    # Pushrod has OPPOSITE polarity to perch (longer pushrod = car UP).
+    ("pushrod", "front", "+"): (
+        "Higher front static ride height: more bump clearance, "
+        "less front aero load.",
+        "Less front downforce; can stall front aero in mid-corner "
+        "pitch.",
+    ),
+    ("pushrod", "front", "-"): (
+        "Lower front static ride height: more front downforce, "
+        "stiffer aero platform, sharper turn-in.",
+        "Bottoming risk on Kemmel compression / Eau Rouge; harsh "
+        "over kerbs.",
+    ),
+    ("pushrod", "rear", "+"): (
+        "Higher rear static ride height: more rear bump clearance.",
+        "Less rear downforce, more rear rotation under throttle.",
+    ),
+    ("pushrod", "rear", "-"): (
+        "Lower rear static ride height: more rear downforce, more "
+        "stable platform.",
+        "Rear bottoming risk on Kemmel and Eau Rouge exit.",
+    ),
+
+    # --- Dampers (mode, axis, direction). LSC = brake/throttle apply,
+    #     HSC = bumps + kerbs, LSR = recovery from pitch, HSR = kerb
+    #     rebound, hsc_slope = transition between LS and HS regimes.
+    ("damper", "lsc", "front", "+"): (
+        "Sharper front response on brake apply; less initial pitch "
+        "dive; quicker pitch transfer to front.",
+        "Aggressive brake-release transient; trail-brake balance can "
+        "feel snatchy.",
+    ),
+    ("damper", "lsc", "front", "-"): (
+        "Smoother weight transfer to front under braking; gentler "
+        "initial bite; more progressive pitch.",
+        "More dive on entry; can over-rotate the front platform.",
+    ),
+    ("damper", "lsc", "rear", "+"): (
+        "Sharper rear response on throttle apply; less initial squat.",
+        "Less initial rear traction; can feel harsh on bumps under "
+        "power.",
+    ),
+    ("damper", "lsc", "rear", "-"): (
+        "Smoother power pickup; more initial rear squat absorbs the "
+        "throttle hit.",
+        "Rear platform sinks deeper on power; less consistent aero "
+        "platform.",
+    ),
+    ("damper", "hsc", "front", "+"): (
+        "Less compliance over bumps and kerbs; sharper kerb response.",
+        "Chassis can skip across kerbs (T3, T7); aero platform less "
+        "stable on bumpy entries.",
+    ),
+    ("damper", "hsc", "front", "-"): (
+        "More compliance over kerbs and high-frequency bumps; better "
+        "front grip retention through Eau Rouge bumps.",
+        "More pitch noise mid-corner; aero platform wanders.",
+    ),
+    ("damper", "hsc", "rear", "+"): (
+        "Less rear compliance over bumps; sharper kerb response.",
+        "Rear can skip on kerbs and bumps; traction loss at the "
+        "moment of impact.",
+    ),
+    ("damper", "hsc", "rear", "-"): (
+        "More rear compliance over kerbs; better traction over "
+        "uneven surfaces.",
+        "More rear-axle pitch noise; can feel vague on long "
+        "compressions.",
+    ),
+    ("damper", "lsr", "front", "+"): (
+        "Slower front rebound after pitch — keeps weight on the "
+        "front longer through entry.",
+        "Front 'sticks down' after braking; can promote mid-corner "
+        "understeer on T9 / T13 release.",
+    ),
+    ("damper", "lsr", "front", "-"): (
+        "Faster front rebound; weight returns to neutral quicker; "
+        "sharper rotation as the brake releases.",
+        "Front can unload too fast through trail-brake; loss of "
+        "front grip mid-corner.",
+    ),
+    ("damper", "lsr", "rear", "+"): (
+        "Slower rear rebound out of the corner; keeps rear platform "
+        "settled longer on power.",
+        "Rear can stay too low after exit — bottoming risk on the "
+        "compression that follows.",
+    ),
+    ("damper", "lsr", "rear", "-"): (
+        "Faster rear rebound on exit; rear lifts back to neutral "
+        "quicker.",
+        "Rear can unload before throttle is fully applied; on-power "
+        "snap-oversteer risk.",
+    ),
+    ("damper", "hsr", "front", "+"): (
+        "Slower front rebound off kerbs and curbing.",
+        "Front can hang low after a kerb hit; subsequent corner "
+        "compromised.",
+    ),
+    ("damper", "hsr", "front", "-"): (
+        "Faster front rebound off kerbs; chassis returns to neutral "
+        "quicker.",
+        "Aggressive bounce off kerbing; aero platform unstable in "
+        "the lap after a kerb-heavy entry.",
+    ),
+    ("damper", "hsr", "rear", "+"): (
+        "Slower rear rebound off kerbs; rear stays planted longer.",
+        "Rear can stay loaded too long; subsequent corner rotation "
+        "compromised.",
+    ),
+    ("damper", "hsr", "rear", "-"): (
+        "Faster rear rebound off kerbs; rear returns to neutral "
+        "quicker.",
+        "Rear bounce off kerbing — traction loss on the next throttle "
+        "application.",
+    ),
+    # HSC slope is the transition rate between LS and HS regimes.
+    ("damper", "hsc_slope", "front", "+"): (
+        "Earlier transition from LS to HS damping under braking — "
+        "stiffer through the meat of the bump.",
+        "Bump-velocity threshold lowers; chassis loses compliance "
+        "earlier.",
+    ),
+    ("damper", "hsc_slope", "front", "-"): (
+        "Later transition to HS damping; more LS regime through "
+        "moderate bumps.",
+        "Loses high-velocity bump control on big hits (Kemmel kink).",
+    ),
+    ("damper", "hsc_slope", "rear", "+"): (
+        "Rear transitions to HS damping earlier — stiffer through "
+        "moderate bumps and kerbs.",
+        "Less rear compliance on bumpy throttle commits.",
+    ),
+    ("damper", "hsc_slope", "rear", "-"): (
+        "Rear stays in LS damping over a wider velocity range.",
+        "Loses rear bump control on big hits.",
+    ),
+
+    # --- ARBs ---
+    ("arb", "front", "+"): (
+        "Stiffer front anti-roll: less front roll through fast "
+        "corners, sharper transient response, better aero-platform "
+        "stability.",
+        "More mid-corner understeer; less single-wheel compliance "
+        "over one-sided kerbs.",
+    ),
+    ("arb", "front", "-"): (
+        "Softer front anti-roll: more front mechanical grip mid-"
+        "corner; better single-wheel compliance.",
+        "More front roll through fast corners; aero balance shifts "
+        "rearward.",
+    ),
+    ("arb", "rear", "+"): (
+        "Stiffer rear anti-roll: faster rotation, sharper turn-in.",
+        "Snap-oversteer risk on throttle and trail-brake; less rear "
+        "single-wheel compliance.",
+    ),
+    ("arb", "rear", "-"): (
+        "Softer rear anti-roll: more rear mechanical grip; better "
+        "throttle traction.",
+        "Lazier rotation; understeer can creep in on entry.",
+    ),
+
+    # --- Camber ---
+    ("camber", "front", "+"): (  # less negative
+        "Less aggressive front camber: more contact patch on "
+        "straights; faster tire warm-up; less wear.",
+        "Less peak mid-corner front grip; more understeer.",
+    ),
+    ("camber", "front", "-"): (  # more negative
+        "More aggressive front camber: more peak mid-corner grip "
+        "from better contact patch in roll.",
+        "Less straight-line tire footprint; more wear; longer "
+        "warm-up.",
+    ),
+    ("camber", "rear", "+"): (
+        "Less aggressive rear camber: more straight-line traction; "
+        "less wear.",
+        "Less peak rear cornering grip; rear can lose grip on power "
+        "exit.",
+    ),
+    ("camber", "rear", "-"): (
+        "More aggressive rear camber: more peak rear cornering grip.",
+        "Less straight-line traction on power; more wear.",
+    ),
+
+    # --- Toe (negative = toe-out for front, positive = toe-in;
+    # the per-corner sign convention varies but the family + sign +
+    # axis maps to handling effect cleanly.)
+    ("camber", "toe-front", "+"):  (  # less negative, toward toe-in
+        "More front straight-line stability; less darty on Kemmel.",
+        "Lazier turn-in response; reduced rotation.",
+    ),
+    ("camber", "toe-front", "-"): (  # more negative, toward toe-out
+        "More turn-in response and rotation.",
+        "More straight-line nervousness; faster front tire wear.",
+    ),
+    ("camber", "toe-rear", "+"): (
+        "More rear straight-line stability; better high-speed "
+        "directional control.",
+        "Lazier mid-corner rotation; more rear drag.",
+    ),
+    ("camber", "toe-rear", "-"): (
+        "More rear rotation; better turn-in feel.",
+        "Less straight-line stability; rear can step out on Kemmel "
+        "transitions.",
+    ),
+
+    # --- Aero ---
+    ("rear_wing", None, "+"): (
+        "More downforce in fast corners (Eau Rouge, Pouhon, "
+        "Blanchimont); higher mid-corner peak grip.",
+        "Higher straight-line drag; ~0.05-0.10 s slower on Kemmel "
+        "per click.",
+    ),
+    ("rear_wing", None, "-"): (
+        "Less drag = faster top speed on Kemmel and Pit straight; "
+        "lower fuel burn.",
+        "Less downforce in fast corners; aero-stall risk in pitch; "
+        "less rear stability under throttle.",
+    ),
+
+    # --- Tire pressure ---
+    ("tyre_pressure", None, "+"): (
+        "Higher cold pressure: less contact patch but faster heat-up "
+        "and more consistent wear over a stint.",
+        "Lower peak grip; tires reach optimum window slower.",
+    ),
+    ("tyre_pressure", None, "-"): (
+        "Lower cold pressure: bigger contact patch, higher peak "
+        "grip, faster warm-up.",
+        "Faster wear; more sensitivity to camber; over-heating risk "
+        "in long stints.",
+    ),
+
+    # --- Brake bias ---
+    ("brake_bias", None, "+"): (  # forward
+        "More front bias: stable braking, no rear lock-up, "
+        "predictable threshold-brake behaviour.",
+        "Lazy turn-in; longer braking distance; front locks first "
+        "if pushed past threshold.",
+    ),
+    ("brake_bias", None, "-"): (  # rearward
+        "More rear bias: rotates faster on entry; more turn-in "
+        "feel; shorter braking distance if rear has grip.",
+        "Snap-oversteer risk under heavy braking; rear can lock at "
+        "T1, T11, T18 entries.",
+    ),
+
+    # --- Diff ---
+    ("diff", "preload", "+"): (
+        "More diff lockup at low torque: better initial throttle "
+        "traction; sharper turn-in.",
+        "More on-throttle understeer; rear can feel locked through "
+        "mid-corner.",
+    ),
+    ("diff", "preload", "-"): (
+        "Freer diff at low torque: easier rotation off-throttle; "
+        "smoother throttle pickup.",
+        "Less initial traction on power; rear can step out "
+        "asymmetrically.",
+    ),
+    ("diff", "ramps", "+"): (
+        "More aggressive coast/drive ramps: tighter diff lock under "
+        "transition; sharper rotation.",
+        "Throttle-off can feel locked; trail-brake balance more "
+        "snappy.",
+    ),
+    ("diff", "ramps", "-"): (
+        "Freer coast/drive ramps: smoother transitions; better "
+        "low-speed throttle modulation.",
+        "Less initial traction; rear can be lazy off slow corners.",
+    ),
+    ("diff", "plates", "+"): (
+        "More clutch plates: tighter diff lock overall; better "
+        "traction.",
+        "More on-throttle understeer; less rotation.",
+    ),
+    ("diff", "plates", "-"): (
+        "Fewer clutch plates: freer diff overall; easier rotation.",
+        "Less peak traction; more wheelspin on slow exits.",
+    ),
+
+    # --- Fuel (mass) ---
+    ("fuel", None, "+"): (
+        "More fuel: more vertical load on tires (slightly more "
+        "grip), but more mass to brake and accelerate.",
+        "Longer braking distances; slower per-lap pace; more brake "
+        "heat.",
+    ),
+    ("fuel", None, "-"): (
+        "Less fuel: faster pace per lap, sharper transitions, less "
+        "brake heat.",
+        "Less downforce-to-mass ratio in high-speed corners; "
+        "shorter race distance.",
+    ),
+}
+
+
+def _car_feel(family: str, name: str, delta: float) -> tuple[str, str] | None:
+    """Look up the (effect, trade) sentences for a parameter change."""
+    sign = "+" if delta > 0 else "-"
+    axis = _param_axis(name)
+    mode = _param_damper_mode(name) if family == "damper" else None
+    sub = _param_subtype(family, name)
+
+    # 1. (family, mode, axis, direction) — dampers
+    if mode and axis:
+        key = (family, mode, axis, sign)
+        if key in _CAR_FEEL:
+            return _CAR_FEEL[key]
+    # 2. (family, sub, direction) — diff modes (preload/ramps/plates),
+    # rear-third spring, toe (front/rear sub-axes)
+    if sub:
+        key = (family, sub, sign)
+        if key in _CAR_FEEL:
+            return _CAR_FEEL[key]
+    # 3. (family, axis, direction)
+    if axis:
+        key = (family, axis, sign)
+        if key in _CAR_FEEL:
+            return _CAR_FEEL[key]
+    # 4. (family, None, direction) — single-axis families (wing, fuel,
+    # brake bias, tyre pressure)
+    key = (family, None, sign)
+    if key in _CAR_FEEL:
+        return _CAR_FEEL[key]
+    return None
+
+
+def _param_axis(name: str) -> str | None:
+    """Classify a parameter as front / rear by inspecting the name.
+
+    Falls back to family-implied axis for parameters that don't
+    encode the axle in the name string itself (heave springs are
+    front-only on the GTP cars; the third spring is rear-only).
+    """
+    n = name.lower()
+    if any(t in n for t in ("_fl", "_fr", "front", "_f_")):
+        return "front"
+    if any(t in n for t in ("_rl", "_rr", "rear", "_r_", "third")):
+        return "rear"
+    # Family-implied axis (param name has no axle marker).
+    if "heave_spring" in n:
+        return "front"  # GTP heave is front-axle
+    return None
+
+
+def _param_damper_mode(name: str) -> str | None:
+    """Pull lsc/hsc/lsr/hsr/hsc_slope from a damper parameter name."""
+    n = name.lower()
+    if "hsc_slope" in n:
+        return "hsc_slope"
+    for mode in ("lsc", "hsc", "lsr", "hsr"):
+        if f"damper_{mode}_" in n:
+            return mode
+    return None
+
+
+def _param_subtype(family: str, name: str) -> str | None:
+    """Sub-bucket within a family (e.g. diff preload vs ramps vs plates)."""
+    n = name.lower()
+    if family == "diff":
+        if "preload" in n:
+            return "preload"
+        if "ramp" in n or "coast" in n:
+            return "ramps"
+        if "clutch" in n or "plate" in n:
+            return "plates"
+    if family == "spring_rate":
+        if "third" in n:
+            return "rear-third"
+    if family == "camber" and "toe" in n:
+        return "toe-front" if "front" in n or "_fl" in n or "_fr" in n else "toe-rear"
+    return None
+
+
 # Map ParameterSpec.family -> overall theme key. Many families collapse
 # into the same theme so the OVERALL paragraph doesn't fragment per
 # family (e.g. perches + pushrods are both "ride height").
@@ -280,20 +749,49 @@ def _render_change(
     spec = onto.get(j.parameter)
     label = _PARAM_LABEL.get(j.parameter, _humanize(j.parameter))
     family = spec.family if spec else "other"
-    direction = _direction_word(family, (j.value - past) if past is not None else 0.0)
+    delta = (j.value - past) if past is not None else 0.0
+    direction = _direction_word(family, delta)
 
     change_str = _format_value_delta(j, spec, past)
-    helps = _phase_phrase(j.corners_helped[:5])
-    hurts = _phase_phrase(j.corners_hurt[:4])
-
     body: list[str] = [f"{label}: {change_str}  ({direction})"]
-    if helps:
-        body.append(f"  Helps: {helps}")
-    if hurts:
-        body.append(f"  Watch: {hurts}")
-    if not helps and not hurts:
-        body.append("  (no per-corner trade-off -- model held this at training baseline)")
+
+    # Car-feel narrative: Effect + Trade in handling vocabulary
+    # (pitch / roll / understeer / oversteer / aero stall / bottoming
+    # / turn-in / throttle traction). Falls through to phase-themed
+    # corner mention if no narrative is registered for this family.
+    feel = _car_feel(family, j.parameter, delta)
+    if feel is not None:
+        effect, trade = feel
+        body.append(f"  Effect: {effect}")
+        body.append(f"  Trade:  {trade}")
+        # Tack on a single most-impactful corner mention so the user
+        # knows where on the lap to feel it.
+        impact = _dominant_impact_corner(j)
+        if impact:
+            body.append(f"  Watch most: {impact}")
+    else:
+        # No car-feel entry for this family/axis -- fall back to the
+        # phase-themed list so we still say something meaningful.
+        helps = _phase_phrase(j.corners_helped[:5])
+        hurts = _phase_phrase(j.corners_hurt[:4])
+        if helps:
+            body.append(f"  Helps: {helps}")
+        if hurts:
+            body.append(f"  Watch: {hurts}")
+        if not helps and not hurts:
+            body.append("  (no per-corner trade-off -- model held this at training baseline)")
     return body
+
+
+def _dominant_impact_corner(j: SetupJustification) -> str:
+    """Single-line `T11 braking apex` style — the corner-phase with the
+    biggest absolute score delta across helps + hurts."""
+    candidates = list(j.corners_helped) + list(j.corners_hurt)
+    if not candidates:
+        return ""
+    top = max(candidates, key=lambda i: abs(i.score_delta))
+    phase_label = _PHASE_LABEL.get(top.phase, top.phase.value)
+    return f"T{top.corner_id} {phase_label}"
 
 
 def _format_value_delta(
@@ -324,8 +822,12 @@ def _format_value_delta(
         fmt = lambda v: f"{v:.0f}"  # noqa: E731
     elif step >= 0.1:
         fmt = lambda v: f"{v:.1f}"  # noqa: E731
-    else:
+    elif step >= 0.01:
         fmt = lambda v: f"{v:.2f}"  # noqa: E731
+    else:
+        # Torsion bar turns step 0.001 -- 3 decimals so 0.105 doesn't
+        # render as 0.10 (loses a digit the user actually has to enter).
+        fmt = lambda v: f"{v:.3f}"  # noqa: E731
 
     val_s = fmt(snapped_val).rstrip()
     unit_s = f" {units}" if units else ""
