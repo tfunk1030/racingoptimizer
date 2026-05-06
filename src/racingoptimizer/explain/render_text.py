@@ -141,7 +141,8 @@ def render_status_text(status: ModelStatus) -> str:
 def _conditions_line(rec: SetupRecommendation) -> str:
     env = rec.env
     return (
-        f"Conditions: AirTemp {env.track_temp_c:.1f} C  "
+        f"Conditions: AirTemp {env.air_temp_c:.1f} C  "
+        f"TrackTemp {env.track_temp_c:.1f} C  "
         f"AirDensity {env.air_density:.3f} kg/m^3  "
         f"Wind {env.wind_vel_ms:.1f} m/s  "
         f"Wetness {env.track_wetness:.2f}"

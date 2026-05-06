@@ -461,15 +461,25 @@ def _aggregate(
     understeer_expr = pl.col("SteeringWheelAngle") - k_car * pl.col("AccelLat")
     aggs.append(understeer_expr.mean().cast(pl.Float32).alias("understeer_angle_mean_rad"))
 
+    # Raw iRacing `*shockDefl` and `*rideHeight` channels are in METERS.
+    # The aliased columns end in `_mm`; convert at the aggregation boundary
+    # so every downstream consumer (fitter target channels, baselines,
+    # score.platform / aero / bottoming penalty, aero map lookups which
+    # expect mm via `aero.interpolator.interpolate`) reads a value that
+    # actually matches its column name.
     for src, alias in _SHOCK_DEFL_P99_COLUMNS:
         if has[src]:
             aggs.append(
-                pl.col(src).abs().quantile(0.99).cast(pl.Float32).alias(alias)
+                (pl.col(src).abs().quantile(0.99) * 1000.0)
+                .cast(pl.Float32).alias(alias)
             )
 
     for src, alias in _RIDE_HEIGHT_MEAN_COLUMNS:
         if has[src]:
-            aggs.append(pl.col(src).mean().cast(pl.Float32).alias(alias))
+            aggs.append(
+                (pl.col(src).mean() * 1000.0)
+                .cast(pl.Float32).alias(alias)
+            )
 
     # Spec section 6: load-transfer asymmetry. Sign convention:
     #   positive = right-front + left-rear loaded.

@@ -35,6 +35,7 @@ from racingoptimizer.physics.score import (
     _clamped_or_raise,
     _corner_phase_keys,
     _score_breakdown,
+    _score_breakdown_per_car,
     score_breakdown,
 )
 from racingoptimizer.physics.weights import weight_corners
@@ -45,8 +46,48 @@ def recommend(
     track: str,
     env: EnvironmentFrame,
     constraints: ConstraintsTable,
+    *,
+    schedule: list | None = None,
 ) -> SetupRecommendation:
-    weights = _cached_weights(model, track)
+    """Constraint-clamped DE search for the optimal setup.
+
+    ``schedule`` (per-car v4 only): when ``model.feature_schema_version >= 4``
+    the caller MUST pass the target track's
+    ``list[CornerScheduleEntry]`` (built via
+    ``physics.corner_schedule.build_corner_schedule``). The per-corner
+    archetype features ride alongside each entry and are fed into
+    ``PhysicsModel._predict_v4`` so the same per-car fitter can score the
+    target corners.
+    """
+    is_per_car = int(model.feature_schema_version) >= 4
+    if is_per_car and schedule is None:
+        raise ValueError(
+            "per-car PhysicsModel requires `schedule` — build it from the "
+            "target TrackModel via "
+            "`racingoptimizer.physics.corner_schedule.build_corner_schedule`."
+        )
+    # Per-car: cap the trust radius to the values the driver has actually
+    # run on the TARGET track. Without this cap the joint surrogate's
+    # response surface lets the optimizer drift outside the empirical
+    # envelope (e.g. recommending heave_spring=25 N/mm when the driver
+    # has only ever tried 30 or 50). v3 pickles return None and the cap
+    # is a no-op.
+    target_observed: dict[str, tuple[float, ...]] = {}
+    # Global empirical range per parameter — aggregated across every track
+    # the driver has run for this car, used as the denominator in the pin
+    # check (see `_pin_or_trust_bounds`). The constraint span is the wrong
+    # denominator when constraints reflect the legal UI envelope rather
+    # than what the driver explored — wide envelopes would mask real
+    # corpus variation as "near constant".
+    global_observed: dict[str, set[float]] = {}
+    if is_per_car:
+        per_track = getattr(model, "per_track_parameter_observed", {}) or {}
+        target_observed = dict(per_track.get(track, {}) or {})
+        for _track_params in per_track.values():
+            for _name, _vals in (_track_params or {}).items():
+                if _vals:
+                    global_observed.setdefault(_name, set()).update(_vals)
+    weights = _cached_weights(model, track, schedule=schedule)
 
     fittable = [
         p for p in fittable_parameters(model.car, constraints)
@@ -89,11 +130,22 @@ def recommend(
             )
         regime = _median_regime(model, name)
         observed_std = float(observed_std_table.get(name, 0.0))
+        target_observed_values = tuple(target_observed.get(name, ()))
+        target_step = _click_step_for(model, name, bound)
+        global_vals = global_observed.get(name)
+        empirical_range = (
+            (max(global_vals) - min(global_vals))
+            if global_vals and len(global_vals) > 1
+            else 0.0
+        )
         sub_bounds, was_pinned = _pin_or_trust_bounds(
             bound=bound,
             baseline=baseline,
             regime=regime,
             observed_std=observed_std,
+            target_observed=target_observed_values,
+            click_step=target_step,
+            empirical_range=empirical_range,
         )
         if was_pinned:
             pinned_constant.add(name)
@@ -104,7 +156,7 @@ def recommend(
     full_baseline = dict(model.baseline_setup)
     if not param_names:
         return _baseline_recommendation(
-            model, track, env, full_baseline, weights,
+            model, track, env, full_baseline, weights, schedule=schedule,
         )
 
     # Budget per spec §13: < 5 s recommendation latency. With ~50 (corner,
@@ -120,28 +172,42 @@ def recommend(
     )
 
     aero = _aero_surface_or_none(model)
-    keys = _corner_phase_keys(model)
     baselines = model.resolved_baselines
+    if is_per_car:
+        keys = None  # type: ignore[assignment]
+    else:
+        keys = _corner_phase_keys(model)
 
     def objective(x: np.ndarray) -> float:
         candidate = dict(full_baseline)
         for name, value in zip(param_names, x.tolist(), strict=True):
             candidate[name] = float(value)
         clamped = _clamped_or_raise(model, candidate, strict=False)
-        breakdown_inner = _score_breakdown(
-            model, clamped, env, aero, keys, weights, baselines,
-        )
+        if is_per_car:
+            breakdown_inner = _score_breakdown_per_car(
+                model, clamped, env, aero, schedule, weights, baselines,
+            )
+        else:
+            breakdown_inner = _score_breakdown(
+                model, clamped, env, aero, keys, weights, baselines,
+            )
         return -float(sum(breakdown_inner.values()))
 
+    # DE budget: per-car v4 with 40+ fittable parameters × 70+ schedule
+    # entries × 30+ output channels per objective evaluation works out to
+    # ~150 ms per call. With the seeded population of 30 candidates, each
+    # generation costs ~5 s; capping at maxiter=5 keeps total DE time
+    # under a minute. tol=5e-3 lets convergence short-circuit earlier once
+    # the population plateaus inside the trust-radius envelope.
     result = differential_evolution(
         objective,
         bounds=bounds,
         seed=int(model.seed) & 0x7FFFFFFF,
-        maxiter=15,
+        maxiter=5,
         popsize=pop_size,
         polish=False,
         init=init_population,
-        tol=1e-4,
+        tol=5e-3,
         mutation=(0.3, 1.0),
     )
 
@@ -189,7 +255,7 @@ def recommend(
 
     _fill_untrained_baselines(parameters, model, full_baseline)
     breakdown = score_breakdown(
-        model, recommended, track, env, weights=weights,
+        model, recommended, track, env, weights=weights, schedule=schedule,
     )
     return SetupRecommendation(
         car=model.car,
@@ -214,24 +280,40 @@ def recommend(
 _WEIGHTS_CACHE: dict[tuple[int, str], dict[int, float]] = {}
 
 
-def _cached_weights(model: PhysicsModel, track: str) -> dict[int, float]:
+def _cached_weights(
+    model: PhysicsModel,
+    track: str,
+    *,
+    schedule: list | None = None,
+) -> dict[int, float]:
     key = (id(model), track)
     if key in _WEIGHTS_CACHE:
         return _WEIGHTS_CACHE[key]
-    try:
-        weights = weight_corners(track, model)
-    except Exception:  # pragma: no cover — corpus-shape dependent
-        corners: set[int] = set()
-        for key in model.fitters:
-            if len(key) == 3:
-                corners.add(int(key[0]))
-            elif len(key) == 4:
-                corners.add(int(key[1]))
-        sorted_corners = sorted(corners)
+    if int(model.feature_schema_version) >= 4 and schedule:
+        # Per-car: weight every target-track corner uniformly until
+        # `weight_corners` learns to consume a corner schedule. Future work
+        # can derive per-corner time sensitivity from the schedule's
+        # archetype values (longer corners + slower apex = higher weight).
+        corners = sorted({int(entry.corner_id) for entry in schedule})
         weights = (
-            {c: 1.0 / len(sorted_corners) for c in sorted_corners}
-            if sorted_corners else {}
+            {c: 1.0 / len(corners) for c in corners}
+            if corners else {}
         )
+    else:
+        try:
+            weights = weight_corners(track, model)
+        except Exception:  # pragma: no cover — corpus-shape dependent
+            corners_set: set[int] = set()
+            for fkey in model.fitters:
+                if len(fkey) == 3:
+                    corners_set.add(int(fkey[0]))
+                elif len(fkey) == 4:
+                    corners_set.add(int(fkey[1]))
+            sorted_corners = sorted(corners_set)
+            weights = (
+                {c: 1.0 / len(sorted_corners) for c in sorted_corners}
+                if sorted_corners else {}
+            )
     _WEIGHTS_CACHE[key] = weights
     return weights
 
@@ -325,6 +407,9 @@ def _pin_or_trust_bounds(
     baseline: float,
     regime: str,
     observed_std: float,
+    target_observed: tuple[float, ...] = (),
+    click_step: float = 0.0,
+    empirical_range: float = 0.0,
 ) -> tuple[tuple[float, float], bool]:
     """Decide search bounds for a single parameter.
 
@@ -334,10 +419,30 @@ def _pin_or_trust_bounds(
     recommender adds those parameters to a "pinned" warning so the briefing
     can explain why no exploration happened. Otherwise the existing trust-
     radius logic applies (sparse → 30%, noisy → 50%, confident/dense → full).
+
+    ``target_observed`` (per-car v4): the unique values the driver has
+    actually run on the TARGET track. When non-empty, the trust bound is
+    additionally capped to STRICTLY ``[min(target_observed),
+    max(target_observed)]`` clipped to the constraint bound — no extra
+    margin. The per-car recommender will not extrapolate outside the
+    empirical envelope; recommending a never-tried value would be guessing
+    against a confidence bracket the joint surrogate cannot honestly
+    estimate. ``click_step`` is kept in the signature for callers but is
+    used only to widen a degenerate single-value envelope into a window
+    DE can search (``click_step`` either side of the lone value).
+
+    ``empirical_range`` (per-car v4): the global ``max - min`` observed
+    across every pooled session for this parameter. Used as the pin
+    denominator instead of the constraint span — wide legal envelopes
+    (e.g. BMW heave 0..900 N/mm per BMWBounds.md) would otherwise mask
+    real corpus variation as "near constant". When 0 (no empirical data,
+    or truly constant), the original constraint-span logic applies so
+    fully-uniform parameters still pin correctly.
     """
     lo, hi = bound
     span = hi - lo
-    if span > 0.0 and observed_std / span < _NEAR_CONSTANT_FRACTION:
+    pin_denom = empirical_range if empirical_range > 0.0 else span
+    if pin_denom > 0.0 and observed_std / pin_denom < _NEAR_CONSTANT_FRACTION:
         eps = max(span * _PIN_HALF_WIDTH_FRACTION, 1e-9)
         pinned_lo = max(lo, baseline - eps)
         pinned_hi = min(hi, baseline + eps)
@@ -345,7 +450,52 @@ def _pin_or_trust_bounds(
         if pinned_hi <= pinned_lo:
             pinned_hi = min(hi, pinned_lo + 2 * eps)
         return ((pinned_lo, pinned_hi), True)
-    return (_trust_bounds(bound, baseline, regime), False)
+    trust_lo, trust_hi = _trust_bounds(bound, baseline, regime)
+    if target_observed:
+        empirical_lo = max(lo, min(target_observed))
+        empirical_hi = min(hi, max(target_observed))
+        # Single observed value → expand by one click each side so DE has
+        # SOMETHING to search; otherwise the bound is degenerate and DE
+        # raises. Multi-value observations stay strict.
+        if empirical_hi <= empirical_lo:
+            margin = max(float(click_step), 1e-6)
+            empirical_lo = max(lo, empirical_lo - margin)
+            empirical_hi = min(hi, empirical_hi + margin)
+        # Cap trust to the empirical envelope strictly. We INTERSECT (not
+        # replace) so a tighter trust bound from a sparse-regime
+        # parameter is kept.
+        capped_lo = max(trust_lo, empirical_lo)
+        capped_hi = min(trust_hi, empirical_hi)
+        if capped_hi > capped_lo:
+            trust_lo, trust_hi = capped_lo, capped_hi
+        else:
+            # Trust bound and empirical envelope don't overlap (e.g. the
+            # per-session-median baseline drifted far from anything the
+            # driver ran on the target track). Trust the empirical
+            # envelope — it's the only ground truth we have.
+            trust_lo, trust_hi = empirical_lo, empirical_hi
+    return ((trust_lo, trust_hi), False)
+
+
+def _click_step_for(
+    model: PhysicsModel,
+    parameter: str,
+    bound: tuple[float, float],
+) -> float:
+    """One iRacing-garage click for `parameter`, for empirical-envelope margin.
+
+    Reads ``ParameterSpec.step`` from the per-car ontology when available
+    (every fittable parameter ships with a `step` per the setup-card
+    rendering work). Falls back to 1% of the constraint span which is
+    intentionally tiny so the cap stays close to the observed values.
+    """
+    spec = model.ontology.get(parameter) if model.ontology else None
+    step = float(getattr(spec, "step", 0.0) or 0.0) if spec else 0.0
+    if step > 0.0:
+        return step
+    lo, hi = bound
+    span = hi - lo
+    return max(span * 0.01, 1e-6) if span > 0 else 1e-6
 
 
 def _seed_population(
@@ -417,12 +567,16 @@ def _baseline_recommendation(
     env: EnvironmentFrame,
     baseline: dict[str, float],
     weights: dict[int, float],
+    *,
+    schedule: list | None = None,
 ) -> SetupRecommendation:
     parameters: dict[str, tuple[float, Confidence]] = {
         name: (float(value), _parameter_confidence(model, name))
         for name, value in baseline.items()
     }
-    breakdown = score_breakdown(model, baseline, track, env, weights=weights)
+    breakdown = score_breakdown(
+        model, baseline, track, env, weights=weights, schedule=schedule,
+    )
     return SetupRecommendation(
         car=model.car,
         track=track,

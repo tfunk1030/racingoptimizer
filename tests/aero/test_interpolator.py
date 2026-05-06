@@ -173,7 +173,7 @@ def test_out_of_envelope_front_rh_clamps_to_edge(
     expected_bal, expected_ld = porsche_surface.interpolate(
         75.0, rear, wing, BASELINE_AIR_DENSITY
     )
-    with caplog.at_level(logging.WARNING, logger="racingoptimizer.aero"):
+    with caplog.at_level(logging.DEBUG, logger="racingoptimizer.aero"):
         bal, ld = porsche_surface.interpolate(200.0, rear, wing, BASELINE_AIR_DENSITY)
     assert bal == pytest.approx(expected_bal, abs=1e-12)
     assert ld == pytest.approx(expected_ld, abs=1e-12)
@@ -187,7 +187,7 @@ def test_out_of_envelope_wing_clamps_to_edge(
     expected_bal, expected_ld = porsche_surface.interpolate(
         front, rear, 17.0, BASELINE_AIR_DENSITY
     )
-    with caplog.at_level(logging.WARNING, logger="racingoptimizer.aero"):
+    with caplog.at_level(logging.DEBUG, logger="racingoptimizer.aero"):
         bal, ld = porsche_surface.interpolate(front, rear, 25.0, BASELINE_AIR_DENSITY)
     assert bal == pytest.approx(expected_bal, abs=1e-12)
     assert ld == pytest.approx(expected_ld, abs=1e-12)

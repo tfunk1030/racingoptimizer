@@ -78,6 +78,7 @@ DAMPER_SUFFIX = {
     "high speed compression": "hsc",
     "low speed rebound": "lsr",
     "high speed rebound": "hsr",
+    "high speed compression slope": "hsc_slope",
 }
 
 
@@ -122,6 +123,12 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
         return ("pushrod_length_offset_front_mm", None)
     if h == "pushrod length offset rear":
         return ("pushrod_length_offset_rear_mm", None)
+    if h.startswith("anti-roll bar size"):
+        # Categorical ARB-size (Disconnect/Soft/Medium/Stiff). Must be
+        # checked BEFORE the blade-count matcher below, since both share
+        # the "anti-roll bar" prefix.
+        side = h.split("—", 1)[1].strip() if "—" in h else h.rsplit(maxsplit=1)[-1]
+        return (f"arb_size_{side}", None)
     if h.startswith("anti-roll bar"):
         side = h.split("—", 1)[1].strip() if "—" in h else h.rsplit(maxsplit=1)[-1]
         return (f"anti_roll_bar_{side}", None)
@@ -132,12 +139,26 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
         if suffix is None:
             raise ConstraintsParseError(f"unknown damper section: {heading!r}")
         return (f"damper_{suffix}", None)
+    if h == "torsion bar turns":
+        # No unit suffix on the loader key — the ontology names match
+        # `torsion_bar_turns_fl` / `_fr` directly.
+        return ("torsion_bar_turns", None)
+    if h == "torsion bar od":
+        return ("torsion_bar_od", "mm")
     if h.startswith("corner weight"):
         return ("corner_weight", "kg")
     if h == "brake bias":
         return ("brake_bias", "pct")
     if h == "differential":
         return ("diff", None)
+    # Diff categoricals (RearDiffSpec). Ontology carries the labels via
+    # `ParameterSpec.choices` (coast/drive ramps) or the legal numeric
+    # values via `discrete_values` (clutch plates); the constraint table
+    # just bounds the DE search range.
+    if h == "differential coast/drive ramps":
+        return ("diff_coast_drive_ramps", None)
+    if h == "differential clutch friction plates":
+        return ("diff_clutch_friction_plates", None)
     if h == "camber":
         return ("camber", "deg")
     if h == "toe":

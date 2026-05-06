@@ -138,6 +138,19 @@ class PhysicsModel:
     # the recommender as long as `baseline_setup` is populated).
     parameter_observed_std: dict[str, float] = field(default_factory=dict)
 
+    # Per-track per-parameter observed value sets. Populated only by
+    # `fit_per_car` (the v4 per-car path). Keyed by ``track → parameter →
+    # tuple of distinct observed values across that track's sessions``.
+    # Used by ``physics.recommend._pin_or_trust_bounds`` to cap the trust
+    # radius to the empirical envelope on the TARGET track so the per-car
+    # recommender cannot extrapolate the heave spring (or anything else)
+    # outside what the driver has actually run there. Empty on per-(car,
+    # track) v3 pickles and on legacy pickles produced before this field
+    # existed.
+    per_track_parameter_observed: dict[str, dict[str, tuple[float, ...]]] = field(
+        default_factory=dict
+    )
+
     @property
     def resolved_baselines(self) -> CarBaselines:
         """Return `car_baselines` if set, else the per-car cold-start default.
@@ -178,6 +191,7 @@ class PhysicsModel:
         # parameter as "observed std unknown" → falls through to the existing
         # trust-radius behaviour (no pinning, no regression).
         slot_values.setdefault("parameter_observed_std", {})
+        slot_values.setdefault("per_track_parameter_observed", {})
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 
@@ -186,26 +200,106 @@ class PhysicsModel:
         setup: dict[str, float],
         track: str,
         env: EnvironmentFrame,
+        *,
+        schedule: list | None = None,
     ) -> float:
         # Local import sidesteps the module-graph cycle: score imports model.
         from racingoptimizer.physics.score import score_setup as _score
-        return _score(self, setup, track, env)
+        return _score(self, setup, track, env, schedule=schedule)
 
     def recommend(
         self,
         track: str,
         env: EnvironmentFrame,
         constraints: ConstraintsTable,
+        *,
+        schedule: list | None = None,
     ):
         from racingoptimizer.physics.recommend import recommend as _recommend
-        return _recommend(self, track, env, constraints)
+        return _recommend(self, track, env, constraints, schedule=schedule)
+
+    def predict_setup_readouts(
+        self,
+        setup: dict[str, float],
+        env: EnvironmentFrame,
+    ) -> dict[str, float]:
+        """Predict deterministic setup-readout channels at ``setup``.
+
+        These channels (``setup_static_*_ride_height_mm`` etc.) are
+        functions of setup inputs only — perches, pushrods, springs,
+        torsion bars. Corner geometry and env have ~0 weight in the
+        trained Ridge regressor, but the signature still requires an env
+        frame so the assembled feature row matches what the fitter saw at
+        training time.
+
+        Returns ``{channel_name: predicted_value}`` for every channel the
+        trained model carries with a ``setup_static_`` (or other readout)
+        prefix. Picks one fitter per channel (any ``corner_id`` /
+        ``phase`` tuple — readouts are corner-independent so any will
+        do). Channels missing from the fitter dict are omitted, and an
+        unsupported feature schema (legacy v1/v2) returns an empty dict.
+        """
+        readout_prefixes = ("setup_static_",)
+
+        by_channel: dict[str, FitRecord] = {}
+        for key, record in self.fitters.items():
+            channel = key[-1] if isinstance(key, tuple) and key else None
+            if not isinstance(channel, str):
+                continue
+            if not any(channel.startswith(p) for p in readout_prefixes):
+                continue
+            if not record.fitter.is_trained:
+                continue
+            by_channel.setdefault(channel, record)
+
+        if not by_channel:
+            return {}
+
+        schema = int(self.feature_schema_version)
+        if schema < 3:
+            # Legacy per-parameter sum models don't carry joint feature
+            # rows; the readout was never trained as a single fitter.
+            return {}
+
+        env_features = _env_to_array(env)
+        archetype: dict[str, float] = {}
+
+        out: dict[str, float] = {}
+        for channel, record in by_channel.items():
+            if schema >= 4:
+                row = _assemble_feature_row_v4(
+                    record.feature_names, setup, self.baseline_setup,
+                    env_features, archetype,
+                )
+            else:
+                row = _assemble_feature_row(
+                    record.feature_names, setup, self.baseline_setup,
+                    env_features,
+                )
+            try:
+                mu, _sigma = record.fitter.predict(row.reshape(1, -1))
+            except (UntrainedError, ValueError):
+                continue
+            out[channel] = float(mu[0])
+        return out
 
     def predict(
         self,
         setup: dict[str, float],
         env: EnvironmentFrame,
         corner_phase_key: CornerPhaseKey,
+        *,
+        corner_archetype: dict[str, float] | None = None,
     ) -> CornerPhaseStateWithConfidence:
+        if int(self.feature_schema_version) >= 4:
+            if corner_archetype is None:
+                raise ValueError(
+                    "per-car model requires `corner_archetype` (dict of "
+                    "apex_speed_ms / peak_lat_g / corner_min/max_speed_ms / "
+                    "corner_duration_s) — schedule must come from the target "
+                    "TrackModel, not the trained sessions."
+                )
+            return self._predict_v4(setup, env, corner_phase_key, corner_archetype)
         if int(self.feature_schema_version) >= 3:
             return self._predict_v3(setup, env, corner_phase_key)
         return self._predict_legacy(setup, env, corner_phase_key)
@@ -260,6 +354,79 @@ class PhysicsModel:
             # std so the bracket reflects both training-grain noise (CV)
             # and per-prediction extrapolation widening (GP posterior /
             # RF tree-spread). Spec §3 / §7 calibration target.
+            bracket_std = max(float(record.cv_residual_std), posterior_std)
+            confidence = Confidence.derive(
+                value=mean_value,
+                n_samples=int(record.n_samples),
+                cv_residual_std=bracket_std,
+                signal_std=float(max(record.signal_std, 1e-12)),
+            )
+            confidence = _maybe_downgrade_aero(
+                confidence, channel, self.aero_correction_available,
+            )
+            states[channel] = confidence
+
+        return CornerPhaseStateWithConfidence(
+            corner_phase_key=corner_phase_key,
+            states=states,
+            untrained_channels=tuple(sorted(untrained)),
+        )
+
+    # ---- Stage 4 per-car (track-agnostic) prediction --------------------
+
+    def _predict_v4(
+        self,
+        setup: dict[str, float],
+        env: EnvironmentFrame,
+        corner_phase_key: CornerPhaseKey,
+        corner_archetype: dict[str, float],
+    ) -> CornerPhaseStateWithConfidence:
+        """Predict for a target corner using the per-car fitters keyed by (phase, channel).
+
+        ``corner_archetype`` carries the geometric descriptors of the TARGET
+        corner (apex speed, peak lat-G, max/min speed, duration). It is the
+        bridge that lets a Laguna-trained Cadillac fitter score a Spa corner:
+        the (phase, channel) fitter's input row is reconstructed in the
+        trained order with the target corner's archetype values plugged in.
+        """
+        phase = (
+            corner_phase_key.phase.value
+            if isinstance(corner_phase_key.phase, Phase)
+            else str(corner_phase_key.phase)
+        )
+
+        channels: dict[str, FitRecord] = {}
+        for key, record in self.fitters.items():
+            if len(key) != 2:
+                continue
+            ph, channel = key
+            if ph != phase:
+                continue
+            if not record.fitter.is_trained:
+                continue
+            channels[channel] = record
+
+        env_features = _env_to_array(env)
+        states: dict[str, Confidence] = {}
+        untrained: list[str] = []
+
+        for channel in sorted(channels.keys()):
+            record = channels[channel]
+            x_row = _assemble_feature_row_v4(
+                record.feature_names,
+                setup,
+                self.baseline_setup,
+                env_features,
+                corner_archetype,
+            )
+            try:
+                mu, sigma = record.fitter.predict(x_row.reshape(1, -1))
+            except (UntrainedError, ValueError):
+                untrained.append(channel)
+                continue
+            mean_value = float(mu[0])
+            posterior_std = float(sigma[0]) if sigma.size else 0.0
+
             bracket_std = max(float(record.cv_residual_std), posterior_std)
             confidence = Confidence.derive(
                 value=mean_value,
@@ -458,6 +625,41 @@ def _assemble_feature_row(
     env_index = {name: idx for idx, name in enumerate(_ENV_COLUMNS)}
     row = np.empty(len(feature_names), dtype=np.float64)
     for i, name in enumerate(feature_names):
+        if name in env_index:
+            row[i] = float(env_features[env_index[name]])
+            continue
+        if name in setup and setup[name] is not None:
+            row[i] = float(setup[name])
+            continue
+        if name in baseline and baseline[name] is not None:
+            row[i] = float(baseline[name])
+            continue
+        row[i] = 0.0
+    return row
+
+
+def _assemble_feature_row_v4(
+    feature_names: tuple[str, ...],
+    setup: dict[str, float],
+    baseline: dict[str, float],
+    env_features: np.ndarray,
+    corner_archetype: dict[str, float],
+) -> np.ndarray:
+    """Build the per-car (v4) joint feature row.
+
+    Same shape rules as ``_assemble_feature_row`` for setup + env, plus a
+    third source: corner archetype features keyed by name (apex_speed_ms,
+    peak_lat_g, etc). When a feature_name matches an archetype key, that
+    archetype value is used; setup/env/baseline fallbacks remain unchanged.
+    """
+    from racingoptimizer.physics.fitter import _ENV_COLUMNS
+
+    env_index = {name: idx for idx, name in enumerate(_ENV_COLUMNS)}
+    row = np.empty(len(feature_names), dtype=np.float64)
+    for i, name in enumerate(feature_names):
+        if name in corner_archetype and corner_archetype[name] is not None:
+            row[i] = float(corner_archetype[name])
+            continue
         if name in env_index:
             row[i] = float(env_features[env_index[name]])
             continue

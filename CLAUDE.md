@@ -26,6 +26,11 @@ uv run ruff check src tests                 # lint (must stay clean)
 
 VISION.md is decomposed into six slices plus three cross-cutting modules. Status reflects what is **merged** AND what has been **verified across all 5 GTP cars** (BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, Ferrari 499P) versus only single-car (BMW Sebring fixture) smoke. Per VISION.md "do not assume a unified setup schema across cars" — the five cars have different suspension architectures, IBT YAML setup-blob shapes, and aero-map step sizes. **A green BMW test is not a "works" claim.**
 
+**Two recommend code paths.** `optimize <car> <track>` routes by `PER_CAR_MODEL_CARS` (`src/racingoptimizer/cli/recommend.py:54`):
+
+- **v4 (per-car, track-agnostic)** — currently `{"cadillac", "bmw"}`. `fit_per_car()` pools every session for the car across every track into one fitter; cache key folds the session-id set + ontology fingerprint. Cache file: `corpus/models/<car>__per-car__<digest>.pickle`. Adding a car requires (a) BMWBounds/CadillacBounds-style per-car overrides in `constraints.md`, (b) the car key added to `PER_CAR_MODEL_CARS`, (c) at least one ingested session on the target track for corner-schedule extraction.
+- **v3 (per-(car, track))** — every other car. Trains per pair, uses donor-track extrapolation when target is unseen.
+
 | Slice | Module | Code merged | Per-car verification scope |
 |---|---|---|---|
 | **A — IBT ingestion** | `racingoptimizer.ingest` | ✅ | Detect/normalize: ✓ all 5 (`tests/test_detect.py`). Per-car parser end-to-end: ✓ all 5 (`tests/test_parser_per_car.py`). |
@@ -51,9 +56,31 @@ Cross-cutting modules (master-plan §2) — all merged:
 - `racingoptimizer.confidence.Confidence` — frozen `(value, lo, hi, n_samples, regime)` with `Confidence.derive(...)` regime-derivation classmethod (sparse short-circuits noisy at `n_samples < 30`).
 - `racingoptimizer.constraints.{ConstraintsTable, load_constraints, clamp}` — markdown parser for `constraints.md` plus per-car-shadowing `clamp(value, parameter, car)`.
 
+## Setup-card renderer contract (`explain/full_setup_card.py`)
+
+Every garage line carries one tag. The set is closed:
+
+| Tag | Meaning |
+|---|---|
+| `[OPT]` | Optimizer recommendation, post-clamp, rounded to iRacing UI step. |
+| `[OPT pin]` | Optimizer pinned to observed median (no per-session variance to learn from). |
+| `[OPT mirror]` | Per-axle parameter mirrored onto the symmetric corner (currently only rear coil spring rate; iRacing requires LR=RR). |
+| `[past]` | Most-recent session value; no constraint bounds yet to optimize against. |
+| `[readout]` | iRacing-calculated, past-session value. Driver cannot type these. |
+| `[predicted]` | Same readout but evaluated by `PhysicsModel.predict_setup_readouts()` at the new setup vector — what iRacing will display after the user enters the `[OPT]` values. |
+
+Static ride heights, corner weights, deflections, and the `AeroCalculator` block are all readouts; the `[predicted]` path covers `setup_static_*_ride_height_mm` and falls back to `[readout]` for the rest.
+
+Per-axle mirroring lives in `_MIRRORED_LEAVES`; predicted-readout path mapping in `_PREDICTED_READOUT_PATHS`. Add to either dict to extend coverage.
+
 Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/`. Read the active slice's spec before touching its code.
 
 `constraints.md` covers the bounded subset (wing, tyre pressure, heave spring/slider, static ride heights). ARBs, dampers, corner weights, brake bias, differential, camber, toe, brake ducts, and throttle/brake mapping are all `<TODO: from iRacing UI>` placeholders awaiting manual UI capture. Slice E's `fit` gracefully degrades — it lists CE-gated unbounded parameters in `untrained_parameters` and does not refuse to run.
+
+**Known regressions / gaps:**
+
+- `optimize <car> <track> --json` emits valid JSON to stdout, then a trailing `\n[saved to recommendations\<...>.txt]` to stderr. Click's `CliRunner` mixes stderr into `result.output` by default, so `tests/cli/test_per_car_smoke.py::test_recommend_per_car_json` fails JSON-decoding the combined stream. The text smoke test (the merge gate) passes. Fix: either suppress the auto-save stderr line under `--json`, or set `mix_stderr=False` in the test.
+- Categorical setup parameters from BMWBounds.md / Cadillacbounds.md are not yet representable — the constraints parser at `constraints/loader.py:222–298` only handles numeric `min – max` ranges. ARB size (disconnected/soft/medium/stiff), diff coast/drive ramps, clutch friction plates, and toe-in (units mismatch) all render as `[past]` until the parser learns enums + the unit-mismatch is resolved.
 
 ## Project automations (`.claude/`)
 

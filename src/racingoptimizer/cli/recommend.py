@@ -45,6 +45,16 @@ from racingoptimizer.ingest.paths import resolve_corpus_root
 
 CANONICAL_CARS = ("acura", "bmw", "cadillac", "ferrari", "porsche")
 
+# Cars that use the per-car (track-agnostic) physics model. Per VISION §3 /
+# §6: "Build an empirical physics model for each car... be able to generate
+# optimal setups for any track from just the track model and aero maps."
+# We are rolling this out one car at a time. Cadillac came first (most
+# coverage on a single track + brand-new spa data); BMW joins now that
+# constraints.md mirrors BMWBounds.md and a fresh BMW@Spa session has been
+# captured. Other cars stay on the per-(car, track) v3 path until each is
+# validated.
+PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw"})
+
 
 # --------------------------------------------------------------------------
 # `optimize <car> <track>` recommend command
@@ -90,6 +100,14 @@ CANONICAL_CARS = ("acura", "bmw", "cadillac", "ferrari", "porsche")
     "--no-cache", is_flag=True, default=False,
     help="Bypass on-disk PhysicsModel cache and refit.",
 )
+@click.option(
+    "--output-file", type=click.Path(path_type=Path), default=None,
+    help=(
+        "Write the full briefing + setup card to this file. Defaults to "
+        "`recommendations/<car>__<track>__<YYYYMMDD-HHMMSS>.txt` (or "
+        "`.json` with --json). Pass `-` to disable file output."
+    ),
+)
 def recommend_cmd(
     car: str,
     track: str | None,
@@ -102,6 +120,7 @@ def recommend_cmd(
     as_json: bool,
     corpus_root: Path | None,
     no_cache: bool,
+    output_file: Path | None,
 ) -> None:
     """Recommend a setup for `<car>` at `<track>`.
 
@@ -116,9 +135,6 @@ def recommend_cmd(
     car_key, track = _resolve_car_track_or_exit(car, track)
     root = resolve_corpus_root(corpus_root)
     catalog_sessions = _safe_sessions(car_key, corpus_root=root)
-    track_slug, donor_track = _resolve_track_or_extrapolate(
-        track, catalog_sessions, car_key,
-    )
 
     pinned_overrides = _parse_pins(pins, wing=wing)
     constraints_table = load_constraints()
@@ -126,21 +142,49 @@ def recommend_cmd(
         constraints_table, car_key, pinned_overrides,
     )
 
-    fit_track = donor_track or track_slug
-    sessions_for_fit = catalog_sessions.filter(pl.col("track") == fit_track)
-    session_ids = sorted(sessions_for_fit["session_id"].to_list())
-    model = _build_or_load_model(
-        car_key, fit_track, session_ids, root, no_cache=no_cache,
-    )
+    if car_key in PER_CAR_MODEL_CARS:
+        # Per-car path: pool every Cadillac session across every track. The
+        # target track is whatever the user asked for; we build a target
+        # TrackModel from however many sessions exist on that track (cold-
+        # start ok with as few as 1 session) and extract a per-corner
+        # archetype schedule. The same per-car PhysicsModel scores every
+        # corner via its archetype features.
+        track_slug, sessions_for_target, schedule, model = _build_per_car_pipeline(
+            car_key=car_key,
+            track=track,
+            catalog_sessions=catalog_sessions,
+            root=root,
+            no_cache=no_cache,
+        )
+        donor_track: str | None = None
+        sessions_for_fit = catalog_sessions  # env medians come from full corpus
+        session_ids = sorted(catalog_sessions["session_id"].to_list())
+        env = _env_from_overrides(
+            model=model, sessions=sessions_for_target,
+            air_temp=air_temp, track_temp=track_temp,
+            wind=wind, wetness=wetness,
+            corpus_root=root,
+        )
+        rec = model.recommend(track_slug, env, pinned_constraints, schedule=schedule)
+    else:
+        track_slug, donor_track = _resolve_track_or_extrapolate(
+            track, catalog_sessions, car_key,
+        )
+        fit_track = donor_track or track_slug
+        sessions_for_fit = catalog_sessions.filter(pl.col("track") == fit_track)
+        session_ids = sorted(sessions_for_fit["session_id"].to_list())
+        model = _build_or_load_model(
+            car_key, fit_track, session_ids, root, no_cache=no_cache,
+        )
+        env = _env_from_overrides(
+            model=model, sessions=sessions_for_fit,
+            air_temp=air_temp, track_temp=track_temp,
+            wind=wind, wetness=wetness,
+            corpus_root=root,
+        )
+        rec = model.recommend(fit_track, env, pinned_constraints)
+        schedule = None  # v3 path: per-(car, track) keying owns the corners
 
-    env = _env_from_overrides(
-        model=model, sessions=sessions_for_fit,
-        air_temp=air_temp, track_temp=track_temp,
-        wind=wind, wetness=wetness,
-        corpus_root=root,
-    )
-
-    rec = model.recommend(fit_track, env, pinned_constraints)
     rec, clamp_warnings, top_warnings = _post_clamp(rec, model, constraints_table)
 
     if donor_track is not None:
@@ -156,6 +200,7 @@ def recommend_cmd(
         rec, model,
         pinned=pinned_overrides,
         clamp_warnings=clamp_warnings,
+        schedule=schedule,
     )
 
     if as_json:
@@ -166,29 +211,79 @@ def recommend_cmd(
             warnings=top_warnings,
             track_display=track_slug,
         )
-        click.echo(json.dumps(out, indent=2, sort_keys=False))
+        rendered = json.dumps(out, indent=2, sort_keys=False)
+        click.echo(rendered)
     else:
-        click.echo(render_recommendation_text(
-            rec, model,
-            justifications=justifications,
-            pinned=pinned_overrides,
-            warnings=top_warnings,
-            track_display=track_slug,
-        ))
-        # Append the full garage-panel setup card. Pulls the user's most
-        # recent ingested setup blob for this (car, track) so every
-        # parameter the iRacing UI exposes is rendered with the right
-        # tag — [OPT] for optimizer-recommended, [past] for unbounded
-        # carry-over, [readout] for calculated.
-        most_recent_setup = _most_recent_setup_for(
-            sessions_for_fit if donor_track is None
-            else _safe_sessions(car_key, corpus_root=root).filter(
-                pl.col("track") == fit_track
-            ),
+        # Render briefing + full setup card into a single string, echo it
+        # to stdout, and (default) write it to a timestamped file under
+        # `recommendations/`. Same content in both places — the file is
+        # the artefact the user takes back to the iRacing garage.
+        if car_key in PER_CAR_MODEL_CARS:
+            # For per-car: prefer the latest setup on the target track if
+            # any exists, otherwise the latest across every car session.
+            target_sessions = catalog_sessions.filter(
+                pl.col("track") == track_slug
+            )
+            most_recent_setup = _most_recent_setup_for(
+                target_sessions if target_sessions.height > 0
+                else catalog_sessions
+            )
+        else:
+            most_recent_setup = _most_recent_setup_for(
+                sessions_for_fit if donor_track is None
+                else _safe_sessions(car_key, corpus_root=root).filter(
+                    pl.col("track") == fit_track
+                ),
+            )
+        # Predict deterministic setup readouts (static ride heights) at
+        # the recommended setup vector so the card can show the platform
+        # state the user will actually see after entering the new
+        # perches/pushrods/springs — instead of echoing the past
+        # session's stale values.
+        opt_setup: dict[str, float] = dict(model.baseline_setup)
+        for _name, (_val, _conf) in rec.parameters.items():
+            opt_setup[_name] = float(_val)
+        try:
+            predicted_readouts = model.predict_setup_readouts(opt_setup, env)
+        except AttributeError:
+            # Legacy pickle predates predict_setup_readouts; fall back to
+            # echoing past readouts.
+            predicted_readouts = {}
+        rendered = (
+            render_recommendation_text(
+                rec, model,
+                justifications=justifications,
+                pinned=pinned_overrides,
+                warnings=top_warnings,
+                track_display=track_slug,
+            )
+            + "\n"
+            + render_full_setup_card(
+                rec, car=car_key, most_recent_setup=most_recent_setup,
+                predicted_readouts=predicted_readouts,
+            )
         )
-        click.echo(render_full_setup_card(
-            rec, car=car_key, most_recent_setup=most_recent_setup,
-        ))
+        click.echo(rendered)
+
+    # File output. Always written unless the user passed `-` to opt out.
+    # Default path is `recommendations/<car>__<track>__<YYYYMMDD-HHMMSS>.txt`
+    # (or `.json` when --json) — the user can hand this file to a sim
+    # crew without the briefing being interleaved with command-line noise.
+    if output_file is None:
+        from datetime import datetime
+        ext = ".json" if as_json else ".txt"
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        output_file = Path("recommendations") / f"{car_key}__{track_slug}__{ts}{ext}"
+    if str(output_file) != "-":
+        try:
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            output_file.write_text(rendered, encoding="utf-8")
+            click.echo(f"\n[saved to {output_file}]", err=True)
+        except OSError as exc:
+            click.echo(
+                f"\n[warning: could not write {output_file}: {exc}]",
+                err=True,
+            )
 
 
 # --------------------------------------------------------------------------
@@ -320,7 +415,7 @@ def status_cmd(car: str, as_json: bool, corpus_root: Path | None) -> None:
             car=car_key, track=track_slug, valid_only=True, corpus_root=root,
         )
         n_clean = _approximate_clean_corner_phases(sids, root)
-        regime = _coverage_regime(len(sids), valid_laps.height)
+        regime = _data_density_regime(len(sids), valid_laps.height)
 
         snapshot = load_latest_fit_quality(
             corpus_root=root, car=car_key, track=track_slug,
@@ -583,6 +678,147 @@ def _apply_pins_to_constraints(
     return ConstraintsTable(_by_car=by_car)
 
 
+def _build_per_car_pipeline(
+    *,
+    car_key: str,
+    track: str,
+    catalog_sessions: pl.DataFrame,
+    root: Path,
+    no_cache: bool = False,
+):
+    """Build the four artefacts a per-car (v4) recommend run needs.
+
+    Returns ``(track_slug, sessions_for_target, schedule, model)``.
+
+    * ``track_slug``: normalised target track slug (matches catalog naming).
+    * ``sessions_for_target``: subset of ``catalog_sessions`` filtered to the
+      target track. Used for env-median computation. May be empty when the
+      target track has zero sessions for this car (true cold-start).
+    * ``schedule``: list of ``CornerScheduleEntry`` for the target track,
+      built from valid laps on the target track. The recommender feeds
+      these archetype features into the per-car PhysicsModel at predict
+      time so the same fitter scores any track.
+    * ``model``: per-car ``PhysicsModel`` trained on EVERY session of
+      ``car_key`` across every track. Cached on disk under
+      ``corpus/models/<car>__per-car__<digest>.pickle``.
+
+    A target track with zero sessions raises a CLI error with the standard
+    untrained-track message — there's nothing to extract a schedule from
+    yet. (Donor extrapolation is replaced by the per-car path itself: the
+    model already pools data across tracks; we just need at least one valid
+    lap on the target to know its corner geometry.)
+    """
+    from racingoptimizer.physics.corner_schedule import build_corner_schedule
+
+    # Track slug normalisation: same rules as the per-(car, track) path.
+    raw = track.strip().lower()
+    needle = slugify_track(raw) or raw
+    bare = needle.replace("_", "")
+    available = sorted(set(catalog_sessions["track"].to_list()))
+    track_slug: str | None = None
+    if needle in available:
+        track_slug = needle
+    elif bare in available:
+        track_slug = bare
+    else:
+        matches = sorted({
+            slug for slug in available
+            if needle in slug or bare in slug.replace("_", "")
+        })
+        if len(matches) == 1:
+            track_slug = matches[0]
+        elif len(matches) > 1:
+            click.echo(
+                f"ambiguous track {track!r}; candidates: {', '.join(matches)}",
+                err=True,
+            )
+            sys.exit(2)
+
+    if track_slug is None:
+        click.echo(
+            f"per-car {car_key} has no sessions on track {track!r}; "
+            f"available: {', '.join(available) or '(none)'}. Run "
+            f"`optimize learn <ibt>` to ingest a session on this track first.",
+            err=True,
+        )
+        sys.exit(2)
+
+    sessions_for_target = catalog_sessions.filter(pl.col("track") == track_slug)
+    target_sids = sorted(sessions_for_target["session_id"].to_list())
+    schedule = build_corner_schedule(target_sids, corpus_root=root)
+    if not schedule:
+        click.echo(
+            f"could not extract a corner schedule for ({car_key}, {track_slug}); "
+            f"target sessions had no detectable corners on any valid lap.",
+            err=True,
+        )
+        sys.exit(2)
+
+    pooled_sids = sorted(catalog_sessions["session_id"].to_list())
+    model = _build_or_load_per_car_model(
+        car_key, pooled_sids, root, no_cache=no_cache,
+    )
+    return track_slug, sessions_for_target, schedule, model
+
+
+def _build_or_load_per_car_model(
+    car: str,
+    session_ids: list[str],
+    root: Path,
+    *,
+    no_cache: bool = False,
+):
+    """Per-car (v4) PhysicsModel cache layer.
+
+    Cache key folds the SET of pooled session ids + ontology fingerprint +
+    feature-schema version. Adding a new session on any track invalidates
+    the cache (all sessions contribute to the per-car fit).
+    """
+    cache_path = _per_car_model_cache_path(root, car, session_ids)
+    if not no_cache and cache_path.exists():
+        try:
+            with cache_path.open("rb") as fh:
+                return pickle.load(fh)
+        except Exception:
+            pass
+
+    from racingoptimizer.physics import InsufficientDataError
+    from racingoptimizer.physics.fitter import fit_per_car
+
+    k_folds = 5 if len(session_ids) >= 3 else 2
+    try:
+        model = fit_per_car(car, session_ids, corpus_root=root, k_folds=k_folds)
+    except InsufficientDataError as exc:
+        click.echo(
+            f"insufficient training data for per-car {car}: {exc}",
+            err=True,
+        )
+        sys.exit(2)
+
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with cache_path.open("wb") as fh:
+            pickle.dump(model, fh)
+    except Exception:
+        pass
+    return model
+
+
+def _per_car_model_cache_path(
+    root: Path, car: str, session_ids: list[str],
+) -> Path:
+    """Cache path for the per-car PhysicsModel. Mirrors `_model_cache_path`
+    semantics but keys on ``per-car`` instead of a track."""
+    from racingoptimizer.physics.fitter import (
+        ENV_FEATURE_SCHEMA_VERSION_PER_CAR,
+    )
+
+    parts = _model_cache_parts(car, session_ids)
+    parts.append(f"schema={int(ENV_FEATURE_SCHEMA_VERSION_PER_CAR)}")
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
+    return root / "models" / f"{car}__per-car__{digest}.pickle"
+
+
 def _build_or_load_model(
     car: str,
     track: str,
@@ -630,16 +866,39 @@ def _build_or_load_model(
 
 
 def _model_cache_path(root: Path, car: str, track: str, session_ids: list[str]) -> Path:
-    """Cache path keyed by session ids + ontology fingerprint + feature schema.
+    """Cache path keyed by session ids + ontology + constraints + fitters layout + feature schema.
 
-    The ontology fingerprint folds in the per-car parameter set and each
-    parameter's `(family, fittable, user_settable)` triple. Any change to
-    `physics.ontology` (e.g. flipping a CE-gated entry to `fittable=True`)
-    invalidates pre-existing cached pickles so a stale model cannot leak
-    a now-impossible recommendation. The feature-schema version pins the
-    pickle layout: pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3).
+    Each component matters for pickle validity:
+    * Session ids — adding a session = new training data.
+    * Ontology fingerprint — per-car parameter set + each spec's
+      `(family, fittable, user_settable)` triple. Flipping a CE-gated
+      entry invalidates the pickle.
+    * Constraints content — bounds in `constraints.md` are baked into
+      the model at fit time; editing them must invalidate the pickle so
+      DE doesn't search against stale bounds.
+    * Fitters package layout version — class adds/renames/module-moves
+      under `physics.fitters` would otherwise leave a valid digest
+      pointing at a pickle that fails to revive
+      (`ModuleNotFoundError`).
+    * Feature-schema version — pre-S2.2 (v1), S2.2 env-12 (v2),
+      Stage-3 coupled (v3).
     """
     from racingoptimizer.physics.fitter import ENV_FEATURE_SCHEMA_VERSION
+
+    parts = _model_cache_parts(car, session_ids)
+    parts.append(f"schema={int(ENV_FEATURE_SCHEMA_VERSION)}")
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
+    return root / "models" / f"{car}__{track}__{digest}.pickle"
+
+
+def _model_cache_parts(car: str, session_ids: list[str]) -> list[str]:
+    """Cache key components shared by both per-(car, track) and per-car paths.
+
+    Folds session ids, ontology fingerprint, constraints.md content, and
+    the fitters-package layout version. Caller appends any path-specific
+    suffix (per-track schema vs per-car schema) before hashing.
+    """
+    from racingoptimizer.physics.fitters import FITTERS_LAYOUT_VERSION
     from racingoptimizer.physics.ontology import ontology_for
 
     parts = ["|".join(sorted(session_ids))]
@@ -649,9 +908,31 @@ def _model_cache_path(root: Path, car: str, track: str, session_ids: list[str]) 
         for name, spec in sorted(onto.items())
     )
     parts.append(f"onto={onto_fingerprint}")
-    parts.append(f"schema={int(ENV_FEATURE_SCHEMA_VERSION)}")
-    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
-    return root / "models" / f"{car}__{track}__{digest}.pickle"
+    parts.append(f"constraints={_constraints_fingerprint()}")
+    parts.append(f"fitters_layout={FITTERS_LAYOUT_VERSION}")
+    return parts
+
+
+def _constraints_fingerprint() -> str:
+    """Stable digest of the active `constraints.md` file content.
+
+    Hashed at cache-key build time so editing the file (e.g. tightening
+    a per-car spring bound after a UI capture) invalidates every
+    pre-existing pickle that was fit against the old bounds.
+    """
+    try:
+        from racingoptimizer.constraints.loader import _default_constraints_path
+        path = _default_constraints_path()
+        if not path.is_file():
+            return "missing"
+        return hashlib.sha256(
+            path.read_bytes()
+        ).hexdigest()[:16]
+    except Exception:
+        # Constraints file unreadable — fall back to a sentinel rather
+        # than crash the cache lookup. Caller will refit on the next
+        # run when the file becomes readable.
+        return "unreadable"
 
 
 def _env_from_overrides(
@@ -1013,7 +1294,18 @@ def _approximate_clean_corner_phases(
     return total_rows
 
 
-def _coverage_regime(n_sessions: int, n_laps: int) -> str:
+def _data_density_regime(n_sessions: int, n_laps: int) -> str:
+    """Classify a (car, track) pair by how much TRAINING DATA exists for it.
+
+    This is a capacity heuristic — "do we have enough laps to even try?"
+    — and is distinct from `Confidence.regime`, which classifies the
+    fitter's residual-vs-signal ratio at predict time. The status
+    command surfaces this density regime per track; the briefing's
+    per-parameter `[confidence: ...]` tag uses `Confidence.regime`. They
+    can disagree (a track with hundreds of laps but flat input variance
+    looks `dense` here and `sparse` to the fitter), and that's OK — they
+    answer different questions.
+    """
     if n_laps == 0 or n_sessions == 0:
         return "sparse"
     if n_sessions >= 4 and n_laps >= 100:
@@ -1023,6 +1315,11 @@ def _coverage_regime(n_sessions: int, n_laps: int) -> str:
     if n_sessions >= 2:
         return "noisy"
     return "sparse"
+
+
+# Back-compat alias — older imports referenced this name. Remove once
+# downstream tooling is updated.
+_coverage_regime = _data_density_regime
 
 
 _REGIME_RANK: dict[str, int] = {"sparse": 0, "noisy": 1, "confident": 2, "dense": 3}

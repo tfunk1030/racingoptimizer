@@ -102,13 +102,29 @@ def render_status_json(status: ModelStatus) -> dict[str, Any]:
 # ---- internals -----------------------------------------------------------
 
 
-def _env_to_json(env) -> dict[str, float]:
+def _env_to_json(env) -> dict[str, float | bool | int]:
+    """Serialise the full 12-channel `EnvironmentFrame` for JSON consumers.
+
+    Mirrors the field set in `racingoptimizer.context.environment` so
+    downstream tools (engineering dashboards, weather-aware diff
+    viewers) see the same view the fitter trains on.
+    """
     return {
+        # Atmospheric floats
+        "air_temp_c": float(env.air_temp_c),
         "air_density_kg_m3": float(env.air_density),
-        "track_temp_c": float(env.track_temp_c),
+        "air_pressure_mbar": float(env.air_pressure_mbar),
+        "relative_humidity": float(env.relative_humidity),
         "wind_vel_ms": float(env.wind_vel_ms),
         "wind_dir_deg": float(env.wind_dir_deg),
+        "fog_level": float(env.fog_level),
+        # Track surface
+        "track_temp_c": float(env.track_temp_c),
         "wetness": float(env.track_wetness),
+        # Discrete state
+        "weather_declared_wet": bool(env.weather_declared_wet),
+        "precip_type": int(env.precip_type),
+        "skies": int(env.skies),
     }
 
 

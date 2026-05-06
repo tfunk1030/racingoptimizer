@@ -22,8 +22,13 @@ class ForestFitter(FitterBase):
         self,
         *,
         random_state: int = 0xC0FFEE,
-        n_estimators: int = 100,
-        max_depth: int | None = None,
+        n_estimators: int = 50,
+        # Cap tree depth so per-prediction tree traversal stays fast
+        # under the per-car v4 path's heavy DE search (>40 fittable
+        # parameters, 70+ schedule entries × 30+ output channels per
+        # objective evaluation). 15 levels capture the dominant feature
+        # interactions; deeper splits mostly memorise noise.
+        max_depth: int | None = 15,
     ) -> None:
         super().__init__()
         self._random_state = int(random_state)

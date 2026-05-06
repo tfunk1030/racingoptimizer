@@ -1,0 +1,1114 @@
+{
+  "car": "bmw",
+  "track": "sebring_international",
+  "track_display": "sebring_international",
+  "environment": {
+    "air_density_kg_m3": 1.177146553993225,
+    "track_temp_c": 35.0,
+    "wind_vel_ms": 4.023359775543213,
+    "wind_dir_deg": 2.356194496154785,
+    "wetness": 0.0
+  },
+  "confidence": {
+    "regime": "noisy",
+    "n_samples": 51,
+    "n_parameters": 38
+  },
+  "pinned": {},
+  "parameters": [
+    {
+      "parameter": "anti_roll_bar_front",
+      "value": 1.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 1.0,
+        "lo": -3.988778815066005,
+        "hi": 5.988778815066005
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 1.000 to 1 (legal range 1..5)",
+        "observed in training [-3.989, 5.989]"
+      ]
+    },
+    {
+      "parameter": "anti_roll_bar_rear",
+      "value": 1.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 1.0,
+        "lo": -3.988778815066005,
+        "hi": 5.988778815066005
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 1.000 to 1 (legal range 1..5)",
+        "observed in training [-3.989, 5.989]"
+      ]
+    },
+    {
+      "parameter": "brake_bias_pct",
+      "value": 46.499991505868564,
+      "unit": "pct",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 46.5,
+        "lo": 41.511221184933994,
+        "hi": 51.488778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [41.511, 51.489]"
+      ]
+    },
+    {
+      "parameter": "camber_fl_deg",
+      "value": -2.9,
+      "unit": "deg",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": -2.9,
+        "lo": -7.888778815066004,
+        "hi": 2.088778815066005
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [-7.889, 2.089]"
+      ]
+    },
+    {
+      "parameter": "camber_fr_deg",
+      "value": -2.9,
+      "unit": "deg",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": -2.9,
+        "lo": -7.888778815066004,
+        "hi": 2.088778815066005
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [-7.889, 2.089]"
+      ]
+    },
+    {
+      "parameter": "camber_rl_deg",
+      "value": -1.8999997052111404,
+      "unit": "deg",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": -1.9,
+        "lo": -6.888778815066004,
+        "hi": 3.088778815066005
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [-6.889, 3.089]"
+      ]
+    },
+    {
+      "parameter": "camber_rr_deg",
+      "value": -1.899999475981255,
+      "unit": "deg",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": -1.9,
+        "lo": -6.888778815066004,
+        "hi": 3.088778815066005
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [-6.889, 3.089]"
+      ]
+    },
+    {
+      "parameter": "damper_hsc_fl",
+      "value": 9.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 9.0,
+        "lo": 4.011221184933995,
+        "hi": 13.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 9.000 to 9 (legal range 0..11)",
+        "observed in training [4.011, 13.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsc_fr",
+      "value": 9.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 9.0,
+        "lo": 4.011221184933995,
+        "hi": 13.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 9.000 to 9 (legal range 0..11)",
+        "observed in training [4.011, 13.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsc_rl",
+      "value": 10.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 10.0,
+        "lo": 5.011221184933995,
+        "hi": 14.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 10.000 to 10 (legal range 0..11)",
+        "observed in training [5.011, 14.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsc_rr",
+      "value": 10.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 10.0,
+        "lo": 5.011221184933995,
+        "hi": 14.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 10.000 to 10 (legal range 0..11)",
+        "observed in training [5.011, 14.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsc_slope_fl",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 5.000 to 5 (legal range 0..11)",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsc_slope_fr",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 5.000 to 5 (legal range 0..11)",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsc_slope_rl",
+      "value": 11.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 11.0,
+        "lo": 6.011221184933995,
+        "hi": 15.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 11.000 to 11 (legal range 0..11)",
+        "observed in training [6.011, 15.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsc_slope_rr",
+      "value": 11.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 11.0,
+        "lo": 6.011221184933995,
+        "hi": 15.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 11.000 to 11 (legal range 0..11)",
+        "observed in training [6.011, 15.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsr_fl",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 5.000 to 5 (legal range 0..11)",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsr_fr",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 5.000 to 5 (legal range 0..11)",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsr_rl",
+      "value": 6.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 6.0,
+        "lo": 1.0112211849339952,
+        "hi": 10.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 6.000 to 6 (legal range 0..11)",
+        "observed in training [1.011, 10.989]"
+      ]
+    },
+    {
+      "parameter": "damper_hsr_rr",
+      "value": 6.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 6.0,
+        "lo": 1.0112211849339952,
+        "hi": 10.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 6.000 to 6 (legal range 0..11)",
+        "observed in training [1.011, 10.989]"
+      ]
+    },
+    {
+      "parameter": "damper_lsc_fl",
+      "value": 10.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 10.0,
+        "lo": 5.011221184933995,
+        "hi": 14.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 10.000 to 10 (legal range 0..11)",
+        "observed in training [5.011, 14.989]"
+      ]
+    },
+    {
+      "parameter": "damper_lsc_fr",
+      "value": 10.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 10.0,
+        "lo": 5.011221184933995,
+        "hi": 14.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [5.011, 14.989]"
+      ]
+    },
+    {
+      "parameter": "damper_lsc_rl",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 5.000 to 5 (legal range 0..11)",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_lsc_rr",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 5.000 to 5 (legal range 0..11)",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_lsr_fl",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_lsr_fr",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 5.000 to 5 (legal range 0..11)",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_lsr_rl",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "damper_lsr_rr",
+      "value": 5.0,
+      "unit": "click",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 5.0,
+        "lo": 0.011221184933995154,
+        "hi": 9.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "discrete-click value rounded from 5.000 to 5 (legal range 0..11)",
+        "observed in training [0.011, 9.989]"
+      ]
+    },
+    {
+      "parameter": "diff_preload_nm",
+      "value": 10.0,
+      "unit": "Nm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 10.0,
+        "lo": 5.011221184933995,
+        "hi": 14.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [5.011, 14.989]"
+      ]
+    },
+    {
+      "parameter": "heave_perch_offset_front_mm",
+      "value": -30.500071571219653,
+      "unit": "mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": -30.5,
+        "lo": -35.488778815066006,
+        "hi": -25.511221184933994
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [-35.489, -25.511]"
+      ]
+    },
+    {
+      "parameter": "heave_spring_rate_n_per_mm",
+      "value": 30.000158769478368,
+      "unit": "N/mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 30.0,
+        "lo": 25.011221184933994,
+        "hi": 34.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [25.011, 34.989]"
+      ]
+    },
+    {
+      "parameter": "pushrod_length_offset_front_mm",
+      "value": -24.500032254742973,
+      "unit": "mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": -24.5,
+        "lo": -29.488778815066006,
+        "hi": -19.511221184933994
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [-29.489, -19.511]"
+      ]
+    },
+    {
+      "parameter": "pushrod_length_offset_rear_mm",
+      "value": -36.5,
+      "unit": "mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": -36.5,
+        "lo": -41.488778815066006,
+        "hi": -31.511221184933994
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [-41.489, -31.511]"
+      ]
+    },
+    {
+      "parameter": "rear_coil_spring_rate_n_per_mm",
+      "value": 159.99996140453595,
+      "unit": "N/mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 160.0,
+        "lo": 155.011221184934,
+        "hi": 164.988778815066
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [155.011, 164.989]"
+      ]
+    },
+    {
+      "parameter": "rear_wing_angle_deg",
+      "value": 16.999996883065894,
+      "unit": "deg",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 17.0,
+        "lo": 12.011221184933994,
+        "hi": 21.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [12.011, 21.989]"
+      ]
+    },
+    {
+      "parameter": "spring_perch_offset_rear_mm",
+      "value": 30.0,
+      "unit": "mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 30.0,
+        "lo": 25.011221184933994,
+        "hi": 34.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [25.011, 34.989]"
+      ]
+    },
+    {
+      "parameter": "third_perch_offset_rear_mm",
+      "value": 36.0,
+      "unit": "mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 36.0,
+        "lo": 31.011221184933994,
+        "hi": 40.988778815066006
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [31.011, 40.989]"
+      ]
+    },
+    {
+      "parameter": "third_spring_rate_n_per_mm",
+      "value": 380.0,
+      "unit": "N/mm",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 380.0,
+        "lo": 375.011221184934,
+        "hi": 384.988778815066
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [375.011, 384.989]"
+      ]
+    },
+    {
+      "parameter": "tyre_cold_pressure_kpa",
+      "value": 152.0,
+      "unit": "kPa",
+      "pinned": false,
+      "confidence": {
+        "regime": "noisy",
+        "n_samples": 51,
+        "value": 152.0,
+        "lo": 147.011221184934,
+        "hi": 156.988778815066
+      },
+      "sensitivity_minus_1_click": 0.0,
+      "sensitivity_plus_1_click": 0.0,
+      "corners_helped": [
+        {
+          "corner_id": 0,
+          "phase": "straight",
+          "score_delta": 0.0,
+          "note": "model held value at training baseline; no per-corner sensitivity in this corpus"
+        }
+      ],
+      "corners_hurt": [],
+      "telemetry_evidence": [
+        "noisy confidence backed by 51 samples",
+        "observed in training [147.011, 156.989]"
+      ]
+    }
+  ],
+  "untrained_parameters": [
+    "corner_weight_fl_kg",
+    "corner_weight_fr_kg",
+    "corner_weight_rl_kg",
+    "corner_weight_rr_kg"
+  ],
+  "aero_correction_available": true,
+  "warnings": [
+    "pinned to observed median (no per-session variation in training corpus, no learnable response surface): anti_roll_bar_front, anti_roll_bar_rear, brake_bias_pct, camber_fl_deg, camber_fr_deg, camber_rl_deg, camber_rr_deg, damper_hsc_fl, damper_hsc_fr, damper_hsc_rl, damper_hsc_rr, damper_hsc_slope_fl, damper_hsc_slope_fr, damper_hsc_slope_rl, damper_hsc_slope_rr, damper_hsr_fl, damper_hsr_fr, damper_hsr_rl, damper_hsr_rr, damper_lsc_fl, damper_lsc_fr, damper_lsc_rl, damper_lsc_rr, damper_lsr_fl, damper_lsr_fr, damper_lsr_rl, damper_lsr_rr, diff_preload_nm, heave_perch_offset_front_mm, heave_spring_rate_n_per_mm, pushrod_length_offset_front_mm, pushrod_length_offset_rear_mm, rear_coil_spring_rate_n_per_mm, rear_wing_angle_deg, spring_perch_offset_rear_mm, third_perch_offset_rear_mm, third_spring_rate_n_per_mm, tyre_cold_pressure_kpa",
+    "untrained_parameters: corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg"
+  ]
+}

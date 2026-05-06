@@ -76,8 +76,10 @@ def test_append_and_load_round_trip(tmp_path: Path) -> None:
     )
     assert isinstance(snap, FitQualitySnapshot)
     # rec_b is the latest fit and has lower noise → higher fit_quality.
-    assert snap.fit_quality == pytest.approx(1.0 - 0.1, abs=1e-9)
-    assert snap.prior_fit_quality == pytest.approx(1.0 - 0.5, abs=1e-9)
+    # fit_quality = 1 / (1 + noise_ratio), bounded [0, 1] without
+    # saturating at the floor like the old `max(0, 1 - noise_ratio)`.
+    assert snap.fit_quality == pytest.approx(1.0 / (1.0 + 0.1), abs=1e-9)
+    assert snap.prior_fit_quality == pytest.approx(1.0 / (1.0 + 0.5), abs=1e-9)
     assert snap.n_fitters == 1
 
 

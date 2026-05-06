@@ -130,37 +130,75 @@ Medium / Stiff) is a separate discrete control not yet modelled.
 | --- | --- |
 | 1 | 5 |
 
+> **NOTE — damper click bounds.** 0..11 click range per corner per
+> damper mode (LSC / HSC / LSR / HSR / HSC slope). iRacing's GTP garage
+> exposes each as a discrete integer click count. Range captured from
+> Cadillac's garage UI (`Cadillacbounds.md`) and applied as the default;
+> other cars are assumed to follow the same envelope until verified.
+> ARB-style integer rounding is enforced at the briefing render.
+
 ### Damper — Low Speed Compression (LSC)
 | corner | min | max |
 | --- | --- | --- |
-| FL | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| FR | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| RL | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| RR | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+| FL | 0 | 11 |
+| FR | 0 | 11 |
+| RL | 0 | 11 |
+| RR | 0 | 11 |
 
 ### Damper — High Speed Compression (HSC)
 | corner | min | max |
 | --- | --- | --- |
-| FL | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| FR | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| RL | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| RR | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+| FL | 0 | 11 |
+| FR | 0 | 11 |
+| RL | 0 | 11 |
+| RR | 0 | 11 |
 
 ### Damper — Low Speed Rebound (LSR)
 | corner | min | max |
 | --- | --- | --- |
-| FL | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| FR | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| RL | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| RR | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+| FL | 0 | 11 |
+| FR | 0 | 11 |
+| RL | 0 | 11 |
+| RR | 0 | 11 |
 
 ### Damper — High Speed Rebound (HSR)
 | corner | min | max |
 | --- | --- | --- |
-| FL | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| FR | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| RL | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| RR | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+| FL | 0 | 11 |
+| FR | 0 | 11 |
+| RL | 0 | 11 |
+| RR | 0 | 11 |
+
+### Damper — High Speed Compression Slope (HS slope)
+Separate click index from the four primary damper modes. Sets where the
+damper transitions from low-speed to high-speed compression behaviour.
+| corner | min | max |
+| --- | --- | --- |
+| FL | 0 | 11 |
+| FR | 0 | 11 |
+| RL | 0 | 11 |
+| RR | 0 | 11 |
+
+### Torsion bar turns
+Per-side preload turn count on the front torsion bars. Cadillac and BMW
+M Hybrid V8 expose this control on the same envelope per BMWBounds.md /
+Cadillacbounds.md; other cars use coil springs at the front and ignore
+this section. 0.001 turn step.
+| corner | min | max |
+| --- | --- | --- |
+| FL | -0.250 | 0.250 |
+| FR | -0.250 | 0.250 |
+
+### Torsion bar OD
+Per-side outer-diameter selection on the front torsion bars (Cadillac
+and BMW M Hybrid V8 expose the same 14-value list per BMWBounds.md /
+Cadillacbounds.md). The garage UI's fixed list runs from 13.90 to 18.20
+mm; the recommender clamps to the continuous envelope and the renderer
+picks the nearest legal value via `ParameterSpec.discrete_values`.
+| corner | min | max |
+| --- | --- | --- |
+| FL | 13.90 | 18.20 |
+| FR | 13.90 | 18.20 |
 
 ### Corner weight (target)
 | corner | min | max |
@@ -186,6 +224,38 @@ Preload is a single Nm scalar shared across the GTPs.
 | preload     | Nm | 0.0  | 150.0 |
 | coast ratio | %  | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
 | power ratio | %  | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+
+### Anti-roll bar size — front
+Categorical iRacing UI selection. The ontology
+(`ParameterSpec.choices`) carries the labels in stiffness-ascending
+order: 0=Disconnect, 1=Soft, 2=Medium, 3=Stiff. DE searches the
+integer-index envelope; the renderer maps back to the label.
+| min | max |
+| --- | --- |
+| 0 | 3 |
+
+### Anti-roll bar size — rear
+Same encoding as the front ARB size (0..3 → Disconnect / Soft / Medium / Stiff).
+| min | max |
+| --- | --- |
+| 0 | 3 |
+
+### Differential coast/drive ramps
+Coast/drive ramp angle pair selection. The ontology
+(`ParameterSpec.choices`) carries the labels in lock-up-ascending
+order: 0=40/65, 1=45/70, 2=50/75. DE searches the integer-index
+envelope; the renderer maps back to the label string.
+| min | max |
+| --- | --- |
+| 0 | 2 |
+
+### Differential clutch friction plates
+Discrete numeric (2 / 4 / 6 plates). The ontology's
+`discrete_values=(2, 4, 6)` snaps the optimizer's continuous output to
+the nearest legal value at render time.
+| min | max |
+| --- | --- |
+| 2 | 6 |
 
 ### Camber
 Negative values only (top of wheel inboard). Front spans wider than rear.
@@ -235,14 +305,18 @@ Discrete iRacing setting; structure varies per car (curve preset, shape index, o
 - **Rear coil spring rate:** 60.0 – 300.0 N/mm
 
 ### bmw
-- **Heave spring rate:** 30.0 – 100.0 N/mm
-- **Rear third spring rate:** 100.0 – 300.0 N/mm
-- **Rear coil spring rate:** 100.0 – 300.0 N/mm
+- **Heave spring rate:** 0.0 – 900.0 N/mm
+- **Rear third spring rate:** 0.0 – 900.0 N/mm
+- **Rear coil spring rate:** 105.0 – 280.0 N/mm
+- **Spring perch offset rear:** -100.0 – 100.0 mm
+- **Third perch offset rear:** -100.0 – 100.0 mm
 
 ### cadillac
-- **Heave spring rate:** 20.0 – 200.0 N/mm
-- **Rear third spring rate:** 100.0 – 1000.0 N/mm
-- **Rear coil spring rate:** 105.0 – 300.0 N/mm
+- **Heave spring rate:** 0.0 – 700.0 N/mm
+- **Rear third spring rate:** 0.0 – 900.0 N/mm
+- **Rear coil spring rate:** 105.0 – 280.0 N/mm
+- **Spring perch offset rear:** -100.0 – 100.0 mm
+- **Third perch offset rear:** -100.0 – 100.0 mm
 
 ### porsche
 - **Heave spring rate:** 150.0 – 600.0 N/mm

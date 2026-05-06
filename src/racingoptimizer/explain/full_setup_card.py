@@ -10,12 +10,20 @@ garage UI, ready to be entered.
 This module produces that view by walking the most-recent ingested setup
 JSON for the (car, track) combination and tagging each leaf with a source:
 
-* ``[OPT]``       — optimizer-recommended value, post-clamp.
-* ``[OPT pin]``   — optimizer pinned to observed median (no signal to deviate).
-* ``[past]``      — value from your most-recent session (no constraint bounds
-                    to optimize against yet).
-* ``[readout]``   — calculated by iRacing; you don't enter this. Listed so
-                    you can verify the resulting platform state matches.
+* ``[OPT]``        — optimizer-recommended value, post-clamp.
+* ``[OPT pin]``    — optimizer pinned to observed median (no signal to deviate).
+* ``[OPT mirror]`` — value mirrored from the per-axle parameter (e.g.
+                     iRacing requires LR=RR rear spring rate). The
+                     optimizer trains the parameter once; the renderer
+                     mirrors it onto the symmetric corner.
+* ``[past]``       — value from your most-recent session (no constraint
+                     bounds to optimize against yet).
+* ``[readout]``    — calculated by iRacing; you don't enter this. Past
+                     session value, listed for reference.
+* ``[predicted]``  — calculated readout the optimizer's setup-readout
+                     fitter projects under the new inputs. This is what
+                     iRacing's calculator will show after you enter the
+                     ``[OPT]`` values.
 
 VISION §7 gates this output: every USER-set parameter must surface a value
 the driver can actually type. Calculated readouts must NOT be presented as
@@ -70,6 +78,33 @@ _PANELS: tuple[tuple[str, str], ...] = (
 )
 
 
+# Setup leaves whose iRacing UI value must mirror another corner.
+# {target_path: (source_path, parameter_name)} — when the renderer walks
+# `target_path`, it pulls the OPT value from `source_path`'s recommendation
+# and tags `[OPT mirror]`. Currently only the rear coil spring rate
+# (iRacing requires LR=RR; the optimizer trains LeftRear only).
+_MIRRORED_LEAVES: dict[tuple[str, ...], tuple[tuple[str, ...], str]] = {
+    ("Chassis", "RightRear", "SpringRate"): (
+        ("Chassis", "LeftRear", "SpringRate"),
+        "rear_coil_spring_rate_n_per_mm",
+    ),
+}
+
+
+# Calculated readouts the optimizer's setup-readout fitter can predict at
+# the recommended setup vector. Maps the YAML leaf path → the model's
+# output channel name. When a prediction is available, the renderer shows
+# `[predicted]` with the projected value (and notes the past readout in
+# parentheses if it differs); otherwise it falls back to `[readout]`
+# echoing the past-session YAML value.
+_PREDICTED_READOUT_PATHS: dict[tuple[str, ...], str] = {
+    ("Chassis", "LeftFront", "RideHeight"): "setup_static_lf_ride_height_mm",
+    ("Chassis", "RightFront", "RideHeight"): "setup_static_rf_ride_height_mm",
+    ("Chassis", "LeftRear", "RideHeight"): "setup_static_lr_ride_height_mm",
+    ("Chassis", "RightRear", "RideHeight"): "setup_static_rr_ride_height_mm",
+}
+
+
 def _humanize_leaf(name: str) -> str:
     """Turn a YAML leaf key into a friendly garage label.
 
@@ -119,12 +154,53 @@ def _round_to_step(value: float, step: float | None) -> float:
     return round(value / step) * step
 
 
-def _format_opt_value(value: float, step: float | None, units: str) -> str:
-    """Render an optimizer-recommended numeric with garage-step rounding + units."""
-    snapped = _round_to_step(value, step)
-    if step is None or step >= 1.0:
+def _snap_to_discrete(value: float, choices: tuple[float, ...]) -> float:
+    """Snap ``value`` to the nearest entry in ``choices`` (non-uniform list).
+
+    Used for parameters whose iRacing UI exposes a fixed list of values
+    that don't follow a uniform step — torsion bar OD's 14 diameters
+    being the canonical example. Returns the closest legal value;
+    distance ties resolve to the lower entry (Python ``min`` is stable).
+    """
+    return min(choices, key=lambda c: abs(c - value))
+
+
+def _format_opt_value(
+    value: float,
+    spec_step: float | None,
+    units: str,
+    *,
+    discrete_values: tuple[float, ...] | None = None,
+    choices: tuple[str, ...] | None = None,
+) -> str:
+    """Render an optimizer-recommended value as a single user-enterable string.
+
+    Three rendering modes:
+
+    * ``choices`` set → categorical parameter; round ``value`` to the
+      nearest valid index and emit the corresponding label (no units).
+    * ``discrete_values`` set → numeric parameter with non-uniform legal
+      values (e.g. torsion bar OD); snap to the closest entry and format
+      with the same precision as the surrounding step would imply.
+    * Otherwise → uniform-step rounding via ``_round_to_step``.
+    """
+    if choices:
+        idx = max(0, min(len(choices) - 1, int(round(value))))
+        return choices[idx]
+    if discrete_values:
+        snapped = _snap_to_discrete(value, discrete_values)
+        # Render integer-valued discrete sets without trailing zeros
+        # (clutch plates → "6", not "6.00") and float-valued sets with
+        # 2 decimals (torsion bar OD → "14.34", "17.94").
+        if all(v == int(v) for v in discrete_values):
+            body = f"{int(round(snapped))}"
+        else:
+            body = f"{snapped:.2f}"
+        return f"{body} {units}".rstrip()
+    snapped = _round_to_step(value, spec_step)
+    if spec_step is None or spec_step >= 1.0:
         body = f"{snapped:.0f}"
-    elif step >= 0.1:
+    elif spec_step >= 0.1:
         body = f"{snapped:.1f}"
     else:
         body = f"{snapped:.2f}"
@@ -188,6 +264,7 @@ def render_full_setup_card(
     *,
     car: str,
     most_recent_setup: dict | str | None,
+    predicted_readouts: dict[str, float] | None = None,
 ) -> str:
     """Render every garage parameter as a single readable block.
 
@@ -195,6 +272,14 @@ def render_full_setup_card(
     recent ingested session for this (car, track) combination. The card
     walks that structure so it covers exactly the parameters that exist in
     the iRacing UI for this car (no fictitious entries, no missing ones).
+
+    ``predicted_readouts`` maps the model's setup-readout channel name
+    (e.g. ``setup_static_lf_ride_height_mm``) to the value the trained
+    fitter projects at the optimizer's recommended setup vector. Used to
+    render ``[predicted]`` static ride heights in place of the stale past
+    ``[readout]`` values. Optional — when omitted (or for a channel the
+    model didn't carry) the card falls back to the past YAML value with
+    the ``[readout]`` tag.
 
     Returns a multi-line string; caller is responsible for emitting it
     (e.g. via ``click.echo``).
@@ -216,6 +301,7 @@ def render_full_setup_card(
 
     pinned = set(getattr(rec, "pinned_to_observed_median", ()) or ())
     opt_index = _ontology_path_index(rec, car)
+    readouts = dict(predicted_readouts or {})
 
     lines: list[str] = []
     lines.append("=" * 64)
@@ -223,9 +309,10 @@ def render_full_setup_card(
     lines.append("=" * 64)
     lines.append(
         "Legend: [OPT] optimizer recommendation · [OPT pin] pinned to "
-        "observed median · [past] from your most recent session "
-        "(no bounds yet) · [readout] calculated by iRacing — verify, "
-        "don't enter."
+        "observed median · [OPT mirror] mirrored from per-axle parameter "
+        "· [past] from your most recent session (no bounds yet) · "
+        "[readout] calculated by iRacing — verify, don't enter · "
+        "[predicted] readout the optimizer projects under the new inputs."
     )
 
     for top_key, panel_label in _PANELS:
@@ -233,7 +320,7 @@ def render_full_setup_card(
         if not isinstance(block, dict):
             continue
         rendered = _render_panel(
-            panel_label, top_key, block, opt_index, pinned,
+            panel_label, top_key, block, opt_index, pinned, readouts,
         )
         if rendered:
             lines.append("")
@@ -249,6 +336,7 @@ def _render_panel(
     block: dict,
     opt_index: dict[tuple[str, ...], tuple[str, float, ParameterSpec]],
     pinned: set[str],
+    predicted_readouts: dict[str, float],
 ) -> list[str]:
     """Walk one top-level garage panel and emit its rows.
 
@@ -259,7 +347,9 @@ def _render_panel(
     where the value is rounded to the iRacing garage click step and the
     parenthetical shows the past value when it differs (so the user can
     spot what actually changed). Calculated readouts pass through with
-    their raw YAML string and the ``[readout]`` tag.
+    their raw YAML string and the ``[readout]`` tag — unless the model
+    has a prediction for the new setup, in which case ``[predicted]``
+    overrides with the projected value.
     """
     lines: list[str] = [f"-- {panel_label} " + "-" * (60 - len(panel_label))]
     rows = list(_walk_block(block, prefix=(top_key,)))
@@ -277,21 +367,80 @@ def _render_panel(
             last_subkey = subkey
 
         opt_match = opt_index.get(path)
+        mirror_source = _MIRRORED_LEAVES.get(path)
+        predicted_channel = _PREDICTED_READOUT_PATHS.get(path)
         is_calc = _is_leaf_calculated(leaf_name)
 
         delta_note = ""
         if is_calc:
-            tag = "[readout]"
-            displayed = _format_value(value)
+            # Try the predicted-readout fitter first — gives the user
+            # the platform state they'll see after entering the new
+            # setup, instead of echoing last session's stale value.
+            predicted_val: float | None = None
+            if predicted_channel is not None:
+                predicted_val = predicted_readouts.get(predicted_channel)
+            if predicted_val is not None:
+                tag = "[predicted]"
+                # Static ride heights render with one decimal + mm units;
+                # match the past-readout YAML format ("30.5 mm") for
+                # visual consistency.
+                displayed = f"{predicted_val:.1f} mm"
+                past_scalar = _scalar_from_yaml(value)
+                if past_scalar is not None and abs(predicted_val - past_scalar) >= 0.05:
+                    delta_note = f" (was {past_scalar:.1f})"
+            else:
+                tag = "[readout]"
+                displayed = _format_value(value)
         elif opt_match is not None:
             param_name, opt_val, spec = opt_match
             tag = "[OPT pin]" if param_name in pinned else "[OPT]"
-            displayed = _format_opt_value(opt_val, spec.step, spec.units)
+            spec_discrete = getattr(spec, "discrete_values", None)
+            spec_choices = getattr(spec, "choices", None)
+            displayed = _format_opt_value(
+                opt_val, spec.step, spec.units,
+                discrete_values=spec_discrete, choices=spec_choices,
+            )
             past_scalar = _scalar_from_yaml(value)
-            if past_scalar is not None:
-                snapped = _round_to_step(opt_val, spec.step)
-                if abs(snapped - past_scalar) >= max(spec.step or 0.0, 1e-6) / 2:
+            if past_scalar is not None and not spec_choices:
+                if spec_discrete:
+                    snapped = _snap_to_discrete(opt_val, spec_discrete)
+                    threshold = 1e-6
+                else:
+                    snapped = _round_to_step(opt_val, spec.step)
+                    threshold = max(spec.step or 0.0, 1e-6) / 2
+                if abs(snapped - past_scalar) >= threshold:
                     delta_note = f" (was {_format_value(past_scalar)})"
+            elif spec_choices:
+                # Categorical: compare label to past YAML string directly.
+                idx = max(0, min(len(spec_choices) - 1, int(round(opt_val))))
+                opt_label = spec_choices[idx]
+                past_label = (
+                    str(value).strip() if value is not None else ""
+                )
+                if past_label and past_label != opt_label:
+                    delta_note = f" (was {past_label})"
+        elif mirror_source is not None:
+            source_path, _param_name = mirror_source
+            source_match = opt_index.get(source_path)
+            if source_match is not None:
+                _src_param, src_val, src_spec = source_match
+                tag = "[OPT mirror]"
+                src_discrete = getattr(src_spec, "discrete_values", None)
+                src_choices = getattr(src_spec, "choices", None)
+                displayed = _format_opt_value(
+                    src_val, src_spec.step, src_spec.units,
+                    discrete_values=src_discrete, choices=src_choices,
+                )
+                past_scalar = _scalar_from_yaml(value)
+                if past_scalar is not None:
+                    snapped = _round_to_step(src_val, src_spec.step)
+                    if abs(snapped - past_scalar) >= max(
+                        src_spec.step or 0.0, 1e-6,
+                    ) / 2:
+                        delta_note = f" (was {_format_value(past_scalar)})"
+            else:
+                tag = "[past]"
+                displayed = _format_value(value)
         else:
             tag = "[past]"
             displayed = _format_value(value)

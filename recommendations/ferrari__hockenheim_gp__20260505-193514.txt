@@ -1,0 +1,414 @@
+ferrari @ hockenheim_gp - recommended setup
+Conditions: AirTemp 18.5 C  TrackTemp 20.6 C  AirDensity 1.181 kg/m^3  Wind 4.5 m/s  Wetness 0.00
+Confidence: sparse (n=3 backing samples for the dominant sparse parameter, 33 parameters reported)
+
+Damper Hsc Fl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsc Fr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsc Rl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsc Rr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsc Slope Fl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsc Slope Fr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsc Slope Rl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsc Slope Rr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsr Fl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsr Fr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsr Rl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Hsr Rr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Lsc Fl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Lsc Fr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Lsc Rl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Lsc Rr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Lsr Fl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Lsr Fr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Lsr Rl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Damper Lsr Rr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 0 samples
+      - discrete-click value rounded from 5.500 to 6 (legal range 0..11)
+
+Camber Rl Deg: -1.90 deg   [confidence: sparse]
+    +1 click: -0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Camber Rr Deg: -1.90 deg   [confidence: sparse]
+    +1 click: -0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Camber Fl Deg: -2.80 deg   [confidence: sparse]
+    +1 click: -0.000 score    -1 click: -0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Camber Fr Deg: -2.80 deg   [confidence: sparse]
+    +1 click: -0.000 score    -1 click: -0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Anti Roll Bar Front: 1.00 click   [confidence: sparse]
+    +1 click: -0.000 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Anti Roll Bar Rear: 3.00 click   [confidence: sparse]
+    +1 click: -0.000 score    -1 click: -0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Brake Bias Pct: 53.00 pct   [confidence: sparse]
+    +1 click: -0.000 score    -1 click: -0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.092, score -0.092)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Rear Wing Angle: 17.00 deg   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: -0.001 score
+    Hurts:
+           T8-exit (exit score cost 0.091, score -0.091)
+           T8-mid_corner (mid-corner score cost 0.089, score -0.089)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Heave Perch Offset Front Mm: -16.50 mm   [confidence: sparse]
+    +1 click: -0.001 score    -1 click: -0.001 score
+    Hurts:
+           T8-exit (exit score cost 0.089, score -0.089)
+           T8-mid_corner (mid-corner score cost 0.088, score -0.088)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Pushrod Length Offset Front Mm: 0.00 mm   [confidence: sparse]
+    +1 click: -0.001 score    -1 click: -0.001 score
+    Hurts:
+           T8-exit (exit score cost 0.090, score -0.090)
+           T8-mid_corner (mid-corner score cost 0.088, score -0.088)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Pushrod Length Offset Rear Mm: 4.00 mm   [confidence: sparse]
+    +1 click: -0.001 score    -1 click: -0.001 score
+    Hurts:
+           T8-exit (exit score cost 0.090, score -0.090)
+           T8-mid_corner (mid-corner score cost 0.088, score -0.088)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Tyre Cold Pressure: 152.00 kPa   [confidence: sparse]
+    +1 click: -0.002 score    -1 click: +0.000 score
+    Hurts:
+           T8-exit (exit score cost 0.090, score -0.090)
+           T8-mid_corner (mid-corner score cost 0.088, score -0.088)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Diff Preload Nm: 25.00 Nm   [confidence: sparse]
+    +1 click: -0.002 score    -1 click: -0.002 score
+    Hurts:
+           T8-exit (exit score cost 0.090, score -0.090)
+           T8-mid_corner (mid-corner score cost 0.088, score -0.088)
+           T8-trail_brake (trail-brake score cost 0.080, score -0.080)
+    Evidence:
+      - sparse confidence backed by 3 samples
+
+Warnings:
+  - pinned to observed median (no per-session variation in training corpus, no learnable response surface): anti_roll_bar_front, anti_roll_bar_rear, brake_bias_pct, camber_fl_deg, camber_fr_deg, camber_rl_deg, camber_rr_deg, damper_hsc_fl, damper_hsc_fr, damper_hsc_rl, damper_hsc_rr, damper_hsc_slope_fl, damper_hsc_slope_fr, damper_hsc_slope_rl, damper_hsc_slope_rr, damper_hsr_fl, damper_hsr_fr, damper_hsr_rl, damper_hsr_rr, damper_lsc_fl, damper_lsc_fr, damper_lsc_rl, damper_lsc_rr, damper_lsr_fl, damper_lsr_fr, damper_lsr_rl, damper_lsr_rr, diff_preload_nm, heave_perch_offset_front_mm, pushrod_length_offset_front_mm, pushrod_length_offset_rear_mm, rear_wing_angle_deg, tyre_cold_pressure_kpa
+  - untrained_parameters: corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg, damper_hsc_fl, damper_hsc_fr, damper_hsc_rl, damper_hsc_rr, damper_hsc_slope_fl, damper_hsc_slope_fr, damper_hsc_slope_rl, damper_hsc_slope_rr, damper_hsr_fl, damper_hsr_fr, damper_hsr_rl, damper_hsr_rr, damper_lsc_fl, damper_lsc_fr, damper_lsc_rl, damper_lsc_rr, damper_lsr_fl, damper_lsr_fr, damper_lsr_rl, damper_lsr_rr, heave_spring_rate_n_per_mm, rear_coil_spring_rate_n_per_mm, spring_perch_offset_rear_mm, third_perch_offset_rear_mm, third_spring_rate_n_per_mm (skipped — bounds not in constraints.md)
+
+================================================================
+FULL SETUP CARD — ferrari @ hockenheim_gp
+================================================================
+Legend: [OPT] optimizer recommendation · [OPT pin] pinned to observed median · [OPT mirror] mirrored from per-axle parameter · [past] from your most recent session (no bounds yet) · [readout] calculated by iRacing — verify, don't enter · [predicted] readout the optimizer projects under the new inputs.
+
+-- TIRES & AERO ------------------------------------------------
+  [TireType]
+    Tire Type                                   Dry                [past]
+  [LeftFront]
+    Starting Pressure                     152.0 kPa                [OPT pin]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [LeftRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightFront]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [AeroSettings]
+    Rear Wing Angle                          17 deg                [OPT pin]
+  [AeroCalculator]
+    Front Rh At Speed                       15.0 mm                [readout]
+    Rear Rh At Speed                        40.0 mm                [readout]
+    Downforce Balance                        48.98%                [readout]
+    LD                                        3.855                [readout]
+
+-- CHASSIS -----------------------------------------------------
+  [Front]
+    Heave Spring                                  3                [past]
+    Heave Perch Offset                     -16.5 mm                [OPT pin]
+    Heave Spring Defl               10.3 mm 80.3 mm                [readout]
+    Heave Slider Defl              41.4 mm 200.0 mm                [readout]
+    Arb Size                                      A                [past]
+    Arb Blades                              1 click                [OPT pin]
+    Pushrod Length Delta                       0 mm                [OPT pin]
+    Toe In                                  -0.7 mm                [past]
+  [LeftFront]
+    Corner Weight                            2582 N                [readout]
+    Ride Height                             30.1 mm                [predicted]
+    Shock Defl                     15.9 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        11.8 mm                [readout]
+    Torsion Bar Turns                   0.089 Turns                [past]
+    Torsion Bar OD                                2                [past]
+    Camber                                 -2.8 deg                [OPT pin]
+  [LeftRear]
+    Corner Weight                            2845 N                [readout]
+    Ride Height                             44.2 mm                [predicted]
+    Shock Defl                     17.1 mm 150.0 mm                [readout]
+    Torsion Bar Defl                         8.5 mm                [readout]
+    Torsion Bar Turns                   0.040 Turns                [past]
+    Torsion Bar OD                                2                [past]
+    Camber                                 -1.9 deg                [OPT pin]
+    Toe In                                  +0.3 mm                [past]
+  [Rear]
+    Heave Spring                                  5                [past]
+    Heave Perch Offset                    -112.5 mm                [past]
+    Heave Spring Defl               12.9 mm 67.0 mm                [readout]
+    Heave Slider Defl              22.6 mm 300.0 mm                [readout]
+    Arb Size                                      C                [past]
+    Arb Blades                              3 click                [OPT pin]
+    Pushrod Length Delta                       4 mm                [OPT pin]
+    Fuel Level                                9.0 L                [past]
+  [RightFront]
+    Corner Weight                            2582 N                [readout]
+    Ride Height                             30.1 mm                [predicted]
+    Shock Defl                     15.9 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        11.8 mm                [readout]
+    Torsion Bar Turns                   0.089 Turns                [past]
+    Torsion Bar OD                                2                [past]
+    Camber                                 -2.8 deg                [OPT pin]
+  [RightRear]
+    Corner Weight                            2845 N                [readout]
+    Ride Height                             44.2 mm                [predicted]
+    Shock Defl                     17.1 mm 150.0 mm                [readout]
+    Torsion Bar Defl                         8.5 mm                [readout]
+    Torsion Bar Turns                   0.040 Turns                [past]
+    Torsion Bar OD                                2                [past]
+    Camber                                 -1.9 deg                [OPT pin]
+    Toe In                                  +0.3 mm                [past]

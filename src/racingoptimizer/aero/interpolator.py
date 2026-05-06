@@ -139,8 +139,16 @@ class AeroSurface:
             float(wing_deg), float(self._wing_axis[0]), float(self._wing_axis[-1])
         )
 
+        # Demoted to DEBUG: GTPs run BELOW the aero map's calibrated front-rh
+        # envelope floor (typically 25mm) at all times — every aero call
+        # during DE search produces these warnings, generating tens of
+        # thousands of stderr lines per recommend run that fill output
+        # buffers and stall pipes. The clamp is the correct fallback (use
+        # the envelope edge); making the envelope itself match GTP reality
+        # is a follow-up that requires re-deriving the aero maps. Keeping
+        # the debug-level log so users can `--verbose` if they care.
         if front_was_clamped:
-            logger.warning(
+            logger.debug(
                 "front_rh_mm=%s out of envelope %s for car %s; clamped to %s",
                 front_rh_mm,
                 (float(d.front_rh_mm[0]), float(d.front_rh_mm[-1])),
@@ -148,7 +156,7 @@ class AeroSurface:
                 front_clamped,
             )
         if rear_was_clamped:
-            logger.warning(
+            logger.debug(
                 "rear_rh_mm=%s out of envelope %s for car %s; clamped to %s",
                 rear_rh_mm,
                 (float(d.rear_rh_mm[0]), float(d.rear_rh_mm[-1])),
@@ -156,7 +164,7 @@ class AeroSurface:
                 rear_clamped,
             )
         if wing_was_clamped:
-            logger.warning(
+            logger.debug(
                 "wing_deg=%s out of envelope %s for car %s; clamped to %s",
                 wing_deg,
                 (float(self._wing_axis[0]), float(self._wing_axis[-1])),

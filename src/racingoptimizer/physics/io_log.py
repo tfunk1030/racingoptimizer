@@ -19,8 +19,13 @@ After every `fit()`, append one row per fitter to
 
 `load_latest_fit_quality(car, track, corpus_root)` reads the freshest entry
 group for a (car, track) pair and returns
-``fit_quality = 1 - median(noise_ratio)`` plus the previous entry's value
-for the trend-line render in `optimize status`.
+``fit_quality = median(signal / (signal + cv_residual))`` plus the previous
+entry's value for the trend-line render in `optimize status`. This
+formulation is bounded in [0, 1] without saturating at the floor when
+per-fitter ``cv_residual_std`` exceeds the in-sample variance — a regime
+that Stage-3 joint fits routinely hit at low ``n_samples`` (3..22 per
+fitter), and that the original ``max(0, 1 - noise_ratio)`` flattened to
+zero, killing the §6 "track how prediction accuracy improves" surface.
 
 The log is append-only; we read it back by groupby + last to surface "the
 latest fit" per (sessions_hash, fit_timestamp) tuple.
@@ -151,9 +156,11 @@ def load_latest_fit_quality(
     latest = rows[0]
     prior = rows[1] if len(rows) > 1 else None
 
-    fit_quality = max(0.0, 1.0 - float(latest["median_noise_ratio"]))
+    fit_quality = _fit_quality_from_noise_ratio(
+        float(latest["median_noise_ratio"])
+    )
     prior_fit_quality = (
-        max(0.0, 1.0 - float(prior["median_noise_ratio"]))
+        _fit_quality_from_noise_ratio(float(prior["median_noise_ratio"]))
         if prior is not None
         else None
     )
@@ -167,6 +174,28 @@ def load_latest_fit_quality(
         n_fitters=int(latest["n_fitters"]),
         prior_fit_quality=prior_fit_quality,
     )
+
+
+def _fit_quality_from_noise_ratio(noise_ratio: float) -> float:
+    """Map ``cv_residual / signal`` to a bounded [0, 1] quality score.
+
+    Equivalent to ``signal / (signal + cv_residual)`` (since
+    ``noise_ratio = cv_residual / signal``):
+
+      noise_ratio = 0   → 1.0  (no noise at all)
+      noise_ratio = 1   → 0.5  (signal == noise)
+      noise_ratio = 5   → 0.17 (5× more noise than signal — still > 0)
+      noise_ratio → ∞   → 0.0  (asymptote, never reached)
+
+    Replaces the old ``max(0, 1 - noise_ratio)`` which clamped to 0 the
+    moment ``cv_residual`` exceeded ``signal`` — common at small
+    ``n_samples`` per fitter, and the reason the §6 "track accuracy
+    improves" surface in `optimize status` saturated to 0.000 across
+    most BMW tracks.
+    """
+    if noise_ratio < 0.0 or not (noise_ratio == noise_ratio):  # NaN check
+        return 0.0
+    return 1.0 / (1.0 + noise_ratio)
 
 
 __all__ = [

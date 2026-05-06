@@ -41,15 +41,17 @@ def test_ce_gated_families_present_but_unfittable(car: str) -> None:
 
     ARBs / brake bias / differential preload were CE-gated in the original
     landing of the ontology but flipped to fittable=True when bounds landed
-    in `bf2e48b` (see `test_fittable_parameters_only_returns_bounded_user_settable`
-    above). The CE-gated entries that remain are the ones whose bounds are
-    still `<TODO: from iRacing UI>` placeholders.
+    in `bf2e48b`. Dampers (16 click params per car) flipped to
+    fittable=True with estimated 1..15 click bounds. The CE-gated entries
+    that remain are the ones whose bounds are still `<TODO: from iRacing
+    UI>` placeholders — currently per-corner-weight targets.
     """
     onto = ontology_for(car)
-    # Per-corner damper clicks — bounds still TODO in `constraints.md`.
+    # Dampers are now fittable since `constraints.md` carries 1..15 click
+    # bounds per (corner, mode).
     assert "damper_lsc_fl" in onto
-    assert onto["damper_lsc_fl"].fittable is False
-    # Per-corner-weight targets — bounds still TODO.
+    assert onto["damper_lsc_fl"].fittable is True
+    # Per-corner-weight targets — bounds still TODO in `constraints.md`.
     assert "corner_weight_fl_kg" in onto
     assert onto["corner_weight_fl_kg"].fittable is False
 
@@ -169,9 +171,14 @@ def test_fittable_parameters_only_returns_bounded_user_settable() -> None:
     assert "static_ride_height_rear_mm" not in result
     assert "heave_spring_mm" not in result
     assert "heave_slider_mm" not in result
-    # CE-gated must NOT show up (constraints are still <TODO>).
-    assert "damper_lsc_fl" not in result
+    # Dampers are now fittable (estimated 1..15 click bounds in
+    # `constraints.md`); they MUST appear so the optimizer searches over
+    # them.
+    assert "damper_lsc_fl" in result
+    assert "damper_hsr_rr" in result
+    # Still-CE-gated must NOT show up (constraints are still <TODO>).
     assert "diff_coast_ratio_pct" not in result
+    assert "corner_weight_fl_kg" not in result
 
 
 @pytest.mark.parametrize(

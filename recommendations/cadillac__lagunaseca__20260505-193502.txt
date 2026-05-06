@@ -1,0 +1,507 @@
+cadillac @ lagunaseca - recommended setup
+Conditions: AirTemp 19.4 C  TrackTemp 37.8 C  AirDensity 1.165 kg/m^3  Wind 6.0 m/s  Wetness 0.00
+Confidence: sparse (n=23 backing samples for the dominant sparse parameter, 42 parameters reported)
+
+Anti Roll Bar Front: 1.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 1.000 to 1 (legal range 1..5)
+      - observed in training [-7.823, 9.823]
+
+Anti Roll Bar Rear: 1.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 1.000 to 1 (legal range 1..5)
+      - observed in training [-7.823, 9.823]
+
+Brake Bias Pct: 48.50 pct   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [39.677, 57.323]
+
+Camber Fl Deg: -2.90 deg   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-11.723, 5.923]
+
+Camber Fr Deg: -2.90 deg   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-11.723, 5.923]
+
+Camber Rl Deg: -1.80 deg   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-10.623, 7.023]
+
+Camber Rr Deg: -1.80 deg   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-10.623, 7.023]
+
+Damper Hsc Fl: 7.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 7.000 to 7 (legal range 0..11)
+      - observed in training [-1.823, 15.823]
+
+Damper Hsc Fr: 7.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 7.000 to 7 (legal range 0..11)
+      - observed in training [-1.823, 15.823]
+
+Damper Hsc Rl: 10.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 10.000 to 10 (legal range 0..11)
+      - observed in training [1.177, 18.823]
+
+Damper Hsc Rr: 10.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 10.000 to 10 (legal range 0..11)
+      - observed in training [1.177, 18.823]
+
+Damper Hsc Slope Fl: 5.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 5.000 to 5 (legal range 0..11)
+      - observed in training [-3.823, 13.823]
+
+Damper Hsc Slope Fr: 5.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 5.000 to 5 (legal range 0..11)
+      - observed in training [-3.823, 13.823]
+
+Damper Hsc Slope Rl: 11.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 11.000 to 11 (legal range 0..11)
+      - observed in training [2.177, 19.823]
+
+Damper Hsc Slope Rr: 11.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 11.000 to 11 (legal range 0..11)
+      - observed in training [2.177, 19.823]
+
+Damper Hsr Fl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 6.000 to 6 (legal range 0..11)
+      - observed in training [-2.823, 14.823]
+
+Damper Hsr Fr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 6.000 to 6 (legal range 0..11)
+      - observed in training [-2.823, 14.823]
+
+Damper Hsr Rl: 5.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 5.000 to 5 (legal range 0..11)
+      - observed in training [-3.823, 13.823]
+
+Damper Hsr Rr: 5.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 5.000 to 5 (legal range 0..11)
+      - observed in training [-3.823, 13.823]
+
+Damper Lsc Fl: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 6.000 to 6 (legal range 0..11)
+      - observed in training [-2.823, 14.823]
+
+Damper Lsc Fr: 6.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 6.000 to 6 (legal range 0..11)
+      - observed in training [-2.823, 14.823]
+
+Damper Lsc Rl: 5.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 5.000 to 5 (legal range 0..11)
+      - observed in training [-3.823, 13.823]
+
+Damper Lsc Rr: 5.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-3.823, 13.823]
+
+Damper Lsr Fl: 5.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 5.000 to 5 (legal range 0..11)
+      - observed in training [-3.823, 13.823]
+
+Damper Lsr Fr: 5.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 5.000 to 5 (legal range 0..11)
+      - observed in training [-3.823, 13.823]
+
+Damper Lsr Rl: 4.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-4.823, 12.823]
+
+Damper Lsr Rr: 4.00 click   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - discrete-click value rounded from 4.000 to 4 (legal range 0..11)
+      - observed in training [-4.823, 12.823]
+
+Diff Preload Nm: 30.00 Nm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [21.177, 38.823]
+
+Heave Perch Offset Front Mm: -27.50 mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-36.323, -18.677]
+
+Heave Spring Rate N Per Mm: 30.00 N/mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [21.177, 38.823]
+
+Pushrod Length Offset Front Mm: -30.50 mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-39.323, -21.677]
+
+Pushrod Length Offset Rear Mm: -34.50 mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-43.323, -25.677]
+
+Rear Coil Spring Rate N Per Mm: 175.00 N/mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [166.177, 183.823]
+
+Rear Wing Angle: 17.00 deg   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [8.177, 25.823]
+
+Spring Perch Offset Rear Mm: 32.50 mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [23.677, 41.323]
+
+Third Perch Offset Rear Mm: 39.50 mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [30.677, 48.323]
+
+Third Spring Rate N Per Mm: 320.00 N/mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [311.177, 328.823]
+
+Torsion Bar Od Fl Mm: 15.51 mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [6.687, 24.333]
+
+Torsion Bar Od Fr Mm: 15.51 mm   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [6.687, 24.333]
+
+Torsion Bar Turns Fl: 0.09 turns   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-8.730, 8.916]
+
+Torsion Bar Turns Fr: 0.09 turns   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [-8.730, 8.916]
+
+Tyre Cold Pressure: 152.00 kPa   [confidence: sparse]
+    +1 click: +0.000 score    -1 click: +0.000 score
+    Helps:
+           T0-straight (model held value at training baseline; no per-corner sensitivity in this corpus, score +0.000)
+    Evidence:
+      - sparse confidence backed by 23 samples
+      - observed in training [143.177, 160.823]
+
+Warnings:
+  - pinned to observed median (no per-session variation in training corpus, no learnable response surface): anti_roll_bar_front, anti_roll_bar_rear, brake_bias_pct, camber_fl_deg, camber_fr_deg, camber_rl_deg, camber_rr_deg, damper_hsc_fl, damper_hsc_fr, damper_hsc_rl, damper_hsc_rr, damper_hsc_slope_fl, damper_hsc_slope_fr, damper_hsc_slope_rl, damper_hsc_slope_rr, damper_hsr_fl, damper_hsr_fr, damper_hsr_rl, damper_hsr_rr, damper_lsc_fl, damper_lsc_fr, damper_lsc_rl, damper_lsc_rr, damper_lsr_fl, damper_lsr_fr, damper_lsr_rl, damper_lsr_rr, diff_preload_nm, heave_perch_offset_front_mm, heave_spring_rate_n_per_mm, pushrod_length_offset_front_mm, pushrod_length_offset_rear_mm, rear_coil_spring_rate_n_per_mm, rear_wing_angle_deg, spring_perch_offset_rear_mm, third_perch_offset_rear_mm, third_spring_rate_n_per_mm, torsion_bar_od_fl_mm, torsion_bar_od_fr_mm, torsion_bar_turns_fl, torsion_bar_turns_fr, tyre_cold_pressure_kpa
+  - untrained_parameters: corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg (skipped — bounds not in constraints.md)
+
+================================================================
+FULL SETUP CARD — cadillac @ lagunaseca
+================================================================
+Legend: [OPT] optimizer recommendation · [OPT pin] pinned to observed median · [OPT mirror] mirrored from per-axle parameter · [past] from your most recent session (no bounds yet) · [readout] calculated by iRacing — verify, don't enter · [predicted] readout the optimizer projects under the new inputs.
+
+-- TIRES & AERO ------------------------------------------------
+  [TireType]
+    Tire Type                                   Dry                [past]
+  [LeftFront]
+    Starting Pressure                     152.0 kPa                [OPT pin]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [LeftRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightFront]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [AeroSettings]
+    Rear Wing Angle                          17 deg                [OPT pin]
+  [AeroCalculator]
+    Front Rh At Speed                       12.0 mm                [readout]
+    Rear Rh At Speed                        25.0 mm                [readout]
+    Downforce Balance                        52.33%                [readout]
+    LD                                        3.659                [readout]
+
+-- CHASSIS -----------------------------------------------------
+  [Front]
+    Heave Spring                            30 N/mm                [OPT pin]
+    Heave Perch Offset                     -27.5 mm                [OPT pin]
+    Heave Spring Defl               13.0 mm 97.7 mm                [readout]
+    Heave Slider Defl              33.1 mm 200.0 mm                [readout]
+    Arb Size                                   Soft                [past]
+    Arb Blades                              1 click                [OPT pin]
+    Toe In                                  -0.1 mm                [past]
+    Pushrod Length Offset                  -30.5 mm                [OPT pin]
+    Power Steering Assist                  8 (EPAS)                [past]
+  [LeftFront]
+    Corner Weight                            2655 N                [readout]
+    Ride Height                             30.0 mm                [readout]
+    Shock Defl                     11.9 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        14.7 mm                [readout]
+    Torsion Bar Turns                    0.09 turns                [OPT pin]
+    Torsion Bar OD                         15.51 mm                [OPT pin]
+    Ls Comp Damping                         6 click                [OPT pin]
+    Hs Comp Damping                         7 click                [OPT pin]
+    Hs Comp Damp Slope                      5 click                [OPT pin]
+    Ls Rbd Damping                          5 click                [OPT pin]
+    Hs Rbd Damping                          6 click                [OPT pin]
+    Camber                                 -2.9 deg                [OPT pin]
+  [LeftRear]
+    Corner Weight                            2827 N                [readout]
+    Ride Height                             46.8 mm                [predicted]
+    Shock Defl                     18.4 mm 150.0 mm                [readout]
+    Spring Defl                     13.7 mm 77.5 mm                [readout]
+    Spring Perch Offset                     32.5 mm                [OPT pin]
+    Spring Rate                            175 N/mm                [OPT pin]
+    Ls Comp Damping                         5 click                [OPT pin]
+    Hs Comp Damping                        10 click                [OPT pin]
+    Hs Comp Damp Slope                     11 click                [OPT pin]
+    Ls Rbd Damping                          4 click                [OPT pin]
+    Hs Rbd Damping                          5 click                [OPT pin]
+    Camber                                 -1.8 deg                [OPT pin]
+    Toe In                                  -0.1 mm                [past]
+  [RightFront]
+    Corner Weight                            2655 N                [readout]
+    Ride Height                             30.0 mm                [readout]
+    Shock Defl                     11.9 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        14.7 mm                [readout]
+    Torsion Bar Turns                    0.09 turns                [OPT pin]
+    Torsion Bar OD                         15.51 mm                [OPT pin]
+    Ls Comp Damping                         6 click                [OPT pin]
+    Hs Comp Damping                         7 click                [OPT pin]
+    Hs Comp Damp Slope                      5 click                [OPT pin]
+    Ls Rbd Damping                          5 click                [OPT pin]
+    Hs Rbd Damping                          6 click                [OPT pin]
+    Camber                                 -2.9 deg                [OPT pin]
+  [RightRear]
+    Corner Weight                            2827 N                [readout]
+    Ride Height                             46.8 mm                [predicted]
+    Shock Defl                     18.4 mm 150.0 mm                [readout]
+    Spring Defl                     13.7 mm 77.5 mm                [readout]
+    Spring Perch Offset                     32.5 mm                [past]
+    Spring Rate                            175 N/mm                [OPT mirror]
+    Ls Comp Damping                         5 click                [OPT pin]
+    Hs Comp Damping                        10 click                [OPT pin]
+    Hs Comp Damp Slope                     11 click                [OPT pin]
+    Ls Rbd Damping                          4 click                [OPT pin]
+    Hs Rbd Damping                          5 click                [OPT pin]
+    Camber                                 -1.8 deg                [OPT pin]
+    Toe In                                  -0.1 mm                [past]
+  [Rear]
+    Third Spring                           320 N/mm                [OPT pin]
+    Third Perch Offset                      39.5 mm                [OPT pin]
+    Third Spring Defl                7.8 mm 61.2 mm                [readout]
+    Third Slider Defl              19.5 mm 150.0 mm                [readout]
+    Arb Size                                 Medium                [past]
+    Arb Blades                              1 click                [OPT pin]
+    Pushrod Length Offset                  -34.5 mm                [OPT pin]
+    Cross Weight                              50.0%                [readout]
+
+-- BRAKES / DRIVETRAIN -----------------------------------------
+  [Lighting]
+    Roof Id Light Color                      Orange                [past]
+  [BrakeSpec]
+    Pad Compound                             Medium                [past]
+    Front Master Cyl                        19.1 mm                [past]
+    Rear Master Cyl                         20.6 mm                [past]
+    Brake Pressure Bias                      49 pct                [OPT pin]
+    Brake Bias Target                             0                [past]
+    Brake Bias Migration                          0                [past]
+  [Fuel]
+    Fuel Level                                6.5 L                [past]
+    Fuel Target                              2.79 L                [past]
+    Fuel Low Warning                          7.5 L                [past]
+  [TcAndThrottle]
+    Traction Control Gain                  4 (TC B)                [past]
+    Traction Control Slip                  3 (TC A)                [past]
+    Throttle Shape                               12                [past]
+  [GearRatios]
+    Gear Stack                                Short                [past]
+    Speed In First                       127.6 Km/h                [readout]
+    Speed In Second                      158.6 Km/h                [readout]
+    Speed In Third                       187.4 Km/h                [readout]
+    Speed In Fourth                      223.4 Km/h                [readout]
+    Speed In Fifth                       261.2 Km/h                [readout]
+    Speed In Sixth                       293.4 Km/h                [readout]
+    Speed In Seventh                     322.2 Km/h                [readout]
+  [DiffSpec]
+    Diff Coast Ramp Angle                    40 deg                [past]
+    Diff Drive Ramp Angle                    65 deg                [past]
+    Clutch Friction Plates                        4                [past]
+    Preload                                   30 Nm                [OPT pin]

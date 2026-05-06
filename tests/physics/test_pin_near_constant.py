@@ -72,6 +72,55 @@ def test_pin_respects_constraint_bounds_at_edge() -> None:
     assert hi <= bound[1]
 
 
+def test_no_pin_when_empirical_range_dominates_wide_constraint() -> None:
+    """Wide constraint envelope must not mask real corpus variation.
+
+    Regression: BMW heave was pinned at 50 N/mm despite the corpus carrying
+    values 30/40/50/60/80 across 9 Sebring sessions, because the constraint
+    span had been widened to the full BMWBounds.md legal envelope (0..900
+    N/mm) and `observed_std=11.48 / span=900 = 1.27%` fell below the 2%
+    threshold. The denominator should be the empirical training range
+    (max-min observed = 50 N/mm) so meaningful variation in a wide
+    envelope is preserved: `11.48 / 50 = 23%` → not pinned.
+    """
+    bound = (0.0, 900.0)
+    baseline = 50.0
+    observed_std = 11.48  # BMW heave global stddev across all sessions
+    empirical_range = 50.0  # 80 - 30 across BMW Sebring corpus
+
+    _, was_pinned_with_range = _pin_or_trust_bounds(
+        bound=bound, baseline=baseline, regime="confident",
+        observed_std=observed_std,
+        empirical_range=empirical_range,
+    )
+    assert was_pinned_with_range is False, (
+        "empirical range 50 + std 11.48 = 23% spread; must not pin"
+    )
+
+    # Without empirical_range (legacy path / v3 model) the wide constraint
+    # span swallows the same std and pins — documents the regression we fixed.
+    _, was_pinned_legacy = _pin_or_trust_bounds(
+        bound=bound, baseline=baseline, regime="confident",
+        observed_std=observed_std,
+    )
+    assert was_pinned_legacy is True, (
+        "without empirical_range the wide constraint span pins (legacy "
+        "behaviour we've fixed for per-car v4 models)"
+    )
+
+
+def test_pin_when_empirical_range_is_zero_falls_back_to_span() -> None:
+    """Truly constant params (single observed value) must still pin via span fallback."""
+    bound = (0.0, 11.0)  # damper click range
+    baseline = 11.0
+    # Driver only ever ran one click value — std=0, range=0.
+    _, was_pinned = _pin_or_trust_bounds(
+        bound=bound, baseline=baseline, regime="confident",
+        observed_std=0.0, empirical_range=0.0,
+    )
+    assert was_pinned is True
+
+
 def test_pin_with_zero_span_bound_is_safe() -> None:
     """Degenerate constraint (lo == hi) should not crash."""
     bound = (10.0, 10.0)

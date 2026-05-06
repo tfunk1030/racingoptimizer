@@ -35,6 +35,7 @@ Family = Literal[
     "perch_offset",
     "pushrod",
     "camber",
+    "torsion_bar",
 ]
 
 
@@ -83,6 +84,19 @@ class ParameterSpec:
     # "general idea" garage-ranges table and may need refinement against
     # the live iRacing UI.
     step: float | None = None
+    # Non-uniform discrete legal values. Used by parameters whose iRacing
+    # UI exposes a fixed list of options that don't follow a uniform
+    # step — e.g. torsion bar OD's 14 diameters from 13.90..18.20 mm.
+    # When present, the renderer snaps the optimizer's continuous output
+    # to the nearest legal value at display time (overrides ``step``);
+    # the DE search itself runs continuously over the constraint range.
+    discrete_values: tuple[float, ...] | None = None
+    # Categorical (enum-typed) parameter labels, in display order. The
+    # underlying YAML value is a string (e.g. ARB Size: "Soft"); the
+    # fitter trains on the integer index and the renderer maps the
+    # rounded index back to the label. ``None`` means the parameter is
+    # numeric.
+    choices: tuple[str, ...] | None = None
 
 
 # --- Path-extraction helpers ----------------------------------------------
@@ -226,7 +240,10 @@ def _common_bounded() -> dict[str, ParameterSpec]:
         "third_spring_rate_n_per_mm": ParameterSpec(
             json_path=_THIRD_SPRING_RATE_R, dtype=float, units="N/mm",
             family="spring_rate", fittable=True, user_settable=True,
-            step=5.0,
+            # iRacing GTP UI exposes third spring in 10 N/mm increments
+            # (BMWBounds.md / Cadillacbounds.md both confirm). Coil springs
+            # step in 5 N/mm but the third is coarser.
+            step=10.0,
         ),
         "rear_coil_spring_rate_n_per_mm": ParameterSpec(
             json_path=_REAR_COIL_SPRING_RATE, dtype=float, units="N/mm",
@@ -347,25 +364,35 @@ def _blocked_like(base: ParameterSpec, *, units: str | None = None) -> Parameter
     )
 
 
-# (constraint suffix, IBT field name) for the four damper modes.
+# (constraint suffix, IBT field name) for the damper modes.
+# `hsc_slope` is iRacing's HS-Comp damper crossover-knee click separate
+# from the four primary modes; constraints.md has its own section.
 _DAMPER_MODES: tuple[tuple[str, str], ...] = (
     ("lsc", "LsCompDamping"),
     ("hsc", "HsCompDamping"),
     ("lsr", "LsRbdDamping"),
     ("hsr", "HsRbdDamping"),
+    ("hsc_slope", "HsCompDampSlope"),
 )
 
 
 def _damper_paths(
     corner_to_path: tuple[tuple[str, tuple[str, ...]], ...],
 ) -> dict[str, ParameterSpec]:
-    """Generate `damper_<mode>_<corner>` entries from a (corner_code → path) map."""
+    """Generate `damper_<mode>_<corner>` entries from a (corner_code → path) map.
+
+    Dampers are now ``fittable=True`` since `constraints.md` carries
+    estimated 1..15 click bounds per (corner, mode). The values are
+    discrete integer clicks; the post-clamp in `cli/recommend.py` rounds
+    DE's continuous proposals to the nearest legal integer before
+    rendering.
+    """
     out: dict[str, ParameterSpec] = {}
     for code, parent_path in corner_to_path:
         for suffix, field_name in _DAMPER_MODES:
             out[f"damper_{suffix}_{code}"] = ParameterSpec(
                 json_path=(*parent_path, field_name), dtype=float, units="click",
-                family="damper", fittable=False, is_discrete=True,
+                family="damper", fittable=True, is_discrete=True, step=1.0,
             )
     return out
 
@@ -442,10 +469,124 @@ _ACURA_OVERRIDES: dict[str, ParameterSpec] = {
     "third_perch_offset_rear_mm": _blocked_like(_common_bounded()["third_perch_offset_rear_mm"]),
 }
 
+# iRacing GTP front torsion-bar diameters — 14 discrete values across the
+# range. Both Cadillac and BMW (per BMWBounds.md / Cadillacbounds.md)
+# expose the same list. The DE search runs continuously over the bound
+# envelope; the renderer snaps to the nearest legal diameter at display
+# time via `ParameterSpec.discrete_values`.
+_TORSION_BAR_OD_VALUES: tuple[float, ...] = (
+    13.90, 14.34, 14.76, 15.14, 15.51, 15.86, 16.19,
+    16.51, 16.81, 17.11, 17.39, 17.67, 17.94, 18.20,
+)
+
+
 _CADILLAC_OVERRIDES: dict[str, ParameterSpec] = {
     "diff_preload_nm": ParameterSpec(
         json_path=("BrakesDriveUnit", "DiffSpec", "Preload"),
         dtype=float, units="Nm", family="diff", fittable=True,
+    ),
+    # Cadillac front uses torsion bars instead of coil springs at the
+    # corners. Per-side preload turns + outer-diameter selection are the
+    # actual user-input controls; the iRacing UI exposes 14 discrete OD
+    # values from 13.90..18.20 mm — DE searches the continuous envelope
+    # and the renderer snaps to the nearest legal diameter via
+    # `discrete_values`.
+    "torsion_bar_turns_fl": ParameterSpec(
+        json_path=("Chassis", "LeftFront", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.001,
+    ),
+    "torsion_bar_turns_fr": ParameterSpec(
+        json_path=("Chassis", "RightFront", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.001,
+    ),
+    "torsion_bar_od_fl_mm": ParameterSpec(
+        json_path=("Chassis", "LeftFront", "TorsionBarOD"),
+        dtype=float, units="mm", family="torsion_bar",
+        fittable=True, user_settable=True,
+        discrete_values=_TORSION_BAR_OD_VALUES,
+    ),
+    "torsion_bar_od_fr_mm": ParameterSpec(
+        json_path=("Chassis", "RightFront", "TorsionBarOD"),
+        dtype=float, units="mm", family="torsion_bar",
+        fittable=True, user_settable=True,
+        discrete_values=_TORSION_BAR_OD_VALUES,
+    ),
+}
+
+
+# ARB-size enum (front + rear). Order is stiffness-ascending: the index
+# is meaningful as an ordinal feature for the fitter (Disconnect = no
+# anti-roll bar engagement → softest, Stiff = fully engaged).
+_ARB_SIZE_CHOICES: tuple[str, ...] = ("Disconnect", "Soft", "Medium", "Stiff")
+# Diff coast/drive ramp angle pairs. Ordered ascending in lock-up
+# aggressiveness (40°/65° = freest, 50°/75° = most locked).
+_DIFF_COAST_DRIVE_RAMP_CHOICES: tuple[str, ...] = ("40/65", "45/70", "50/75")
+# Clutch friction plate count. Stored as a numeric value in the iRacing
+# YAML (not a string label), so it uses ``discrete_values`` for the
+# render-time snap rather than ``choices``.
+_DIFF_CLUTCH_PLATES_VALUES: tuple[float, ...] = (2.0, 4.0, 6.0)
+
+
+_BMW_OVERRIDES: dict[str, ParameterSpec] = {
+    # BMW M Hybrid V8 uses front torsion bars on the same pattern as
+    # Cadillac (per BMWBounds.md lines 13–19). Identical YAML paths,
+    # identical bound envelope, identical 14-diameter OD list. Mirroring
+    # the Cadillac entries keeps the per-car schemas aligned.
+    "torsion_bar_turns_fl": ParameterSpec(
+        json_path=("Chassis", "LeftFront", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.001,
+    ),
+    "torsion_bar_turns_fr": ParameterSpec(
+        json_path=("Chassis", "RightFront", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.001,
+    ),
+    "torsion_bar_od_fl_mm": ParameterSpec(
+        json_path=("Chassis", "LeftFront", "TorsionBarOD"),
+        dtype=float, units="mm", family="torsion_bar",
+        fittable=True, user_settable=True,
+        discrete_values=_TORSION_BAR_OD_VALUES,
+    ),
+    "torsion_bar_od_fr_mm": ParameterSpec(
+        json_path=("Chassis", "RightFront", "TorsionBarOD"),
+        dtype=float, units="mm", family="torsion_bar",
+        fittable=True, user_settable=True,
+        discrete_values=_TORSION_BAR_OD_VALUES,
+    ),
+    # Categorical ARB size selection (front + rear). The iRacing UI
+    # exposes these as named options (Disconnect / Soft / Medium /
+    # Stiff); we store an integer index for the fitter and the renderer
+    # maps the rounded index back to the label via ``ParameterSpec.choices``.
+    "arb_size_front": ParameterSpec(
+        json_path=("Chassis", "Front", "ArbSize"),
+        dtype=float, units="", family="arb",
+        fittable=True, user_settable=True, is_discrete=True,
+        choices=_ARB_SIZE_CHOICES,
+    ),
+    "arb_size_rear": ParameterSpec(
+        json_path=("Chassis", "Rear", "ArbSize"),
+        dtype=float, units="", family="arb",
+        fittable=True, user_settable=True, is_discrete=True,
+        choices=_ARB_SIZE_CHOICES,
+    ),
+    # RearDiffSpec categoricals — both stored under
+    # ``BrakesDriveUnit.RearDiffSpec`` for BMW. Coast/drive ramp angles
+    # are stored as composite strings ("40/65"); clutch plates are
+    # numeric (2/4/6).
+    "diff_coast_drive_ramps": ParameterSpec(
+        json_path=("BrakesDriveUnit", "RearDiffSpec", "CoastDriveRampAngles"),
+        dtype=float, units="", family="diff",
+        fittable=True, user_settable=True, is_discrete=True,
+        choices=_DIFF_COAST_DRIVE_RAMP_CHOICES,
+    ),
+    "diff_clutch_friction_plates": ParameterSpec(
+        json_path=("BrakesDriveUnit", "RearDiffSpec", "ClutchFrictionPlates"),
+        dtype=float, units="plates", family="diff",
+        fittable=True, user_settable=True, is_discrete=True,
+        discrete_values=_DIFF_CLUTCH_PLATES_VALUES,
     ),
 }
 
@@ -495,7 +636,7 @@ _PORSCHE_OVERRIDES: dict[str, ParameterSpec] = {
 }
 
 ACURA: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_ACURA_OVERRIDES)
-BMW: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS)
+BMW: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_BMW_OVERRIDES)
 CADILLAC: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_CADILLAC_OVERRIDES)
 FERRARI: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_FERRARI_OVERRIDES)
 PORSCHE: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_PORSCHE_OVERRIDES)
@@ -559,6 +700,12 @@ def setup_value(car: str, parameter: str, setup_json: dict | str) -> float | Non
     Accepts either a parsed dict or a raw JSON string (slice A persists JSON).
     Returns `None` when the JSON path is missing or the value cannot be
     coerced to a float — the fitter drops such rows rather than aborting.
+
+    Categorical parameters (``ParameterSpec.choices`` non-empty) map the
+    YAML's string label to its integer index in the choices tuple. The
+    fitter then trains on the ordinal-encoded index; the renderer maps
+    the rounded index back to a label at display time. Unknown labels
+    return None so the fitter can drop the row instead of guessing.
     """
     onto = ontology_for(car)
     if parameter not in onto:
@@ -576,6 +723,12 @@ def setup_value(car: str, parameter: str, setup_json: dict | str) -> float | Non
         return None
 
     raw = _walk(setup, spec.json_path)
+    if spec.choices and isinstance(raw, str):
+        raw_norm = raw.strip().lower()
+        for idx, label in enumerate(spec.choices):
+            if label.strip().lower() == raw_norm:
+                return float(idx)
+        return None
     return _scalar(raw)
 
 

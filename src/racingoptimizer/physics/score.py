@@ -45,6 +45,16 @@ _OBJECTIVE_CONFIDENCE_MULTIPLIER: dict[str, float] = {
     "dense": 1.00,
 }
 
+# Hard floor on predicted mean ride height. iRacing GTPs scrape splitter /
+# floor at very low ride heights; once the floor is touching, aero stalls
+# and traction collapses. VISION §4 lists "bottoming risk" as part of the
+# platform sub-utilization. Below the safety floor, the platform util gets
+# driven to zero linearly across `_BOTTOMING_PENALTY_DEPTH_MM` so the DE
+# objective sees a smooth gradient pushing AWAY from sub-floor predictions
+# rather than a discontinuous cliff.
+_RIDE_HEIGHT_SAFETY_FLOOR_MM: float = 5.0
+_BOTTOMING_PENALTY_DEPTH_MM: float = 10.0
+
 
 def _clip01(x: float) -> float:
     if x < 0.0:
@@ -153,7 +163,7 @@ def aero_eff(
     if aero is None:
         return 0.5, _sparse_conf(0.5)
     ld = _aero_ld_for_state(state, env, aero)
-    util = _clip01(ld / 4.0)
+    util = _clip01(ld / 4.0) * _wind_aero_scale(env)
     contribs = [
         c for c in (
             state.states.get("lf_ride_height_mean_mm"),
@@ -164,6 +174,35 @@ def aero_eff(
     if not contribs:
         return util, _sparse_conf(util)
     return util, _worst_confidence(contribs, util)
+
+
+def _wind_aero_scale(env: EnvironmentFrame) -> float:
+    """Approximate wind-induced aero penalty for the L/D utilization.
+
+    VISION §10 calls for asymmetric headwind/tailwind/crosswind aero
+    correction. A proper directional decomposition needs per-corner car
+    heading (still pending — `physics/wind.py` documents this as Stage
+    5 polish). As a load-bearing first integration we apply the
+    *magnitude*-based downforce scale: any wind reduces effective L/D
+    relative to still air because tailwind reduces local airspeed and
+    crosswind shears flow over the underbody. This reads ``WindVel``
+    (already on every EnvironmentFrame) so the score actually reflects
+    the channel rather than ignoring it.
+
+    Treats ``wind_vel_ms`` as a tailwind worst case
+    (``aero_wind_modifier(headwind=-wind_vel)``) and clamps to the
+    documented 0.25 floor; returns 1.0 (no penalty) when wind is zero
+    or NaN.
+    """
+    from racingoptimizer.physics.wind import aero_wind_modifier
+
+    wind = float(env.wind_vel_ms)
+    if not (wind == wind) or wind <= 0.0:  # NaN / no wind
+        return 1.0
+    downforce_scale, _balance_shift = aero_wind_modifier(
+        headwind_ms=-wind, crosswind_ms=0.0,
+    )
+    return float(max(0.25, min(1.0, downforce_scale)))
 
 
 def platform(
@@ -207,12 +246,55 @@ def platform(
         shock_vals.append(float(c.value))
         shock_confs.append(c)
 
+    # Bottoming penalty (VISION §4: "platform control — ride height
+    # consistency, bottoming risk"). When ANY of the four corners' predicted
+    # mean ride height drops below the safety floor + ramp depth, the
+    # platform util gets pushed toward zero. The check uses the worst
+    # corner's RH so a single bottoming corner kills the platform score
+    # regardless of how clean the other three are. Linear ramp keeps the
+    # DE objective's gradient smooth across the cliff.
+    bottoming_penalty = 0.0
+    if rh_vals:
+        worst_rh = min(rh_vals)
+        headroom = worst_rh - _RIDE_HEIGHT_SAFETY_FLOOR_MM
+        if headroom < _BOTTOMING_PENALTY_DEPTH_MM:
+            bottoming_penalty = _clip01(
+                1.0 - headroom / _BOTTOMING_PENALTY_DEPTH_MM
+            )
+
+    # Telemetry-derived at-speed bottoming penalty. The four
+    # `dynamic_*_rh_at_speed_mm` channels are per-session medians of the
+    # 60Hz `*rideHeight` telemetry, filtered to samples where the car is
+    # at high speed and going straight (full-throttle straight-line
+    # running). They are the GROUND TRUTH for the at-speed pose —
+    # they include real damper compression dynamics, surface effects,
+    # and track-specific straight-line speeds. VISION §3 directs fits to
+    # observed reality, not iRacing's setup-only AeroCalculator panel
+    # (which is a user-input scratchpad, not a setup readout).
+    at_speed_rh_vals: list[float] = []
+    for ch in (
+        "dynamic_lf_rh_at_speed_mm", "dynamic_rf_rh_at_speed_mm",
+        "dynamic_lr_rh_at_speed_mm", "dynamic_rr_rh_at_speed_mm",
+    ):
+        c = state.states.get(ch)
+        if c is None:
+            continue
+        at_speed_rh_vals.append(float(c.value))
+    if at_speed_rh_vals:
+        worst_at_speed_rh = min(at_speed_rh_vals)
+        headroom = worst_at_speed_rh - _RIDE_HEIGHT_SAFETY_FLOOR_MM
+        if headroom < _BOTTOMING_PENALTY_DEPTH_MM:
+            at_speed_bottoming = _clip01(
+                1.0 - headroom / _BOTTOMING_PENALTY_DEPTH_MM
+            )
+            bottoming_penalty = max(bottoming_penalty, at_speed_bottoming)
+
     if shock_vals:
         shock_penalty = _clip01(max(shock_vals) / baselines.shock_defl_scale_mm)
-        penalty = max(rh_penalty, shock_penalty)
+        penalty = max(rh_penalty, shock_penalty, bottoming_penalty)
         contribs = rh_confs + shock_confs
     else:
-        penalty = rh_penalty
+        penalty = max(rh_penalty, bottoming_penalty)
         contribs = rh_confs
 
     util = 1.0 - penalty
@@ -235,8 +317,17 @@ def aggregate_utilization(
     env: EnvironmentFrame,
     aero: AeroSurface | None,
     baselines: CarBaselines,
+    *,
+    phase_weights: dict[Phase, dict[str, float]] | None = None,
 ) -> tuple[float, Confidence]:
-    weights = PHASE_WEIGHTS[phase]
+    """Weighted-sum sub-utilization for one (corner, phase).
+
+    ``phase_weights`` overrides the default ``PHASE_WEIGHTS`` table —
+    used by the wet-mode branch in ``score_setup`` to reweight away from
+    aero_eff toward platform/grip in wet conditions per VISION §10.
+    """
+    table = phase_weights if phase_weights is not None else PHASE_WEIGHTS
+    weights = table[phase]
     total = 0.0
     contribs: list[tuple[float, Confidence]] = []
     has_significant_sparse = False
@@ -284,6 +375,7 @@ def score_setup(
     *,
     weights: dict[int, float] | None = None,
     strict: bool = False,
+    schedule: list | None = None,
 ) -> float:
     """Sum of per-(corner, phase) utilization * per-corner weight.
 
@@ -293,14 +385,36 @@ def score_setup(
     instead. `weights` is the per-corner time-sensitivity table from
     weight_corners; when None, a uniform fall-back across the model's
     corners is used.
+
+    ``schedule`` (per-car v4 only): when the model is per-car
+    (``feature_schema_version >= 4``), pass a list of
+    ``CornerScheduleEntry`` describing the TARGET track's corners +
+    archetype features. The per-corner predict path then scores the target
+    track's corners instead of the trained-track corners (which a per-car
+    model has none of, by design).
     """
     setup = _clamped_or_raise(model, setup, strict=strict)
     if weights is None:
-        weights = _resolve_weights(model, track)
+        weights = _resolve_weights(model, track, schedule=schedule)
     aero = _aero_surface_or_none(model)
-    keys = _corner_phase_keys(model)
-    baselines = model.resolved_baselines
-    breakdown = _score_breakdown(model, setup, env, aero, keys, weights, baselines)
+    baselines, phase_weights = _conditions_adjusted_baselines(model, env)
+    if int(model.feature_schema_version) >= 4:
+        if schedule is None:
+            raise ValueError(
+                "per-car model (v4) requires `schedule` — build it from the "
+                "target TrackModel via "
+                "`racingoptimizer.physics.corner_schedule.build_corner_schedule`."
+            )
+        breakdown = _score_breakdown_per_car(
+            model, setup, env, aero, schedule, weights, baselines,
+            phase_weights=phase_weights,
+        )
+    else:
+        keys = _corner_phase_keys(model)
+        breakdown = _score_breakdown(
+            model, setup, env, aero, keys, weights, baselines,
+            phase_weights=phase_weights,
+        )
     return float(sum(breakdown.values()))
 
 
@@ -312,17 +426,57 @@ def score_breakdown(
     *,
     weights: dict[int, float] | None = None,
     strict: bool = False,
+    schedule: list | None = None,
 ) -> dict[CornerPhaseKey, float]:
     setup = _clamped_or_raise(model, setup, strict=strict)
     if weights is None:
-        weights = _resolve_weights(model, track)
+        weights = _resolve_weights(model, track, schedule=schedule)
     aero = _aero_surface_or_none(model)
+    baselines, phase_weights = _conditions_adjusted_baselines(model, env)
+    if int(model.feature_schema_version) >= 4:
+        if schedule is None:
+            raise ValueError(
+                "per-car model (v4) requires `schedule`"
+            )
+        return _score_breakdown_per_car(
+            model, setup, env, aero, schedule, weights, baselines,
+            phase_weights=phase_weights,
+        )
     keys = _corner_phase_keys(model)
-    baselines = model.resolved_baselines
-    return _score_breakdown(model, setup, env, aero, keys, weights, baselines)
+    return _score_breakdown(
+        model, setup, env, aero, keys, weights, baselines,
+        phase_weights=phase_weights,
+    )
 
 
 # ---- internals -----------------------------------------------------------
+
+
+def _conditions_adjusted_baselines(
+    model: PhysicsModel, env: EnvironmentFrame,
+) -> tuple[CarBaselines, dict[Phase, dict[str, float]] | None]:
+    """Pick wet-aware baselines + phase weights for an env regime.
+
+    VISION §10: the same setup behaves differently in different
+    conditions. This wires `physics.wet_mode` into the score path —
+    classify the env into dry/damp/wet/full_rain, then return the
+    adjusted CarBaselines (lower max grip, lower aero baseline, more
+    wheelspin tolerance) and adjusted phase weights (away from aero_eff
+    toward platform/grip on wet).
+
+    Dry returns the model's resolved baselines and ``None`` for the
+    phase-weight override (so the caller falls back to ``PHASE_WEIGHTS``).
+    """
+    from racingoptimizer.physics.wet_mode import (
+        classify_conditions,
+        wet_baselines,
+        wet_phase_weights,
+    )
+
+    regime = classify_conditions(env)
+    if regime == "dry":
+        return model.resolved_baselines, None
+    return wet_baselines(model.car, regime), wet_phase_weights(regime)
 
 
 def _confidence_with_value(source: Confidence, value: float) -> Confidence:
@@ -431,7 +585,16 @@ def _clamped_or_raise(
     return out
 
 
-def _resolve_weights(model: PhysicsModel, track: str) -> dict[int, float]:
+def _resolve_weights(
+    model: PhysicsModel,
+    track: str,
+    *,
+    schedule: list | None = None,
+) -> dict[int, float]:
+    if schedule:
+        corners = sorted({int(entry.corner_id) for entry in schedule})
+        if corners:
+            return {c: 1.0 / len(corners) for c in corners}
     keys = _corner_phase_keys(model)
     if not keys:
         return {}
@@ -447,6 +610,8 @@ def _score_breakdown(
     keys: list[tuple[int, str]],
     weights: dict[int, float],
     baselines: CarBaselines,
+    *,
+    phase_weights: dict[Phase, dict[str, float]] | None = None,
 ) -> dict[CornerPhaseKey, float]:
     out: dict[CornerPhaseKey, float] = {}
     for corner_id, phase_str in keys:
@@ -461,7 +626,9 @@ def _score_breakdown(
         if not state.states:
             out[cpkey] = 0.0
             continue
-        util, conf = aggregate_utilization(state, phase, env, aero, baselines)
+        util, conf = aggregate_utilization(
+            state, phase, env, aero, baselines, phase_weights=phase_weights,
+        )
         w = weights.get(int(corner_id), 0.0)
         out[cpkey] = float(_confidence_adjusted_utilization(util, conf) * w)
     return out
@@ -471,6 +638,51 @@ def _confidence_adjusted_utilization(util: float, conf: Confidence) -> float:
     """Conservatively score uncertain predictions inside the objective."""
     multiplier = _OBJECTIVE_CONFIDENCE_MULTIPLIER[conf.regime]
     return float(util * multiplier)
+
+
+def _score_breakdown_per_car(
+    model: PhysicsModel,
+    setup: dict[str, float],
+    env: EnvironmentFrame,
+    aero: AeroSurface | None,
+    schedule: list,
+    weights: dict[int, float],
+    baselines: CarBaselines,
+    *,
+    phase_weights: dict[Phase, dict[str, float]] | None = None,
+) -> dict[CornerPhaseKey, float]:
+    """Per-car (v4) score path: iterate the TARGET track's corners.
+
+    ``schedule`` is a list of ``CornerScheduleEntry`` (corner_id, phase,
+    archetype dict). For each entry, the per-car model is queried with the
+    archetype features so the same fitter scores any corner on any track.
+    """
+    out: dict[CornerPhaseKey, float] = {}
+    for entry in schedule:
+        corner_id = int(entry.corner_id)
+        phase_str = str(entry.phase)
+        try:
+            phase = Phase(phase_str)
+        except ValueError:
+            continue
+        cpkey = CornerPhaseKey(
+            session_id="<recommend-virtual>",
+            lap_index=0,
+            corner_id=corner_id,
+            phase=phase,
+        )
+        state = model.predict(
+            setup, env, cpkey, corner_archetype=entry.archetype,
+        )
+        if not state.states:
+            out[cpkey] = 0.0
+            continue
+        util, conf = aggregate_utilization(
+            state, phase, env, aero, baselines, phase_weights=phase_weights,
+        )
+        w = weights.get(corner_id, 0.0)
+        out[cpkey] = float(_confidence_adjusted_utilization(util, conf) * w)
+    return out
 
 
 __all__ = [

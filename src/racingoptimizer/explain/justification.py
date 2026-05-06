@@ -90,8 +90,16 @@ def build_justifications(
     *,
     pinned: dict[str, float] | None = None,
     clamp_warnings: dict[str, str] | None = None,
+    schedule: list | None = None,
 ) -> list[SetupJustification]:
-    """Build one SetupJustification per parameter on `rec.parameters`."""
+    """Build one SetupJustification per parameter on `rec.parameters`.
+
+    ``schedule`` (per-car v4 only) carries the target-track corner schedule
+    needed by ``score_setup`` / ``score_breakdown`` to evaluate the per-car
+    fitter at the target track's archetypes. Without it, the score path
+    raises and the per-parameter sensitivity / impact display silently
+    degrades to zeros. v3 callers pass ``None``.
+    """
     pinned = pinned or {}
     clamp_warnings = clamp_warnings or {}
     onto = ontology_for(model.car)
@@ -99,7 +107,9 @@ def build_justifications(
 
     out: list[SetupJustification] = []
     for parameter, (value, confidence) in rec.parameters.items():
-        helped, hurt = _split_impacts(parameter, value, model, rec, setup)
+        helped, hurt = _split_impacts(
+            parameter, value, model, rec, setup, schedule=schedule,
+        )
         unit = onto[parameter].units if parameter in onto else "?"
         is_pinned = parameter in pinned
         if is_pinned:
@@ -108,6 +118,7 @@ def build_justifications(
         else:
             sens_minus, sens_plus = _sensitivity(
                 model, setup, parameter, value, rec.track, rec.env,
+                schedule=schedule,
             )
         evidence = _evidence(
             confidence=confidence,
@@ -158,6 +169,8 @@ def _split_impacts(
     model: PhysicsModel,
     rec: SetupRecommendation,
     setup: dict[str, float],
+    *,
+    schedule: list | None = None,
 ) -> tuple[tuple[CornerPhaseImpact, ...], tuple[CornerPhaseImpact, ...]]:
     """Per-(corner, phase) score-delta vs the parameter's training baseline.
 
@@ -179,7 +192,7 @@ def _split_impacts(
     counterfactual = dict(setup)
     counterfactual[parameter] = baseline_value
     counterfactual_breakdown = _safe_score_breakdown(
-        model, counterfactual, rec.track, rec.env,
+        model, counterfactual, rec.track, rec.env, schedule=schedule,
     )
 
     helped: list[CornerPhaseImpact] = []
@@ -230,10 +243,12 @@ def _safe_score_breakdown(
     setup: dict[str, float],
     track: str,
     env,
+    *,
+    schedule: list | None = None,
 ) -> dict:
     from racingoptimizer.physics.score import score_breakdown
     try:
-        return score_breakdown(model, setup, track, env)
+        return score_breakdown(model, setup, track, env, schedule=schedule)
     except Exception:
         return {}
 
@@ -245,26 +260,35 @@ def _sensitivity(
     value: float,
     track: str,
     env,
+    *,
+    schedule: list | None = None,
 ) -> tuple[float, float]:
     """Per-click score delta from shifting the parameter ±1 click."""
     step = _step_for(model, parameter)
     if step <= 0:
         return 0.0, 0.0
-    base = _safe_score_total(model, setup, track, env)
+    base = _safe_score_total(model, setup, track, env, schedule=schedule)
 
     minus = dict(setup)
     minus[parameter] = float(_clamp_value(model, parameter, value - step))
     plus = dict(setup)
     plus[parameter] = float(_clamp_value(model, parameter, value + step))
 
-    minus_score = _safe_score_total(model, minus, track, env)
-    plus_score = _safe_score_total(model, plus, track, env)
+    minus_score = _safe_score_total(model, minus, track, env, schedule=schedule)
+    plus_score = _safe_score_total(model, plus, track, env, schedule=schedule)
     return (minus_score - base, plus_score - base)
 
 
-def _safe_score_total(model: PhysicsModel, setup: dict[str, float], track: str, env) -> float:
+def _safe_score_total(
+    model: PhysicsModel,
+    setup: dict[str, float],
+    track: str,
+    env,
+    *,
+    schedule: list | None = None,
+) -> float:
     try:
-        return float(model.score_setup(setup, track, env))
+        return float(model.score_setup(setup, track, env, schedule=schedule))
     except Exception:
         return 0.0
 
