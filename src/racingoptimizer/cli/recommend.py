@@ -166,6 +166,30 @@ def recommend_cmd(
         )
         sys.exit(2)
     pinned_overrides = _parse_pins(pins, wing=wing, fuel=fuel)
+    # Race-mode auto fuel pin: without --quali AND without an explicit
+    # --fuel/--pin, anchor fuel to the most-recent past-session value
+    # (typically the user's last race load, e.g. 58 L on BMW). The
+    # optimizer treats fuel_level_l as a fittable input — leaving it
+    # unpinned in race mode would have it freely minimizing mass for
+    # one-lap pace and recommending values that won't cover a race
+    # distance. Quali mode requires the user to set --fuel explicitly
+    # (already enforced above) and skips this auto-pin.
+    if not quali and "fuel_level_l" not in pinned_overrides:
+        from racingoptimizer.physics.ontology import setup_value
+        past_setup = _most_recent_setup_for(catalog_sessions)
+        if past_setup is not None:
+            try:
+                past_fuel = setup_value(car_key, "fuel_level_l", past_setup)
+            except KeyError:
+                past_fuel = None
+            if past_fuel is not None:
+                pinned_overrides["fuel_level_l"] = float(past_fuel)
+                click.echo(
+                    f"Race fuel auto-pinned to past-session value: "
+                    f"{past_fuel:.1f} L (override with --fuel N, or use "
+                    f"--quali --fuel N for short stint).",
+                    err=True,
+                )
     constraints_table = load_constraints()
     pinned_constraints = _apply_pins_to_constraints(
         constraints_table, car_key, pinned_overrides,
