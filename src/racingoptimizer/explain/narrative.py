@@ -1,14 +1,14 @@
 """Plain-English narrative renderer for setup recommendations.
 
 Default rendering for `optimize <car> <track>` since 2026-05-06. Replaces
-the per-parameter ±1-click + score-delta blocks with a 2-3 line summary
+the per-parameter +/-1-click + score-delta blocks with a 2-3 line summary
 per change, plus an OVERALL DIRECTION header. Pass `--detailed` to bring
 back the legacy block-per-parameter format from
 ``explain.render_text.render_recommendation_text``.
 
 The narrative re-uses the existing ``SetupJustification`` dataclass
 (``corners_helped`` / ``corners_hurt`` lists) so no new physics work is
-needed — only translation: corner-phase + parameter family →
+needed -- only translation: corner-phase + parameter family ->
 engineering English.
 """
 from __future__ import annotations
@@ -137,7 +137,7 @@ def render_narrative(
     pinned: dict[str, float] | None = None,
     warnings: list[str] | None = None,
 ) -> str:
-    """Plain-English briefing — every parameter that moved, with helps + watch."""
+    """Plain-English briefing -- every parameter that moved, with helps + watch."""
     pinned = pinned or {}
     warnings = list(warnings or [])
     onto = ontology_for(model.car)
@@ -150,12 +150,12 @@ def render_narrative(
     fuel_l = rec.parameters.get("fuel_level_l")
     fuel_str = f" ({fuel_l[0]:.1f} L fuel)" if fuel_l else ""
     mode = "quali (3-lap stint)" if quali else "race"
-    lines.append(f" {model.car} @ {track_label} — {mode}{fuel_str}")
+    lines.append(f" {model.car} @ {track_label} -- {mode}{fuel_str}")
     rolled = _rollup_regime(justifications)
     n_med = _median_n_samples(justifications)
     lines.append(
-        f" Conditions: {rec.env.air_temp_c:.0f}°C ambient / "
-        f"{rec.env.track_temp_c:.0f}°C track  |  "
+        f" Conditions: {rec.env.air_temp_c:.0f} C ambient / "
+        f"{rec.env.track_temp_c:.0f} C track  |  "
         f"Confidence: {rolled} (median n={n_med})"
     )
     lines.append("=" * 72)
@@ -185,13 +185,13 @@ def render_narrative(
     for group_label, _families in _GROUPS:
         if group_label not in by_group:
             continue
-        lines.append(f"— {group_label} —")
+        lines.append(f"-- {group_label} --")
         for j in sorted(by_group[group_label], key=_param_sort_key):
             lines.extend(_render_change(j, past_value.get(j.parameter), onto))
             lines.append("")
 
     if "OTHER" in by_group:
-        lines.append("— OTHER —")
+        lines.append("-- OTHER --")
         for j in sorted(by_group["OTHER"], key=_param_sort_key):
             lines.extend(_render_change(j, past_value.get(j.parameter), onto))
             lines.append("")
@@ -230,14 +230,14 @@ def _render_change(
     if hurts:
         body.append(f"  Watch: {hurts}")
     if not helps and not hurts:
-        body.append("  (no per-corner trade-off — model held this at training baseline)")
+        body.append("  (no per-corner trade-off -- model held this at training baseline)")
     return body
 
 
 def _format_value_delta(
     j: SetupJustification, spec: ParameterSpec | None, past: float | None,
 ) -> str:
-    """`50 → 60 N/mm` or `Soft → Medium` or `60 N/mm` (no past)."""
+    """`50 -> 60 N/mm` or `Soft -> Medium` or `60 N/mm` (no past)."""
     units = (spec.units if spec else j.unit) or ""
     if spec and spec.choices:
         idx = max(0, min(len(spec.choices) - 1, int(round(j.value))))
@@ -247,7 +247,7 @@ def _format_value_delta(
             old_label = spec.choices[past_idx]
             if old_label == new_label:
                 return new_label
-            return f"{old_label} → {new_label}"
+            return f"{old_label} -> {new_label}"
         return new_label
 
     step = (spec.step if spec and spec.step else 0.5)
@@ -265,7 +265,7 @@ def _format_value_delta(
     past_s = fmt(past).rstrip()
     if past_s == val_s:
         return f"{val_s}{unit_s}"
-    return f"{past_s} → {val_s}{unit_s}"
+    return f"{past_s} -> {val_s}{unit_s}"
 
 
 def _direction_word(family: str, delta: float) -> str:
@@ -306,7 +306,7 @@ def _overall_direction(
     if not moved:
         return [
             "OVERALL DIRECTION",
-            "  No changes from past setup — already optimal in the model's view.",
+            "  No changes from past setup -- already optimal in the model's view.",
         ]
     family_dirs: dict[str, dict[str, int]] = defaultdict(
         lambda: {"up": 0, "down": 0},
@@ -368,19 +368,19 @@ def _notes_block(
         spec = onto.get(j.parameter)
         step = (spec.step if spec and spec.step else 0.5)
         if abs(j.value - past) >= step / 2:
-            continue  # actually moved by a half-step or more — covered above
+            continue  # actually moved by a half-step or more -- covered above
     if rec.pinned_to_observed_median:
         for name in sorted(rec.pinned_to_observed_median):
             label = _PARAM_LABEL.get(name, _humanize(name))
             out.append(
-                f"  {label}: corpus has only one value — vary it next session "
+                f"  {label}: corpus has only one value -- vary it next session "
                 f"for a recommendation"
             )
     if rec.untrained_parameters:
         params_str = ", ".join(sorted(rec.untrained_parameters))
         out.append(f"  Untrained (constraints.md TODO): {params_str}")
     for w in warnings:
-        out.append(f"  ⚠ {w}")
+        out.append(f"  ! {w}")
     return out
 
 
