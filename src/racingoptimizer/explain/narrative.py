@@ -800,7 +800,7 @@ def _render_change(
         body.append(f"  Trade:  {trade}")
         # Tack on a single most-impactful corner mention so the user
         # knows where on the lap to feel it.
-        impact = _dominant_impact_corner(j)
+        impact = _dominant_impact_corner(j, family=family)
         if impact:
             body.append(f"  Watch most: {impact}")
     else:
@@ -1015,25 +1015,55 @@ def _archetype_for(schedule: list | None, corner_id: int) -> dict | None:
     return None
 
 
-def _dominant_impact_corner(j: SetupJustification) -> str:
-    """Single-line `T11 braking apex` style -- the corner-phase with the
-    biggest absolute score delta the driver will actually feel.
+# Per-family "you will feel this in these phases" preference. The
+# raw score delta picker chases time-impact (longest corner wins),
+# which is duration-biased after the e90e8fd corner-weight refactor.
+# Drivers feel parameters at MECHANICALLY relevant phases regardless
+# of corner length, so we filter the impact pool by family-preferred
+# phases before picking the dominant corner.
+_FAMILY_PREFERRED_PHASES: dict[str, frozenset[Phase]] = {
+    "rear_wing":     frozenset({Phase.MID_CORNER, Phase.STRAIGHT}),
+    "tyre_pressure": frozenset({Phase.MID_CORNER}),
+    "perch_offset":  frozenset({Phase.MID_CORNER, Phase.EXIT}),
+    "pushrod":       frozenset({Phase.MID_CORNER, Phase.EXIT}),
+    "spring_rate":   frozenset({Phase.TRAIL_BRAKE, Phase.MID_CORNER}),
+    "torsion_bar":   frozenset({Phase.TRAIL_BRAKE, Phase.MID_CORNER}),
+    "arb":           frozenset({Phase.MID_CORNER}),
+    "damper":        frozenset({Phase.TRAIL_BRAKE, Phase.MID_CORNER, Phase.EXIT}),
+    "camber":        frozenset({Phase.MID_CORNER}),
+    "brake_bias":    frozenset({Phase.BRAKING, Phase.TRAIL_BRAKE}),
+    "diff":          frozenset({Phase.EXIT}),
+    "fuel":          frozenset({Phase.MID_CORNER}),
+}
 
-    Prefers non-STRAIGHT phases first. With per-corner weights now
-    proportional to lap-time share (corner_duration_s, commit
-    e90e8fd), the longest straights at any track dominate raw score
-    delta -- but a camber or damper change is felt mid-corner, not
-    on the straight. Only fall back to STRAIGHT if every impact is
-    on a straight (true for aero parameters like wing + tyre P).
+
+def _dominant_impact_corner(
+    j: SetupJustification, family: str | None = None,
+) -> str:
+    """Single-line `T11 braking apex` style -- the corner-phase the
+    driver will actually feel this parameter at.
+
+    Filters the helps + hurts pool by `_FAMILY_PREFERRED_PHASES[family]`
+    so a damper change reports trail-brake/mid-corner/exit, a camber
+    reports mid-corner, a diff reports exit -- regardless of which
+    corner has the biggest raw score delta (which is duration-biased
+    by the corner-weight refactor in e90e8fd). Falls back to non-
+    STRAIGHT phases, then to any phase, when the preferred-phase
+    pool is empty.
     """
     candidates = list(j.corners_helped) + list(j.corners_hurt)
     if not candidates:
         return ""
-    on_corner = [
-        i for i in candidates if i.phase != Phase.STRAIGHT
-    ]
-    pool = on_corner if on_corner else candidates
-    top = max(pool, key=lambda i: abs(i.score_delta))
+    preferred = _FAMILY_PREFERRED_PHASES.get(family or "")
+    if preferred:
+        in_preferred = [i for i in candidates if i.phase in preferred]
+        if in_preferred:
+            candidates = in_preferred
+    else:
+        on_corner = [i for i in candidates if i.phase != Phase.STRAIGHT]
+        if on_corner:
+            candidates = on_corner
+    top = max(candidates, key=lambda i: abs(i.score_delta))
     phase_label = _PHASE_LABEL.get(top.phase, top.phase.value)
     return f"T{top.corner_id} {phase_label}"
 
