@@ -345,10 +345,10 @@ def render_full_setup_card(
     lines.append(f"FULL SETUP CARD -- {car} @ {rec.track}")
     lines.append("=" * 64)
     lines.append(
-        "Legend: [OPT] optimizer recommendation |[OPT pin] pinned to "
-        "observed median |[OPT mirror] mirrored from per-axle parameter "
-        "· [past] from your most recent session (no bounds yet) |"
-        "[readout] calculated by iRacing -- verify, don't enter |"
+        "Legend: [OPT] optimizer recommendation | [OPT pin] pinned to "
+        "observed median | [OPT mirror] mirrored from per-axle parameter "
+        "| [past] from your most recent session (no bounds yet) | "
+        "[readout] calculated by iRacing -- verify, don't enter | "
         "[predicted] readout the optimizer projects under the new inputs."
     )
 

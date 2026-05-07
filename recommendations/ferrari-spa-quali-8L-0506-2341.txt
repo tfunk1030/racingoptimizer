@@ -1,0 +1,399 @@
+========================================================================
+ ferrari @ spa_2024_up -- quali (3-lap stint) (8.0 L fuel)
+ Conditions: 20 C ambient / 21 C track  |  Confidence: dense (median n=1071)
+========================================================================
+
+OVERALL DIRECTION
+  Less negative camber; stiffer damping; lower ride height; tighter diff; brake bias rearward; more downforce; stiffer platform; stiffer front platform.
+
+CHANGES (38 of 46 parameters moved)
+
+-- AERO --
+Rear wing: 14 -> 17 deg  (more downforce)
+  Why:    At T5 on straights, predicted rear ride height at speed was 26.2 mm under the past setup.
+  Effect: More downforce in fast corners (Eau Rouge, Pouhon, Blanchimont); higher mid-corner peak grip.
+  Trade:  Higher straight-line drag; ~0.05-0.10 s slower on Kemmel per click.
+  Watch most: T1 on straights
+
+-- PLATFORM (springs / perches / pushrods / torsion bars) --
+Front pushrod offset: -5.0 -> 4.0 mm  (raises car)
+  Why:    At T5 on straights, predicted front static ride height was 29.9 mm under the past setup.
+  Effect: Higher front static ride height: more bump clearance, less front aero load.
+  Trade:  Less front downforce; can stall front aero in mid-corner pitch.
+  Watch most: T1 on straights
+
+Front heave perch: -17.0 -> -19.5 mm  (raises car)
+  Why:    At T5 on straights, predicted front static ride height was 30.5 mm under the past setup.
+  Effect: Higher front static ride height: more bump clearance, less aero load.
+  Trade:  Less front downforce in fast corners; more pitch sensitivity.
+  Watch most: T1 on straights
+
+Rear pushrod offset: 13.0 -> 2.5 mm  (lowers car)
+  Why:    At T5 on straights, predicted rear static ride height was 51.5 mm under the past setup.
+  Effect: Lower rear static ride height: more rear downforce, more stable platform.
+  Trade:  Rear bottoming risk on Kemmel and Eau Rouge exit.
+  Watch most: T1 on straights
+
+Rear third spring: 6 -> 7 index  (stiffens)
+  Why:    At T5 on straights, predicted rear ride height at speed was 29.7 mm under the past setup.
+  Effect: Stiffer rear-axle heave: less rear pitch in compression, sharper rotation through high-speed corners.
+  Trade:  Less rear traction over kerbs; can promote oversteer on throttle if rear is too stiff overall.
+  Watch most: T1 on straights
+
+Rear third perch: -106.5 -> -111.5 mm  (raises car)
+  Why:    At T5 on straights, predicted rear static ride height was 44.8 mm under the past setup.
+  Effect: Higher rear static ride height: more rear compliance, less rear downforce, more rotation under throttle.
+  Trade:  Rear aero stall risk in high-speed corners; less rear stability on Kemmel compression.
+  Watch most: T1 on straights
+
+Rear torsion bar OD: 2 -> 4 index  (stiffens)
+  Why:    At T5 on straights, predicted rear-left shock peak compression was 29.0 mm under the past setup.
+  Helps: braking stability in T17; mid-corner grip in T5; power-down traction in T5; straight-line speed in T5, T6
+  Watch: power-down traction in T1; straight-line speed in T0, T1, T3
+
+Front torsion bar OD: 2 -> 3 index  (stiffens)
+  Why:    At T5 on straights, predicted front-left shock peak compression was 20.2 mm under the past setup.
+  Effect: Stiffer front platform: less roll through fast corners, less pitch under braking, sharper transient response.
+  Trade:  Less single-wheel compliance on one-sided kerbs; mid-corner understeer risk if rear isn't matched.
+  Watch most: T1 on straights
+
+Front heave spring: 1 -> 2 index  (stiffens)
+  Effect: Less front pitch on brake apply; sharper turn-in; aero platform held flatter on long compressions.
+  Trade:  Harsher over kerbs. Mid-corner front grip can drop if oversprung -- watch for understeer.
+  Watch most: T1 on straights
+
+-- DAMPERS --
+Damper Hsc Slope Fr: 5 -> 7 click  (stiffens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 191 mm/s under the past setup.
+  Effect: Earlier transition from LS to HS damping under braking -- stiffer through the meat of the bump.
+  Trade:  Bump-velocity threshold lowers; chassis loses compliance earlier.
+  Watch most: T1 on straights
+
+Damper Lsc Fl: 16 -> 11 click  (softens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 191 mm/s under the past setup.
+  Effect: Smoother weight transfer to front under braking; gentler initial bite; more progressive pitch.
+  Trade:  More dive on entry; can over-rotate the front platform.
+  Watch most: T1 on straights
+
+Damper Hsc Rl: 33 -> 37 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 191 mm/s under the past setup.
+  Effect: Less rear compliance over bumps; sharper kerb response.
+  Trade:  Rear can skip on kerbs and bumps; traction loss at the moment of impact.
+  Watch most: T1 on straights
+
+Damper Lsr Fl: 12 -> 22 click  (stiffens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 191 mm/s under the past setup.
+  Effect: Slower front rebound after pitch -- keeps weight on the front longer through entry.
+  Trade:  Front 'sticks down' after braking; can promote mid-corner understeer on T9 / T13 release.
+  Watch most: T1 on straights
+
+Damper Lsc Rl: 12 -> 18 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 191 mm/s under the past setup.
+  Effect: Sharper rear response on throttle apply; less initial squat.
+  Trade:  Less initial rear traction; can feel harsh on bumps under power.
+  Watch most: T1 on straights
+
+Damper Hsr Fl: 19 -> 22 click  (stiffens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 191 mm/s under the past setup.
+  Effect: Slower front rebound off kerbs and curbing.
+  Trade:  Front can hang low after a kerb hit; subsequent corner compromised.
+  Watch most: T1 on straights
+
+Damper Lsr Rr: 15 -> 21 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 191 mm/s under the past setup.
+  Effect: Slower rear rebound out of the corner; keeps rear platform settled longer on power.
+  Trade:  Rear can stay too low after exit -- bottoming risk on the compression that follows.
+  Watch most: T1 on straights
+
+Damper Hsr Rl: 28 -> 31 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 191 mm/s under the past setup.
+  Effect: Slower rear rebound off kerbs; rear stays planted longer.
+  Trade:  Rear can stay loaded too long; subsequent corner rotation compromised.
+  Watch most: T1 on straights
+
+Damper Hsc Slope Fl: 5 -> 7 click  (stiffens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 191 mm/s under the past setup.
+  Effect: Earlier transition from LS to HS damping under braking -- stiffer through the meat of the bump.
+  Trade:  Bump-velocity threshold lowers; chassis loses compliance earlier.
+  Watch most: T1 on straights
+
+Damper Hsr Rr: 28 -> 26 click  (softens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 191 mm/s under the past setup.
+  Effect: Faster rear rebound off kerbs; rear returns to neutral quicker.
+  Trade:  Rear bounce off kerbing -- traction loss on the next throttle application.
+  Watch most: T1 on straights
+
+Damper Lsc Rr: 12 -> 20 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 190 mm/s under the past setup.
+  Effect: Sharper rear response on throttle apply; less initial squat.
+  Trade:  Less initial rear traction; can feel harsh on bumps under power.
+  Watch most: T1 on straights
+
+Damper Hsc Fr: 32 -> 15 click  (softens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 191 mm/s under the past setup.
+  Effect: More compliance over kerbs and high-frequency bumps; better front grip retention through Eau Rouge bumps.
+  Trade:  More pitch noise mid-corner; aero platform wanders.
+  Watch most: T1 on straights
+
+Damper Hsr Fr: 19 -> 14 click  (softens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 191 mm/s under the past setup.
+  Effect: Faster front rebound off kerbs; chassis returns to neutral quicker.
+  Trade:  Aggressive bounce off kerbing; aero platform unstable in the lap after a kerb-heavy entry.
+  Watch most: T1 on straights
+
+Damper Lsr Fr: 12 -> 15 click  (stiffens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 188 mm/s under the past setup.
+  Effect: Slower front rebound after pitch -- keeps weight on the front longer through entry.
+  Trade:  Front 'sticks down' after braking; can promote mid-corner understeer on T9 / T13 release.
+  Watch most: T1 on straights
+
+Damper Hsc Slope Rr: 6 -> 9 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 190 mm/s under the past setup.
+  Effect: Rear transitions to HS damping earlier -- stiffer through moderate bumps and kerbs.
+  Trade:  Less rear compliance on bumpy throttle commits.
+  Watch most: T1 on straights
+
+Damper Lsr Rl: 15 -> 25 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 190 mm/s under the past setup.
+  Effect: Slower rear rebound out of the corner; keeps rear platform settled longer on power.
+  Trade:  Rear can stay too low after exit -- bottoming risk on the compression that follows.
+  Watch most: T1 on straights
+
+Damper Hsc Rr: 33 -> 35 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 191 mm/s under the past setup.
+  Effect: Less rear compliance over bumps; sharper kerb response.
+  Trade:  Rear can skip on kerbs and bumps; traction loss at the moment of impact.
+  Watch most: T1 on straights
+
+Damper Hsc Fl: 32 -> 13 click  (softens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 201 mm/s under the past setup.
+  Effect: More compliance over kerbs and high-frequency bumps; better front grip retention through Eau Rouge bumps.
+  Trade:  More pitch noise mid-corner; aero platform wanders.
+  Watch most: T1 on straights
+
+Damper Hsc Slope Rl: 6 -> 8 click  (stiffens)
+  Why:    At T5 on straights, predicted rear damper peak velocity was 191 mm/s under the past setup.
+  Effect: Rear transitions to HS damping earlier -- stiffer through moderate bumps and kerbs.
+  Trade:  Less rear compliance on bumpy throttle commits.
+  Watch most: T1 on straights
+
+Damper Lsc Fr: 16 -> 22 click  (stiffens)
+  Why:    At T5 on straights, predicted front damper peak velocity was 182 mm/s under the past setup.
+  Effect: Sharper front response on brake apply; less initial pitch dive; quicker pitch transfer to front.
+  Trade:  Aggressive brake-release transient; trail-brake balance can feel snatchy.
+  Watch most: T1 on straights
+
+-- BALANCE (ARBs / camber / toe) --
+RL camber: -1.8 -> -1.5 deg  (less negative)
+  Why:    At T5 on straights, predicted peak lateral G was 1.62 g under the past setup.
+  Effect: Less aggressive rear camber: more straight-line traction; less wear.
+  Trade:  Less peak rear cornering grip; rear can lose grip on power exit.
+  Watch most: T1 on straights
+
+FL camber: -2.8 -> -2.4 deg  (less negative)
+  Why:    At T5 on straights, predicted peak lateral G was 1.62 g under the past setup.
+  Effect: Less aggressive front camber: more contact patch on straights; faster tire warm-up; less wear.
+  Trade:  Less peak mid-corner front grip; more understeer.
+  Watch most: T1 on straights
+
+RR camber: -1.8 -> -1.6 deg  (less negative)
+  Why:    At T5 on straights, predicted peak lateral G was 1.62 g under the past setup.
+  Effect: Less aggressive rear camber: more straight-line traction; less wear.
+  Trade:  Less peak rear cornering grip; rear can lose grip on power exit.
+  Watch most: T1 on straights
+
+Rear toe: 0.0 -> -0.1 mm  (more negative)
+  Why:    At T5 on straights, predicted understeer angle was -0.14 rad under the past setup.
+  Effect: More rear rotation; better turn-in feel.
+  Trade:  Less straight-line stability; rear can step out on Kemmel transitions.
+  Watch most: T1 on straights
+
+Front toe: -2.0 -> -1.8 mm  (less negative)
+  Why:    At T5 on straights, predicted peak steering input was 0.58 rad under the past setup.
+  Effect: More front straight-line stability; less darty on Kemmel.
+  Trade:  Lazier turn-in response; reduced rotation.
+  Watch most: T1 on straights
+
+FR camber: -2.8 -> -2.7 deg  (less negative)
+  Why:    At T5 on straights, predicted peak lateral G was 1.62 g under the past setup.
+  Effect: Less aggressive front camber: more contact patch on straights; faster tire warm-up; less wear.
+  Trade:  Less peak mid-corner front grip; more understeer.
+  Watch most: T1 on straights
+
+-- BRAKES & DRIVETRAIN --
+Rear diff preload: 20 -> 25 Nm  (tighter)
+  Why:    At T5 on straights, predicted throttle application on exit was 0.99 under the past setup.
+  Effect: More diff lockup at low torque: better initial throttle traction; sharper turn-in.
+  Trade:  More on-throttle understeer; rear can feel locked through mid-corner.
+  Watch most: T1 on straights
+
+Front diff preload: -50 -> 5 Nm  (tighter)
+  Why:    At T5 on straights, predicted throttle application on exit was 0.99 under the past setup.
+  Effect: More diff lockup at low torque: better initial throttle traction; sharper turn-in.
+  Trade:  More on-throttle understeer; rear can feel locked through mid-corner.
+  Watch most: T1 on straights
+
+Brake bias: 54.5 -> 52.0 pct  (bias rearward)
+  Why:    At T5 on straights, predicted peak brake pressure was 0.07 under the past setup.
+  Effect: More rear bias: rotates faster on entry; more turn-in feel; shorter braking distance if rear has grip.
+  Trade:  Snap-oversteer risk under heavy braking; rear can lock at T1, T11, T18 entries.
+  Watch most: T1 on straights
+
+NOTES
+  Fuel level: pinned by user at 8 L
+  Front ARB blade: corpus has only one value -- vary it next session for a recommendation
+  Tyre cold pressure: corpus has only one value -- vary it next session for a recommendation
+  Untrained (constraints.md TODO): corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg, rear_coil_spring_rate_n_per_mm, spring_perch_offset_rear_mm
+  ! pinned to observed median (no per-session variation in training corpus, no learnable response surface): anti_roll_bar_front, tyre_cold_pressure_kpa
+
+================================================================
+FULL SETUP CARD -- ferrari @ spa_2024_up
+================================================================
+Legend: [OPT] optimizer recommendation |[OPT pin] pinned to observed median |[OPT mirror] mirrored from per-axle parameter · [past] from your most recent session (no bounds yet) |[readout] calculated by iRacing -- verify, don't enter |[predicted] readout the optimizer projects under the new inputs.
+
+-- TIRES & AERO ------------------------------------------------
+  [TireType]
+    Tire Type                                   Dry                [past]
+  [LeftFront]
+    Starting Pressure                     152.0 kPa                [OPT pin]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [LeftRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightFront]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [AeroSettings]
+    Rear Wing Angle                          17 deg (was 14)       [OPT]
+  [AeroCalculator]
+    Front Rh At Speed                       15.0 mm                [readout]
+    Rear Rh At Speed                        40.0 mm                [readout]
+    Downforce Balance                        51.01%                [readout]
+    LD                                        3.882                [readout]
+
+-- CHASSIS -----------------------------------------------------
+  [Front]
+    Heave Spring                            2 index (was 1)        [OPT]
+    Heave Perch Offset                     -19.5 mm (was -17)      [OPT]
+    Heave Spring Defl                5.7 mm 84.3 mm                [readout]
+    Heave Slider Defl              36.3 mm 200.0 mm                [readout]
+    Arb Size                                      A                [OPT]
+    Arb Blades                              1 click                [OPT pin]
+    Pushrod Length Delta                     4.0 mm (was -5)       [OPT]
+    Toe In                                  -1.8 mm (was -2)       [OPT]
+  [LeftFront]
+    Corner Weight                            2687 N                [readout]
+    Ride Height                             30.6 mm (was 30.0)     [predicted]
+    Shock Defl                     14.0 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        17.2 mm                [readout]
+    Torsion Bar Turns                     0.1 turns                [OPT]
+    Torsion Bar OD                          3 index (was 2)        [OPT]
+    Camber                                 -2.4 deg (was -2.8)     [OPT]
+  [LeftRear]
+    Corner Weight                            2959 N                [readout]
+    Ride Height                             47.2 mm (was 48.8)     [predicted]
+    Shock Defl                     16.6 mm 150.0 mm                [readout]
+    Torsion Bar Defl                        19.3 mm                [readout]
+    Torsion Bar Turns                     0.0 turns                [OPT]
+    Torsion Bar OD                          4 index (was 2)        [OPT]
+    Camber                                 -1.5 deg (was -1.8)     [OPT]
+    Toe In                                  -0.1 mm (was 0)        [OPT]
+  [Rear]
+    Heave Spring                            7 index (was 6)        [OPT]
+    Heave Perch Offset                    -111.5 mm (was -106.5)   [OPT]
+    Heave Spring Defl                6.3 mm 63.3 mm                [readout]
+    Heave Slider Defl              22.0 mm 300.0 mm                [readout]
+    Arb Size                                      C                [OPT]
+    Arb Blades                              2 click                [OPT]
+    Pushrod Length Delta                     2.5 mm (was 13)       [OPT]
+    Fuel Level                               57.8 L                [past]
+  [RightFront]
+    Corner Weight                            2687 N                [readout]
+    Ride Height                             30.6 mm (was 30.0)     [predicted]
+    Shock Defl                     14.0 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        17.2 mm                [readout]
+    Torsion Bar Turns                     0.1 turns                [OPT mirror]
+    Torsion Bar OD                          3 index (was 2)        [OPT mirror]
+    Camber                                 -2.7 deg (was -2.8)     [OPT]
+  [RightRear]
+    Corner Weight                            2959 N                [readout]
+    Ride Height                             47.2 mm (was 48.8)     [predicted]
+    Shock Defl                     16.6 mm 150.0 mm                [readout]
+    Torsion Bar Defl                        19.3 mm                [readout]
+    Torsion Bar Turns                     0.0 turns                [OPT mirror]
+    Torsion Bar OD                          4 index (was 2)        [OPT mirror]
+    Camber                                 -1.6 deg (was -1.8)     [OPT]
+    Toe In                                  -0.1 mm (was 0)        [OPT mirror]
+
+-- DAMPERS -----------------------------------------------------
+  [LeftFrontDamper]
+    Ls Comp Damping                        11 click (was 16)       [OPT]
+    Hs Comp Damping                        13 click (was 32)       [OPT]
+    Hs Comp Damp Slope                      7 click (was 5)        [OPT]
+    Ls Rbd Damping                         22 click (was 12)       [OPT]
+    Hs Rbd Damping                         22 click (was 19)       [OPT]
+  [LeftRearDamper]
+    Ls Comp Damping                        18 click (was 12)       [OPT]
+    Hs Comp Damping                        37 click (was 33)       [OPT]
+    Hs Comp Damp Slope                      8 click (was 6)        [OPT]
+    Ls Rbd Damping                         25 click (was 15)       [OPT]
+    Hs Rbd Damping                         31 click (was 28)       [OPT]
+  [RightFrontDamper]
+    Ls Comp Damping                        22 click (was 16)       [OPT]
+    Hs Comp Damping                        15 click (was 32)       [OPT]
+    Hs Comp Damp Slope                      7 click (was 5)        [OPT]
+    Ls Rbd Damping                         15 click (was 12)       [OPT]
+    Hs Rbd Damping                         14 click (was 19)       [OPT]
+  [RightRearDamper]
+    Ls Comp Damping                        20 click (was 12)       [OPT]
+    Hs Comp Damping                        35 click (was 33)       [OPT]
+    Hs Comp Damp Slope                      9 click (was 6)        [OPT]
+    Ls Rbd Damping                         21 click (was 15)       [OPT]
+    Hs Rbd Damping                         26 click (was 28)       [OPT]
+
+-- SYSTEMS -----------------------------------------------------
+  [Lighting]
+    Roof Id Light Color                      Purple                [past]
+  [HybridConfig]
+    Hybrid Rear Drive Enabled                   yes                [past]
+    Hybrid Rear Drive Corner Pct                90%                [past]
+  [BrakeSpec]
+    Pad Compound                                Low                [past]
+    Front Master Cyl                        17.8 mm                [past]
+    Rear Master Cyl                         19.1 mm                [past]
+    Brake Pressure Bias                    52.0 pct (was 54.5)     [OPT]
+    Bias Migration                                1                [past]
+    Bias Migration Gain                           0                [past]
+  [TractionControl]
+    Traction Control Gain                   4 (TC2)                [past]
+    Traction Control Slip                   6 (TC1)                [past]
+  [Fuel]
+    Fuel Level                                  8 L (was 57.8)     [OPT]
+    Fuel Target                              2.00 L                [past]
+    Fuel Low Warning                         10.0 L                [past]
+  [GearRatios]
+    Gear Stack                                Short                [past]
+    Speed In First                       121.7 Km/h                [readout]
+    Speed In Second                      157.5 Km/h                [readout]
+    Speed In Third                       190.0 Km/h                [readout]
+    Speed In Fourth                      222.7 Km/h                [readout]
+    Speed In Fifth                       256.6 Km/h                [readout]
+    Speed In Sixth                       291.0 Km/h                [readout]
+    Speed In Seventh                     329.2 Km/h                [readout]
+  [FrontDiffSpec]
+    Preload                                    5 Nm (was -50)      [OPT]
+  [RearDiffSpec]
+    Coast Drive Ramp Options           Less Locking                [past]
+    Clutch Friction Plates                        6                [past]
+    Preload                                   25 Nm (was 20)       [OPT]

@@ -1,0 +1,53 @@
+========================================================================
+ ferrari @ spa_2024_up -- calibration probe (N=6 sessions)
+ Coverage: 39/46 parameters with N>=3 distinct values  (85% explored, 2 pinned)
+========================================================================
+
+PARAMETER                            N  RANGE                      COVERAGE
+---------------------------------------------------------------------------
+anti_roll_bar_front                  1  1.000 click (single)             0%
+tyre_cold_pressure_kpa               1  152.0 kPa (single)               0%
+camber_fl_deg                        2  -2.8 .. -2.4 deg                14%
+camber_fr_deg                        2  -2.8 .. -2.4 deg                14%
+torsion_bar_od_fl_mm                 2  2 .. 5 index                    17%
+arb_size_rear                        2  3.000 .. 4.000                  20%
+rear_wing_angle_deg                  2  14 .. 15 deg                    20%
+third_perch_offset_rear_mm           3  -110.0 .. -106.0 mm              2%
+torsion_bar_turns_rl                 3  0.0 .. 0.1 turns                 2%
+brake_bias_pct                       3  54.2 .. 54.8 pct                 2%
+torsion_bar_turns_fl                 3  0.1 .. 0.1 turns                 3%
+heave_perch_offset_front_mm          3  -17.0 .. -8.5 mm                 3%
+toe_rl_mm                            3  -0.2 .. 0.0 mm                   4%
+diff_preload_nm                      3  20 .. 35 Nm                     10%
+damper_lsr_fl                        3  12 .. 18 click                  15%
+torsion_bar_od_rl_mm                 3  2 .. 5 index                    17%
+camber_rl_deg                        3  -1.9 .. -1.5 deg                21%
+camber_rr_deg                        3  -1.9 .. -1.5 deg                21%
+third_spring_rate_n_per_mm           3  4 .. 6 index                    22%
+heave_spring_rate_n_per_mm           3  1 .. 3 index                    25%
+damper_hsc_slope_fl                  3  5 .. 8 click                    27%
+toe_front_mm                         3  -2.0 .. -0.3 mm                 28%
+front_diff_preload_nm                3  -50 .. -15 Nm                   35%
+damper_hsc_slope_fr                  3  5 .. 9 click                    36%
+arb_size_front                       3  1.000 .. 3.000                  40%
+damper_hsc_slope_rr                  3  6 .. 11 click                   45%
+fuel_level_l                         3  12 .. 58 L                      46%
+anti_roll_bar_rear                   3  1.000 .. 3.000 click            50%
+pushrod_length_offset_rear_mm        4  5.0 .. 13.0 mm                  10%
+pushrod_length_offset_front_mm       4  -6.0 .. 5.5 mm                  14%
+damper_lsc_fr                        4  9 .. 18 click                   22%
+damper_lsc_fl                        4  16 .. 28 click                  30%
+damper_lsr_fr                        4  2 .. 20 click                   45%
+damper_hsc_slope_rl                  4  6 .. 11 click                   45%
+damper_hsc_fr                        4  13 .. 32 click                  48%
+damper_hsc_fl                        4  7 .. 32 click                   62%
+damper_hsc_rl                        5  28 .. 40 click                  30%
+damper_hsc_rr                        5  28 .. 40 click                  30%
+damper_hsr_fl                        5  9 .. 21 click                   30%
+damper_hsr_rl                        5  28 .. 40 click                  30%
+damper_hsr_fr                        5  7 .. 21 click                   35%
+damper_lsc_rl                        5  12 .. 28 click                  40%
+damper_hsr_rr                        5  23 .. 40 click                  42%
+damper_lsc_rr                        5  12 .. 30 click                  45%
+damper_lsr_rr                        5  10 .. 30 click                  50%
+damper_lsr_rl                        5  10 .. 34 click                  60%
