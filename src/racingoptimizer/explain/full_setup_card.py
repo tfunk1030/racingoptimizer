@@ -480,6 +480,47 @@ def _render_panel(
             else:
                 tag = "[readout]"
                 displayed = _format_value(value)
+        elif mirror_source is not None:
+            # Mirror takes precedence over the per-corner opt_match: a
+            # mirror entry explicitly says "this leaf MUST follow its
+            # source" (UI-required for spring rates / torsion bars; user
+            # preference for road-circuit damper symmetry). Without this
+            # ordering, dampers that have BOTH a per-corner ParameterSpec
+            # AND a mirror entry would render the independent per-corner
+            # DE result and never mirror.
+            source_path, _param_name = mirror_source
+            source_match = opt_index.get(source_path)
+            if source_match is not None:
+                _src_param, src_val, src_spec = source_match
+                tag = "[OPT mirror]"
+                src_discrete = getattr(src_spec, "discrete_values", None)
+                src_choices = getattr(src_spec, "choices", None)
+                displayed = _format_opt_value(
+                    src_val, src_spec.step, src_spec.units,
+                    discrete_values=src_discrete, choices=src_choices,
+                )
+                past_scalar = _scalar_from_yaml(value)
+                if past_scalar is not None:
+                    snapped = _round_to_step(src_val, src_spec.step)
+                    if abs(snapped - past_scalar) >= max(
+                        src_spec.step or 0.0, 1e-6,
+                    ) / 2:
+                        delta_note = f" (was {_format_value(past_scalar)})"
+            elif opt_match is not None:
+                # No source recommendation but the path itself has an
+                # opt -- fall back to that rather than [past] so we
+                # don't lose the local DE signal.
+                param_name, opt_val, spec = opt_match
+                tag = "[OPT pin]" if param_name in pinned else "[OPT]"
+                spec_discrete = getattr(spec, "discrete_values", None)
+                spec_choices = getattr(spec, "choices", None)
+                displayed = _format_opt_value(
+                    opt_val, spec.step, spec.units,
+                    discrete_values=spec_discrete, choices=spec_choices,
+                )
+            else:
+                tag = "[past]"
+                displayed = _format_value(value)
         elif opt_match is not None:
             param_name, opt_val, spec = opt_match
             tag = "[OPT pin]" if param_name in pinned else "[OPT]"
@@ -508,28 +549,6 @@ def _render_panel(
                 )
                 if past_label and past_label != opt_label:
                     delta_note = f" (was {past_label})"
-        elif mirror_source is not None:
-            source_path, _param_name = mirror_source
-            source_match = opt_index.get(source_path)
-            if source_match is not None:
-                _src_param, src_val, src_spec = source_match
-                tag = "[OPT mirror]"
-                src_discrete = getattr(src_spec, "discrete_values", None)
-                src_choices = getattr(src_spec, "choices", None)
-                displayed = _format_opt_value(
-                    src_val, src_spec.step, src_spec.units,
-                    discrete_values=src_discrete, choices=src_choices,
-                )
-                past_scalar = _scalar_from_yaml(value)
-                if past_scalar is not None:
-                    snapped = _round_to_step(src_val, src_spec.step)
-                    if abs(snapped - past_scalar) >= max(
-                        src_spec.step or 0.0, 1e-6,
-                    ) / 2:
-                        delta_note = f" (was {_format_value(past_scalar)})"
-            else:
-                tag = "[past]"
-                displayed = _format_value(value)
         else:
             tag = "[past]"
             displayed = _format_value(value)
