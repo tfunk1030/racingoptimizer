@@ -386,6 +386,7 @@ def recommend_cmd(
                 quali=quali,
                 pinned=pinned_overrides,
                 warnings=top_warnings,
+                schedule=schedule,
             )
         rendered = (
             briefing

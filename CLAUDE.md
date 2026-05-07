@@ -16,10 +16,13 @@ uv run optimize learn ./ibtfiles --reparse  # force re-parse already-ok sessions
 uv run optimize bmw sebring                 # recommend by (car, track) — race default
 uv run optimize bmw spa --quali --fuel 8    # quali stint, 8 L pinned
 uv run optimize bmw spa --explore 10        # widen empirical envelope by 10% per side
+uv run optimize bmw spa --reset             # full-envelope search; "fundamentally different" setup
 uv run optimize bmw spa --detailed          # legacy per-param block format (vs default narrative)
 uv run optimize ./my_session.ibt            # recommend by IBT path (auto-detect)
 uv run optimize compare a.ibt b.ibt         # diff two setups per (corner, phase)
 uv run optimize status bmw                  # coverage + fit-quality trend
+uv run optimize calibrate bmw spa           # active-learning probes for thin-variance params
+uv run optimize calibrate bmw spa --status  # just the per-parameter coverage table
 
 uv run pytest -q                            # full suite (~15 min)
 uv run pytest -q -m "not slow"              # fast suite (~2 min)
@@ -30,7 +33,7 @@ uv run ruff check src tests                 # lint (must stay clean)
 
 VISION.md is decomposed into six slices plus three cross-cutting modules. Status reflects what is **merged** AND what has been **verified across all 5 GTP cars** (BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, Ferrari 499P) versus only single-car (BMW Sebring fixture) smoke. Per VISION.md "do not assume a unified setup schema across cars" — the five cars have different suspension architectures, IBT YAML setup-blob shapes, and aero-map step sizes. **A green BMW test is not a "works" claim.**
 
-**Two recommend code paths.** `optimize <car> <track>` routes by `PER_CAR_MODEL_CARS` (`src/racingoptimizer/cli/recommend.py:54`):
+**Two recommend code paths.** `optimize <car> <track>` routes by `PER_CAR_MODEL_CARS` (`src/racingoptimizer/cli/recommend.py:57`):
 
 - **v4 (per-car, track-agnostic)** — currently `{"cadillac", "bmw", "ferrari"}`. `fit_per_car()` pools every session for the car across every track into one fitter; cache file `corpus/models/<car>__per-car__<digest>.pickle`. Adding a car requires (a) per-car constraint overrides in `constraints.md` (BMWBounds.md / Cadillacbounds.md / Ferraribounds.md as the source of truth), (b) car key added to `PER_CAR_MODEL_CARS`, (c) for tracks the car has never been driven on, the CLI's cross-car schedule fallback (`_maybe_borrow_cross_car_track`) borrows corner geometry from any other car's sessions on that track — so Ferrari@Spa works even though Ferrari has no Spa IBTs.
 - **v3 (per-(car, track))** — Acura + Porsche. Trains per pair, uses donor-track extrapolation when target is unseen.
@@ -67,13 +70,17 @@ Two orthogonal axes feed `physics.score._conditions_adjusted_baselines`:
 - **Dry vs wet** (VISION §10): `physics.wet_mode.classify_conditions(env)` returns `dry / damp / wet / full_rain` from `track_wetness` + `weather_declared_wet` + `precip_type`. Non-dry regimes swap baselines (lower max grip + aero baseline, higher wheelspin tolerance) **and** phase weights (less aero_eff, more platform + grip).
 - **Race vs quali** (VISION §4 / §5): `--quali` swaps to `physics.quali_mode.quali_phase_weights` — `grip` x1.15, `aero_eff` x1.20, `platform` x0.55 (re-normalised so each phase still sums to 1.0). Quali takes precedence over the wet phase-weight pick (a wet quali still wants outright pace on a wet-adjusted baseline). Quali requires `--fuel N` (no auto fuel; quali fuel is per-track).
 
-**Race-mode fuel auto-pin** (`cli/recommend.py:160+`): without `--quali` AND without `--fuel`, the CLI anchors `fuel_level_l` to the most-recent past-session value for the target track (typically ~58 L on the BMW M Hybrid V8). Substring-matches the user-typed track to the catalog slug (so `optimize bmw spa` finds `spa_2024_up`); falls back to all-car sessions only when the target track has none. Without this, the optimizer would treat fuel as a freely-fittable input and minimize mass for one-lap pace — recommending fuel loads that won't cover a race.
+**Race-mode fuel auto-pin** (`cli/recommend.py:213-244`): without `--quali` AND without `--fuel`, the CLI anchors `fuel_level_l` to the most-recent past-session value for the target track (typically ~58 L on the BMW M Hybrid V8). Substring-matches the user-typed track to the catalog slug (so `optimize bmw spa` finds `spa_2024_up`); falls back to all-car sessions only when the target track has none. Without this, the optimizer would treat fuel as a freely-fittable input and minimize mass for one-lap pace -- recommending fuel loads that won't cover a race.
 
 Wind enters `physics.score.aero_eff` via `physics.wind.aero_wind_modifier` as a *magnitude* downforce penalty (treats `wind_vel_ms` as a tailwind worst case). Directional decomposition is deferred per `physics/wind.py` docstring — needs per-corner heading data the corner schedule doesn't carry yet.
 
-## Trust radius + `--explore N` (`physics/recommend.py::_pin_or_trust_bounds`)
+## Trust radius + `--explore N` + `--reset` (`physics/recommend.py::_pin_or_trust_bounds`)
 
-Per-car DE search is clipped to `[min(target_observed), max(target_observed)]` — never extrapolates outside the values the driver has actually tried on the target track (VISION §3 honesty rule). `--explore N` widens that envelope by N% of each parameter's constraint span on each side, clipped to legal bounds. `0` (default) is strict empirical; 5–10 is modest exploration; 20–30 is aggressive. Recommendations landing in the widened territory carry weaker confidence by design.
+Per-car DE search is clipped to the **global corpus envelope** -- the union of every value the user has ever run this car at, on any track. Per VISION §3 the search will not extrapolate outside what the surrogate has been trained near, but per-target-track strictness was relaxed in `318d91d` because it left good setups off the table at every track the driver hadn't fully swept. The model is trained on the global corpus too, so the trust envelope matches training density.
+
+`--explore N` widens the envelope by N% of each parameter's constraint span on each side, clipped to legal bounds. `0` (default) is strict empirical; 5-10 is modest exploration; 20-30 is aggressive. Recommendations landing in the widened territory carry weaker confidence by design.
+
+`--reset` opens the search to `[corpus_min - 30%, corpus_max + 30%]` of constraint span on each side, skips the corpus-density pin check (so observed-constants can move), downgrades every parameter's confidence regime to `noisy`, and prints a `RESET MODE` banner to stderr. Use when the current setup feels fundamentally broken and small +/-1-click tweaks aren't moving the car. The optimizer is intentionally extrapolating beyond corpus density; verify on track before pushing.
 
 Pin denominator uses the **empirical training range** (max−min observed across all pooled sessions), not the constraint span. Wide legal envelopes per BMWBounds.md (e.g. heave 0..900 N/mm) would otherwise mask real corpus variation as "near constant" and pin everything (regression test in `tests/physics/test_pin_near_constant.py`). Defensive guard: `target_observed` is clipped to the constraint envelope BEFORE the empirical-window math, so a user constraint pin (e.g. `--fuel 8` collapses to `(8, 8)`) outside the in-corpus values doesn't produce an inverted bound that crashes DE.
 
@@ -156,6 +163,20 @@ Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/
 Still `<TODO: from iRacing UI>`: corner weights (4 of them) and brake duct openings. Slice E's `fit` gracefully degrades — lists CE-gated unbounded parameters in `untrained_parameters` and does not refuse to run.
 
 Categorical params (ARB size, diff coast/drive ramps) are encoded as ordinal indices via `ParameterSpec.choices`; the renderer maps the rounded index back to the label. Non-uniform numeric discrete sets (torsion bar OD's 14 diameters on BMW/Cadillac; clutch's `{2, 4, 6}`) use `ParameterSpec.discrete_values` and snap to the nearest legal value at render time.
+
+## Active-learning probes (`cli/calibrate.py`)
+
+`optimize calibrate <car> <track>` surfaces parameters with thin observed variance on the target track and proposes a value in the largest unsampled gap of each one's legal range. Drives the loop: probe -> drive a clean stint with the proposed values -> `optimize learn` -> re-fit -> the next recommend has slope/curvature where the parameter used to pin to its observed median.
+
+* Default mode: coverage table + top-N (default 3, controlled by `--targets N`) thin-variance probes + a synthetic setup card with probes tagged `[OPT]` and everything else `[OPT pin]` from the past setup.
+* `--status`: coverage table only. Use to decide whether more variance is the bottleneck on accuracy.
+* `--output-file PATH` / `--output-file -`: same convention as recommend; default writes to `recommendations/<car>-<short-track>-cal[-status]-<MMDD>-<HHMM>.txt`.
+
+The picker reads `model.per_track_parameter_observed[track]` (populated by `fit_per_car`); proposals are step-snapped to the parameter's UI step or `discrete_values` set; targets that would step-snap onto the past value get re-routed to the second-largest gap.
+
+## Recommendation filename convention (`cli/recommend.py:407+`, `cli/calibrate.py:346+`)
+
+Default output path: `recommendations/<car>-<short-track>-<mode>[-<fuel>L]-<MMDD>-<HHMM>.<ext>`. `<short-track>` strips variant suffixes via `_short_track` (`spa_2024_up` -> `spa`, `hockenheim_gp` -> `hockenheim`, `sebring_international` -> `sebring`, `daytona_2011_road` -> `daytona`). Mode tag is one of `race` / `quali` / `reset` / `cal` / `cal-status`. Fuel suffix only for quali stints (race auto-pins, would clutter every name). Pass `--output-file -` to suppress file output (e.g. when piping JSON).
 
 **Known regressions / gaps:**
 

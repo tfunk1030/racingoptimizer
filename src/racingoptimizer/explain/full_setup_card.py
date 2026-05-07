@@ -1,7 +1,7 @@
 """Full-setup card: every garage parameter, grouped by panel, ready to enter.
 
 The per-parameter "engineering briefing" in :mod:`render_text` justifies
-each click the optimizer recommends — corners helped, hurts, ±1-click
+each click the optimizer recommends -- corners helped, hurts, +/-1-click
 sensitivity, evidence. Useful for understanding WHY a value was picked,
 but the user has asked for a complementary view: a flat readable list of
 EVERY garage parameter for the car, in the order they appear in the iRacing
@@ -10,24 +10,24 @@ garage UI, ready to be entered.
 This module produces that view by walking the most-recent ingested setup
 JSON for the (car, track) combination and tagging each leaf with a source:
 
-* ``[OPT]``        — optimizer-recommended value, post-clamp.
-* ``[OPT pin]``    — optimizer pinned to observed median (no signal to deviate).
-* ``[OPT mirror]`` — value mirrored from the per-axle parameter (e.g.
+* ``[OPT]``        -- optimizer-recommended value, post-clamp.
+* ``[OPT pin]``    -- optimizer pinned to observed median (no signal to deviate).
+* ``[OPT mirror]`` -- value mirrored from the per-axle parameter (e.g.
                      iRacing requires LR=RR rear spring rate). The
                      optimizer trains the parameter once; the renderer
                      mirrors it onto the symmetric corner.
-* ``[past]``       — value from your most-recent session (no constraint
+* ``[past]``       -- value from your most-recent session (no constraint
                      bounds to optimize against yet).
-* ``[readout]``    — calculated by iRacing; you don't enter this. Past
+* ``[readout]``    -- calculated by iRacing; you don't enter this. Past
                      session value, listed for reference.
-* ``[predicted]``  — calculated readout the optimizer's setup-readout
+* ``[predicted]``  -- calculated readout the optimizer's setup-readout
                      fitter projects under the new inputs. This is what
                      iRacing's calculator will show after you enter the
                      ``[OPT]`` values.
 
 VISION §7 gates this output: every USER-set parameter must surface a value
 the driver can actually type. Calculated readouts must NOT be presented as
-"set this" — they're informational only.
+"set this" -- they're informational only.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ from racingoptimizer.physics.ontology import ParameterSpec, ontology_for
 from racingoptimizer.physics.recommendation import SetupRecommendation
 
 # Pulls a leading signed float out of YAML strings like "30 N/mm" or "-22.5 mm".
-# Used by `_scalar_from_yaml` so the renderer can compute past→opt deltas
+# Used by `_scalar_from_yaml` so the renderer can compute past->opt deltas
 # against numeric values regardless of whether the YAML stored them as
 # strings (the iRacing setup blob format) or pre-coerced floats.
 _LEADING_NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
@@ -53,23 +53,23 @@ _CALCULATED_LEAF_NAMES: frozenset[str] = frozenset({
     "HeaveSpringDefl", "HeaveSliderDefl", "HeaveDamperDefl",
     "ThirdSpringDefl", "ThirdSliderDefl", "ShockDefl", "SpringDefl",
     "TorsionBarDefl",
-    # Ride height — output of perch offsets / pushrod lengths / TB turns.
+    # Ride height -- output of perch offsets / pushrod lengths / TB turns.
     "RideHeight",
-    # Per-corner weight — output of the corner-weight balancing process.
+    # Per-corner weight -- output of the corner-weight balancing process.
     "CornerWeight",
-    # Cross weight — derived from corner weights.
+    # Cross weight -- derived from corner weights.
     "CrossWeight",
-    # Tire feedback — last run readouts.
+    # Tire feedback -- last run readouts.
     "LastHotPressure", "LastTempsOMI", "LastTempsIMO", "TreadRemaining",
-    # AeroCalculator block — entirely a calculator.
+    # AeroCalculator block -- entirely a calculator.
     "DownforceBalance", "FrontRhAtSpeed", "RearRhAtSpeed", "LD",
-    # Gear ratios — derived from GearStack selection.
+    # Gear ratios -- derived from GearStack selection.
     "SpeedInFirst", "SpeedInSecond", "SpeedInThird", "SpeedInFourth",
     "SpeedInFifth", "SpeedInSixth", "SpeedInSeventh",
 })
 
 
-# Top-level YAML keys → garage panel display name. Iteration order here
+# Top-level YAML keys -> garage panel display name. Iteration order here
 # defines section order in the rendered card.
 #
 # `Dampers` and `Systems` are Ferrari/Acura/Porsche tops; BMW/Cadillac
@@ -86,16 +86,16 @@ _PANELS: tuple[tuple[str, str], ...] = (
 
 
 # Setup leaves whose iRacing UI value must mirror another corner.
-# {target_path: (source_path, parameter_name)} — when the renderer walks
+# {target_path: (source_path, parameter_name)} -- when the renderer walks
 # `target_path`, it pulls the OPT value from `source_path`'s recommendation
 # and tags `[OPT mirror]`. Source param entries that don't exist for the
 # car at hand silently no-op (e.g. Ferrari has no rear coil spring, so
 # the SpringRate row resolves to source_match=None and falls through).
 #
 # Coverage:
-# * Rear coil spring rate (LR → RR): all cars that have a rear coil.
-# * Front torsion bar turns + OD (LF → RF): Cadillac, BMW, Ferrari.
-# * Rear torsion bar turns + OD (LR → RR): Ferrari (4-corner torsion).
+# * Rear coil spring rate (LR -> RR): all cars that have a rear coil.
+# * Front torsion bar turns + OD (LF -> RF): Cadillac, BMW, Ferrari.
+# * Rear torsion bar turns + OD (LR -> RR): Ferrari (4-corner torsion).
 #
 # iRacing's UI keeps left/right pairs of these coupled; the optimizer
 # only trains the left side and the renderer mirrors so the user sees
@@ -129,7 +129,7 @@ _MIRRORED_LEAVES: dict[tuple[str, ...], tuple[tuple[str, ...], str]] = {
 
 
 # Calculated readouts the optimizer's setup-readout fitter can predict at
-# the recommended setup vector. Maps the YAML leaf path → the model's
+# the recommended setup vector. Maps the YAML leaf path -> the model's
 # output channel name. When a prediction is available, the renderer shows
 # `[predicted]` with the projected value (and notes the past readout in
 # parentheses if it differs); otherwise it falls back to `[readout]`
@@ -145,7 +145,7 @@ _PREDICTED_READOUT_PATHS: dict[tuple[str, ...], str] = {
 def _humanize_leaf(name: str) -> str:
     """Turn a YAML leaf key into a friendly garage label.
 
-    ``"HeaveSpring"`` → ``"Heave Spring"``; ``"LFshockVel"`` stays mostly
+    ``"HeaveSpring"`` -> ``"Heave Spring"``; ``"LFshockVel"`` stays mostly
     intact. Heuristic: insert a space before each capital letter unless
     preceded by another capital (preserves acronyms like ``LF``).
     """
@@ -164,7 +164,7 @@ def _is_leaf_calculated(leaf_name: str) -> bool:
 def _format_value(value: Any) -> str:
     """Render an arbitrary YAML value as a single readable string."""
     if value is None:
-        return "—"
+        return "--"
     if isinstance(value, bool):
         return "yes" if value else "no"
     if isinstance(value, (int, float)):
@@ -180,7 +180,7 @@ def _round_to_step(value: float, step: float | None) -> float:
 
     The iRacing garage UI exposes parameters as discrete clicks (e.g. spring
     rates step in 5 N/mm, perch offsets in 0.5 mm). Outputting a continuous
-    optimizer value like ``26.438 N/mm`` is unenterable — the driver can
+    optimizer value like ``26.438 N/mm`` is unenterable -- the driver can
     only set ``25`` or ``30``. Rounding here keeps the recommendation in
     the legal value lattice without changing the search itself.
 
@@ -195,7 +195,7 @@ def _snap_to_discrete(value: float, choices: tuple[float, ...]) -> float:
     """Snap ``value`` to the nearest entry in ``choices`` (non-uniform list).
 
     Used for parameters whose iRacing UI exposes a fixed list of values
-    that don't follow a uniform step — torsion bar OD's 14 diameters
+    that don't follow a uniform step -- torsion bar OD's 14 diameters
     being the canonical example. Returns the closest legal value;
     distance ties resolve to the lower entry (Python ``min`` is stable).
     """
@@ -214,12 +214,12 @@ def _format_opt_value(
 
     Three rendering modes:
 
-    * ``choices`` set → categorical parameter; round ``value`` to the
+    * ``choices`` set -> categorical parameter; round ``value`` to the
       nearest valid index and emit the corresponding label (no units).
-    * ``discrete_values`` set → numeric parameter with non-uniform legal
+    * ``discrete_values`` set -> numeric parameter with non-uniform legal
       values (e.g. torsion bar OD); snap to the closest entry and format
       with the same precision as the surrounding step would imply.
-    * Otherwise → uniform-step rounding via ``_round_to_step``.
+    * Otherwise -> uniform-step rounding via ``_round_to_step``.
     """
     if choices:
         idx = max(0, min(len(choices) - 1, int(round(value))))
@@ -227,8 +227,8 @@ def _format_opt_value(
     if discrete_values:
         snapped = _snap_to_discrete(value, discrete_values)
         # Render integer-valued discrete sets without trailing zeros
-        # (clutch plates → "6", not "6.00") and float-valued sets with
-        # 2 decimals (torsion bar OD → "14.34", "17.94").
+        # (clutch plates -> "6", not "6.00") and float-valued sets with
+        # 2 decimals (torsion bar OD -> "14.34", "17.94").
         if all(v == int(v) for v in discrete_values):
             body = f"{int(round(snapped))}"
         else:
@@ -275,7 +275,7 @@ def _ontology_path_index(rec: SetupRecommendation, car: str) -> dict[
     The renderer uses this to splice the optimizer's recommendation into the
     ingested-setup walk: when a leaf's path matches a recommended parameter,
     we replace the past value with the optimizer's, round to the garage
-    click step, append units, and emit the past→opt delta — all of which
+    click step, append units, and emit the past->opt delta -- all of which
     require the spec.
     """
     try:
@@ -314,7 +314,7 @@ def render_full_setup_card(
     (e.g. ``setup_static_lf_ride_height_mm``) to the value the trained
     fitter projects at the optimizer's recommended setup vector. Used to
     render ``[predicted]`` static ride heights in place of the stale past
-    ``[readout]`` values. Optional — when omitted (or for a channel the
+    ``[readout]`` values. Optional -- when omitted (or for a channel the
     model didn't carry) the card falls back to the past YAML value with
     the ``[readout]`` tag.
 
@@ -323,18 +323,18 @@ def render_full_setup_card(
     """
     if most_recent_setup is None:
         return (
-            "FULL SETUP CARD: skipped — no past setup ingested for "
+            "FULL SETUP CARD: skipped -- no past setup ingested for "
             f"({car}, {rec.track}). Run `optimize learn <ibt>` first.\n"
         )
     if isinstance(most_recent_setup, str):
         try:
             setup = json.loads(most_recent_setup)
         except json.JSONDecodeError:
-            return "FULL SETUP CARD: skipped — past setup blob is unparseable.\n"
+            return "FULL SETUP CARD: skipped -- past setup blob is unparseable.\n"
     else:
         setup = most_recent_setup
     if not isinstance(setup, dict):
-        return "FULL SETUP CARD: skipped — past setup blob is not an object.\n"
+        return "FULL SETUP CARD: skipped -- past setup blob is not an object.\n"
 
     pinned = set(getattr(rec, "pinned_to_observed_median", ()) or ())
     opt_index = _ontology_path_index(rec, car)
@@ -342,13 +342,13 @@ def render_full_setup_card(
 
     lines: list[str] = []
     lines.append("=" * 64)
-    lines.append(f"FULL SETUP CARD — {car} @ {rec.track}")
+    lines.append(f"FULL SETUP CARD -- {car} @ {rec.track}")
     lines.append("=" * 64)
     lines.append(
-        "Legend: [OPT] optimizer recommendation · [OPT pin] pinned to "
-        "observed median · [OPT mirror] mirrored from per-axle parameter "
-        "· [past] from your most recent session (no bounds yet) · "
-        "[readout] calculated by iRacing — verify, don't enter · "
+        "Legend: [OPT] optimizer recommendation |[OPT pin] pinned to "
+        "observed median |[OPT mirror] mirrored from per-axle parameter "
+        "· [past] from your most recent session (no bounds yet) |"
+        "[readout] calculated by iRacing -- verify, don't enter |"
         "[predicted] readout the optimizer projects under the new inputs."
     )
 
@@ -384,7 +384,7 @@ def _render_panel(
     where the value is rounded to the iRacing garage click step and the
     parenthetical shows the past value when it differs (so the user can
     spot what actually changed). Calculated readouts pass through with
-    their raw YAML string and the ``[readout]`` tag — unless the model
+    their raw YAML string and the ``[readout]`` tag -- unless the model
     has a prediction for the new setup, in which case ``[predicted]``
     overrides with the projected value.
     """
@@ -410,7 +410,7 @@ def _render_panel(
 
         delta_note = ""
         if is_calc:
-            # Try the predicted-readout fitter first — gives the user
+            # Try the predicted-readout fitter first -- gives the user
             # the platform state they'll see after entering the new
             # setup, instead of echoing last session's stale value.
             predicted_val: float | None = None
@@ -497,7 +497,7 @@ def _walk_block(
 ) -> list[tuple[tuple[str, ...], str, Any]]:
     """Flatten a nested setup block into ``(path, leaf_name, value)`` rows.
 
-    Order is the dict insertion order from the YAML parse — which mirrors
+    Order is the dict insertion order from the YAML parse -- which mirrors
     the iRacing garage panel layout closely enough for readability.
     """
     out: list[tuple[tuple[str, ...], str, Any]] = []

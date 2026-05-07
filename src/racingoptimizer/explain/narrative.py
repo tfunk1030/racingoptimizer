@@ -54,7 +54,7 @@ _PHASE_THEME: dict[Phase, str] = {
 
 
 # Per-parameter (direction) tag inside parens on each CHANGES row.
-# Just the direction verb — the parameter label already names the
+# Just the direction verb -- the parameter label already names the
 # thing being adjusted. (verb_when_value_INCREASES, verb_when_DECREASES).
 # Camber + toe values are negative-by-convention; +ve delta = less
 # negative; -ve = more negative.
@@ -105,24 +105,28 @@ _OVERALL_FRAGMENT: dict[str, tuple[str, str]] = {
 # vocabulary (pitch / roll / understeer / oversteer / aero stall /
 # bottoming / turn-in / throttle traction) instead of phase-aggregated
 # corner lists. Matched in this order at lookup time:
-#   1. (family, mode, axis, direction)   — most specific (dampers)
-#   2. (family, axis, direction)          — front-vs-rear families
-#   3. (family, direction)                — axle-agnostic
+#   1. (family, mode, axis, direction)   -- most specific (dampers)
+#   2. (family, axis, direction)          -- front-vs-rear families
+#   3. (family, direction)                -- axle-agnostic
 # A miss falls through to the terse (verb) format.
 _CAR_FEEL: dict[tuple, tuple[str, str]] = {
 
-    # --- Springs (front platform) ---
-    ("heave_spring", "front", "+"): (
+    # --- Springs (front-axle heave) ---
+    # `heave_spring_rate_n_per_mm` has family="spring_rate"; the
+    # subtype lookup ("front-heave") is what routes here. Don't be
+    # tempted to key on family="heave_spring" -- that's a readout
+    # family with no user-settable parameter.
+    ("spring_rate", "front-heave", "+"): (
         "Less front pitch on brake apply; sharper turn-in; aero "
-        "platform held flatter through Eau Rouge / Pouhon compression.",
-        "Harsher over kerbs (T3 chicane, T16). Mid-corner front grip "
-        "can drop if oversprung — watch for understeer in T9, T13.",
+        "platform held flatter on long compressions.",
+        "Harsher over kerbs. Mid-corner front grip can drop if "
+        "oversprung -- watch for understeer.",
     ),
-    ("heave_spring", "front", "-"): (
+    ("spring_rate", "front-heave", "-"): (
         "More front compliance over kerbs and bumps; better front "
         "grip retention through bumpy entries; smoother brake-release.",
         "More pitch dive under heavy braking; slower turn-in; aero "
-        "platform less stable on Kemmel compression.",
+        "platform less stable on long compressions.",
     ),
 
     # Front torsion bars behave like front springs for pitch / roll,
@@ -263,7 +267,7 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
         "compressions.",
     ),
     ("damper", "lsr", "front", "+"): (
-        "Slower front rebound after pitch — keeps weight on the "
+        "Slower front rebound after pitch -- keeps weight on the "
         "front longer through entry.",
         "Front 'sticks down' after braking; can promote mid-corner "
         "understeer on T9 / T13 release.",
@@ -277,7 +281,7 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ("damper", "lsr", "rear", "+"): (
         "Slower rear rebound out of the corner; keeps rear platform "
         "settled longer on power.",
-        "Rear can stay too low after exit — bottoming risk on the "
+        "Rear can stay too low after exit -- bottoming risk on the "
         "compression that follows.",
     ),
     ("damper", "lsr", "rear", "-"): (
@@ -305,12 +309,12 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ("damper", "hsr", "rear", "-"): (
         "Faster rear rebound off kerbs; rear returns to neutral "
         "quicker.",
-        "Rear bounce off kerbing — traction loss on the next throttle "
+        "Rear bounce off kerbing -- traction loss on the next throttle "
         "application.",
     ),
     # HSC slope is the transition rate between LS and HS regimes.
     ("damper", "hsc_slope", "front", "+"): (
-        "Earlier transition from LS to HS damping under braking — "
+        "Earlier transition from LS to HS damping under braking -- "
         "stiffer through the meat of the bump.",
         "Bump-velocity threshold lowers; chassis loses compliance "
         "earlier.",
@@ -321,7 +325,7 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
         "Loses high-velocity bump control on big hits (Kemmel kink).",
     ),
     ("damper", "hsc_slope", "rear", "+"): (
-        "Rear transitions to HS damping earlier — stiffer through "
+        "Rear transitions to HS damping earlier -- stiffer through "
         "moderate bumps and kerbs.",
         "Less rear compliance on bumpy throttle commits.",
     ),
@@ -498,12 +502,12 @@ def _car_feel(family: str, name: str, delta: float) -> tuple[str, str] | None:
     mode = _param_damper_mode(name) if family == "damper" else None
     sub = _param_subtype(family, name)
 
-    # 1. (family, mode, axis, direction) — dampers
+    # 1. (family, mode, axis, direction) -- dampers
     if mode and axis:
         key = (family, mode, axis, sign)
         if key in _CAR_FEEL:
             return _CAR_FEEL[key]
-    # 2. (family, sub, direction) — diff modes (preload/ramps/plates),
+    # 2. (family, sub, direction) -- diff modes (preload/ramps/plates),
     # rear-third spring, toe (front/rear sub-axes)
     if sub:
         key = (family, sub, sign)
@@ -514,7 +518,7 @@ def _car_feel(family: str, name: str, delta: float) -> tuple[str, str] | None:
         key = (family, axis, sign)
         if key in _CAR_FEEL:
             return _CAR_FEEL[key]
-    # 4. (family, None, direction) — single-axis families (wing, fuel,
+    # 4. (family, None, direction) -- single-axis families (wing, fuel,
     # brake bias, tyre pressure)
     key = (family, None, sign)
     if key in _CAR_FEEL:
@@ -562,6 +566,8 @@ def _param_subtype(family: str, name: str) -> str | None:
         if "clutch" in n or "plate" in n:
             return "plates"
     if family == "spring_rate":
+        if "heave" in n:
+            return "front-heave"
         if "third" in n:
             return "rear-third"
     if family == "camber" and "toe" in n:
@@ -927,7 +933,7 @@ def _telemetry_why(
     """Predict telemetry channel value at the parameter's past setup.
 
     Builds a counterfactual where every parameter is at the optimised
-    value EXCEPT the one in question — that one stays at the past
+    value EXCEPT the one in question -- that one stays at the past
     value. Queries the model at the dominant Helps corner-phase and
     reports the value of the family's primary evidence channel.
     Reads as: "at T11 mid-corner, predicted front shock p99 was 17.4 mm
@@ -950,7 +956,7 @@ def _telemetry_why(
     if channels is None:
         return ""
 
-    # Dominant Helps corner-phase — where this parameter does the most
+    # Dominant Helps corner-phase -- where this parameter does the most
     # work. Falls back to the worst Hurts when there are no helps.
     impacts = list(j.corners_helped) or list(j.corners_hurt)
     if not impacts:
@@ -1010,7 +1016,7 @@ def _archetype_for(schedule: list | None, corner_id: int) -> dict | None:
 
 
 def _dominant_impact_corner(j: SetupJustification) -> str:
-    """Single-line `T11 braking apex` style — the corner-phase with the
+    """Single-line `T11 braking apex` style -- the corner-phase with the
     biggest absolute score delta across helps + hurts."""
     candidates = list(j.corners_helped) + list(j.corners_hurt)
     if not candidates:
@@ -1265,7 +1271,7 @@ def _moved(
     Compares the values the user would actually enter in the iRacing UI
     (snapped to discrete_values or step), not the raw DE output. Without
     this, a torsion-bar turn change of 0.108 -> 0.105 (delta 0.003 with
-    step 0.125) would render as "0.10 turns (stiffens)" — same displayed
+    step 0.125) would render as "0.10 turns (stiffens)" -- same displayed
     value but a "stiffens" verb that contradicts the no-change display.
     """
     if j.pinned:

@@ -88,23 +88,26 @@ def test_render_emits_three_panel_headers_with_real_setup() -> None:
     assert "CHASSIS" in out
     assert "BRAKES / DRIVETRAIN" in out
     # Header banner present.
-    assert "FULL SETUP CARD — bmw @ sebring" in out
+    assert "FULL SETUP CARD -- bmw @ sebring" in out
 
 
 def test_optimizer_recommendations_are_tagged_OPT() -> None:
-    """Parameters in `rec.parameters` show as [OPT] with the optimizer value."""
+    """Parameters in `rec.parameters` show as [OPT] with the post-snap value.
+
+    Renderer rounds to ParameterSpec.step (rear_wing_angle_deg step=1.0,
+    so 15.5 snaps to 16). Test asserts the displayed value, not the raw
+    input.
+    """
     rec = _make_rec({
-        "rear_wing_angle_deg": (15.5, _confidence(15.5)),
+        "rear_wing_angle_deg": (16.0, _confidence(16.0)),
         "heave_spring_rate_n_per_mm": (60.0, _confidence(60.0)),
     })
     out = render_full_setup_card(rec, car="bmw", most_recent_setup=_bmw_setup_blob())
-    # Wing angle line — display uses the optimizer value (15.5), tagged [OPT].
     wing_line = next(
         line for line in out.splitlines() if "Rear Wing Angle" in line
     )
     assert "[OPT]" in wing_line
-    assert "15.5" in wing_line
-    # Heave spring rate — driver-input, optimizer-recommended.
+    assert "16" in wing_line
     spring_line = next(
         line for line in out.splitlines() if "Heave Spring" in line and "Defl" not in line
     )
@@ -212,4 +215,4 @@ def test_render_works_for_every_canonical_car(car: str) -> None:
         aero_correction_available=True,
     )
     out = render_full_setup_card(rec, car=car, most_recent_setup=_bmw_setup_blob())
-    assert f"FULL SETUP CARD — {car} @ sebring" in out
+    assert f"FULL SETUP CARD -- {car} @ sebring" in out
