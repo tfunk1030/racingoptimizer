@@ -35,7 +35,6 @@ def _find_fixture(car: str) -> Path | None:
     if not IBT_DIR.is_dir():
         return None
     matches = sorted(IBT_DIR.glob(f"{prefix}_*"))
-    matches = [m for m in matches if "m4gt3" not in m.name.lower()]
     matches = [m for m in matches if not is_unmaterialised_lfs_pointer(m)]
     return matches[0] if matches else None
 

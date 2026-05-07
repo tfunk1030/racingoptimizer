@@ -12,16 +12,20 @@ from pathlib import Path
 # Maps known iRacing car identifiers (as they appear in IBT YAML or filenames)
 # to the canonical key used in `aero-maps/` and the corpus directory layout.
 # Order matters: longest-prefix wins.
+#
+# GTP-only. GT3 (BMW M4 GT3, Porsche 992R GT3, Aston Martin GT3) are
+# deliberately absent — they have different suspension architectures,
+# aero maps, and constraints, so routing a GT3 IBT into a GTP per-car
+# fitter would poison the training data. GT3 filenames hit the longest-
+# prefix lookup, miss every entry, and raise UnknownCarError; the ingest
+# pipeline catches that and records the session as partial/unknown so
+# the GTP corpus stays clean.
 CAR_PREFIX_MAP: dict[str, str] = {
     "acuraarx06gtp": "acura",
     "bmwlmdh": "bmw",
-    "bmwm4gt3": "bmw",
     "cadillacvseriesrgtp": "cadillac",
     "ferrari499p": "ferrari",
     "porsche963gtp": "porsche",
-    "porsche992rgt3": "porsche",
-    "amvantageevogt3": "bmw",   # NOTE: not GTP — placeholder mapping until we
-                                # confirm where Aston Martin GT3 fits in the model.
 }
 
 

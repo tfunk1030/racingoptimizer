@@ -217,12 +217,13 @@ def recommend_cmd(
         # tracks — and legacy IBT files with no filename datetime
         # default to the YAML's WeekendOptions.Date (currently a
         # future "2026-05-09"), so they win the sort over today's
-        # actual on-target Spa sessions. Legacy files may also carry
-        # a different car schema (M4 GT3 vs M Hybrid V8) where
-        # `BrakesDriveUnit.Fuel.FuelLevel` doesn't resolve. Substring-
-        # match the user-typed track against the catalog (so "spa"
-        # matches stored slug "spa_2024_up"); fall back to all
-        # sessions only if the target track has none.
+        # actual on-target Spa sessions. Substring-match the user-
+        # typed track against the catalog (so "spa" matches stored
+        # slug "spa_2024_up"); fall back to all sessions only if the
+        # target track has none. (Legacy GT3 sessions ingested before
+        # the GT3-routing removal may still sit in the corpus under
+        # the wrong car key; re-ingest with `--reparse` once those
+        # IBT files are removed from `ibtfiles/`.)
         target_subset = _filter_to_target_track(catalog_sessions, track)
         if target_subset.height == 0:
             target_subset = catalog_sessions

@@ -16,20 +16,27 @@ from racingoptimizer.ingest.detect import (
     [
         ("acuraarx06gtp", "acura"),
         ("bmwlmdh", "bmw"),
-        ("bmwm4gt3", "bmw"),
         ("cadillacvseriesrgtp", "cadillac"),
         ("ferrari499p", "ferrari"),
         ("porsche963gtp", "porsche"),
-        ("porsche992rgt3", "porsche"),
     ],
 )
 def test_normalize_car_key_known(raw: str, expected: str) -> None:
     assert normalize_car_key(raw) == expected
 
 
-def test_normalize_car_key_unknown_raises() -> None:
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "teslamodels",
+        "bmwm4gt3",         # GT3 not GTP -- different car
+        "porsche992rgt3",   # GT3 not GTP -- different car
+        "amvantageevogt3",  # GT3 not GTP -- different car
+    ],
+)
+def test_normalize_car_key_unknown_raises(raw: str) -> None:
     with pytest.raises(UnknownCarError):
-        normalize_car_key("teslamodels")
+        normalize_car_key(raw)
 
 
 @pytest.mark.parametrize(
