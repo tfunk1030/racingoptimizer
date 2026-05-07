@@ -96,6 +96,16 @@ _PANELS: tuple[tuple[str, str], ...] = (
 # * Rear coil spring rate (LR -> RR): all cars that have a rear coil.
 # * Front torsion bar turns + OD (LF -> RF): Cadillac, BMW, Ferrari.
 # * Rear torsion bar turns + OD (LR -> RR): Ferrari (4-corner torsion).
+# * Rear toe (LR -> RR): all cars (UI requires symmetry).
+# * Dampers (LF -> RF, LR -> RR) for all 5 modes (LSC / HSC / HSC slope
+#   / LSR / HSR). Per-corner damper search at the optimizer level
+#   sometimes lands on small L/R asymmetric values driven by the score
+#   function's per-corner freedom, but on road circuits real engineering
+#   practice is L/R symmetric (there's no banking-driven asymmetric load
+#   to compensate for). Mirroring at render time gives the user a
+#   symmetric setup to enter without forcing the DE search to collapse
+#   per-corner damper params (which would lose information for ovals or
+#   asymmetric tracks if the corpus ever grows that way).
 #
 # iRacing's UI keeps left/right pairs of these coupled; the optimizer
 # only trains the left side and the renderer mirrors so the user sees
@@ -124,6 +134,48 @@ _MIRRORED_LEAVES: dict[tuple[str, ...], tuple[tuple[str, ...], str]] = {
     ("Chassis", "RightRear", "ToeIn"): (
         ("Chassis", "LeftRear", "ToeIn"),
         "toe_rl_mm",
+    ),
+    # Damper mirrors -- 5 modes x 2 axles = 10 entries. Front and rear
+    # right-side dampers all pull from their left-side counterparts.
+    ("Chassis", "RightFront", "LsCompDamping"): (
+        ("Chassis", "LeftFront", "LsCompDamping"),
+        "damper_lsc_fl",
+    ),
+    ("Chassis", "RightFront", "HsCompDamping"): (
+        ("Chassis", "LeftFront", "HsCompDamping"),
+        "damper_hsc_fl",
+    ),
+    ("Chassis", "RightFront", "HsCompDampSlope"): (
+        ("Chassis", "LeftFront", "HsCompDampSlope"),
+        "damper_hsc_slope_fl",
+    ),
+    ("Chassis", "RightFront", "LsRbdDamping"): (
+        ("Chassis", "LeftFront", "LsRbdDamping"),
+        "damper_lsr_fl",
+    ),
+    ("Chassis", "RightFront", "HsRbdDamping"): (
+        ("Chassis", "LeftFront", "HsRbdDamping"),
+        "damper_hsr_fl",
+    ),
+    ("Chassis", "RightRear", "LsCompDamping"): (
+        ("Chassis", "LeftRear", "LsCompDamping"),
+        "damper_lsc_rl",
+    ),
+    ("Chassis", "RightRear", "HsCompDamping"): (
+        ("Chassis", "LeftRear", "HsCompDamping"),
+        "damper_hsc_rl",
+    ),
+    ("Chassis", "RightRear", "HsCompDampSlope"): (
+        ("Chassis", "LeftRear", "HsCompDampSlope"),
+        "damper_hsc_slope_rl",
+    ),
+    ("Chassis", "RightRear", "LsRbdDamping"): (
+        ("Chassis", "LeftRear", "LsRbdDamping"),
+        "damper_lsr_rl",
+    ),
+    ("Chassis", "RightRear", "HsRbdDamping"): (
+        ("Chassis", "LeftRear", "HsRbdDamping"),
+        "damper_hsr_rl",
     ),
 }
 
