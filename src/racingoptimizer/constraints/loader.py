@@ -41,6 +41,22 @@ class ConstraintsTable:
                 keys.update(table)
         return sorted(keys)
 
+    def with_pin(
+        self, car: str, parameter: str, value: float,
+    ) -> ConstraintsTable:
+        """Return a new ConstraintsTable with `parameter` collapsed to ``(value, value)``.
+
+        Used by `--pin` (CLI) and the staged-DE driver (`recommend_staged`)
+        to fix a parameter at a specific value while leaving everything
+        else searchable. The result is a deep copy so mutating the
+        returned table doesn't affect the original.
+        """
+        new_by_car: dict[str, dict[str, tuple[float, float] | None]] = {
+            ck: dict(table) for ck, table in self._by_car.items()
+        }
+        new_by_car.setdefault(car, {})[parameter] = (float(value), float(value))
+        return ConstraintsTable(_by_car=new_by_car)
+
 
 def _default_constraints_path() -> Path:
     return Path(__file__).resolve().parents[3] / "constraints.md"

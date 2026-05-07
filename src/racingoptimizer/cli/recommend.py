@@ -109,6 +109,20 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
     ),
 )
 @click.option(
+    "--staged", "staged", is_flag=True, default=False,
+    help=(
+        "Run DE in 4 progressive stages + 1 polish pass instead of a "
+        "single search over all 47 parameters. Stages: aero (wing + "
+        "ride heights + tyre P) -> mechanical (springs + ARBs + torsion) "
+        "-> dampers -> detail (cambers + toes + brake bias + diff). Each "
+        "stage holds previous stages' chosen values as pins. Final "
+        "polish re-opens the full vector with explore=5% widening "
+        "seeded from the accumulated stage results. Mirrors engineer "
+        "setup workflow; total wall time roughly equivalent to single-"
+        "pass DE."
+    ),
+)
+@click.option(
     "--reset", "reset_mode", is_flag=True, default=False,
     help=(
         "Open the search to [corpus_min - 30%, corpus_max + 30%] of "
@@ -169,6 +183,7 @@ def recommend_cmd(
     explore_pct: float,
     detailed: bool,
     reset_mode: bool,
+    staged: bool,
     air_temp: float | None,
     track_temp: float | None,
     wind: float | None,
@@ -279,7 +294,7 @@ def recommend_cmd(
         rec = model.recommend(
             track_slug, env, pinned_constraints,
             schedule=schedule, quali=quali, explore_pct=explore_pct,
-            reset_mode=reset_mode,
+            reset_mode=reset_mode, staged=staged,
         )
     else:
         track_slug, donor_track = _resolve_track_or_extrapolate(
@@ -300,7 +315,7 @@ def recommend_cmd(
         rec = model.recommend(
             fit_track, env, pinned_constraints,
             quali=quali, explore_pct=explore_pct,
-            reset_mode=reset_mode,
+            reset_mode=reset_mode, staged=staged,
         )
         schedule = None  # v3 path: per-(car, track) keying owns the corners
 
@@ -416,6 +431,8 @@ def recommend_cmd(
             mode_tag = "quali"
         else:
             mode_tag = "race"
+        if staged:
+            mode_tag = f"{mode_tag}-staged"
         fuel_tag = ""
         if quali and fuel is not None:
             fuel_tag = f"-{int(round(fuel))}L"

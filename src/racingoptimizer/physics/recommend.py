@@ -741,4 +741,159 @@ def _baseline_recommendation(
     )
 
 
-__all__ = ["recommend"]
+# --------------------------------------------------------------------------
+# Staged DE: 4 progressive stages + 1 polish pass over everything.
+#
+# Mirrors engineering setup workflow: aero first (wing + ride heights set
+# the platform), then mechanical balance (springs + ARBs against fixed
+# aero), then dampers (dynamic balance with platform fixed), then detail
+# (cambers, toes, brake bias, diff). Each stage runs DE over a small
+# parameter subset with everything else pinned to either a previous
+# stage's chosen value or the model's training baseline. A final polish
+# pass re-opens the full vector with a small explore-style widening,
+# seeded from the accumulated stage results, to recover any global
+# optimum the staging cuts may have missed.
+#
+# Trade-off vs single-pass DE: each stage's smaller parameter set
+# converges faster (~3 min instead of 15 for BMW 47-param), and the
+# resulting setup tends to follow the engineer-intuitive ordering
+# (wing -> springs -> dampers -> detail). Cost: 5 sequential DE calls
+# instead of 1, total wall time roughly equivalent (~12-18 min).
+# --------------------------------------------------------------------------
+
+# Family -> stage mapping. ParameterSpec.family for every fittable user-
+# settable parameter falls in exactly one stage. Readout-only families
+# (heave_spring, heave_slider, ride_height, corner_weight) have
+# `user_settable=False` so they're already excluded from
+# `fittable_parameters()`. `fuel` lives in stage 1 because fuel mass
+# affects ride height, but in race mode it's auto-pinned by the CLI
+# before recommend_staged is even called.
+_STAGE_FAMILIES: dict[str, frozenset[str]] = {
+    "aero": frozenset(
+        {"rear_wing", "tyre_pressure", "perch_offset", "pushrod", "fuel"}
+    ),
+    "mechanical": frozenset({"spring_rate", "arb", "torsion_bar"}),
+    "dampers": frozenset({"damper"}),
+    "detail": frozenset({"camber", "brake_bias", "diff"}),
+}
+_STAGE_ORDER: tuple[str, ...] = ("aero", "mechanical", "dampers", "detail")
+
+
+def _partition_parameters_by_stage(
+    fittable: list[str], ontology: dict,
+) -> dict[str, list[str]]:
+    """Return ``{stage_name: [param_names]}`` covering every fittable param.
+
+    Every fittable parameter is assigned to exactly one stage based on
+    its `ParameterSpec.family`. Parameters whose family doesn't appear
+    in any stage map fall into the implicit "leftover" stage `detail`
+    (last) so nothing falls through.
+    """
+    by_stage: dict[str, list[str]] = {s: [] for s in _STAGE_ORDER}
+    family_to_stage: dict[str, str] = {}
+    for stage, families in _STAGE_FAMILIES.items():
+        for fam in families:
+            family_to_stage[fam] = stage
+    for name in sorted(fittable):
+        spec = ontology.get(name)
+        if spec is None:
+            by_stage["detail"].append(name)
+            continue
+        stage = family_to_stage.get(spec.family, "detail")
+        by_stage[stage].append(name)
+    return by_stage
+
+
+def recommend_staged(
+    model: PhysicsModel,
+    track: str,
+    env: EnvironmentFrame,
+    constraints: ConstraintsTable,
+    *,
+    schedule: list | None = None,
+    quali: bool = False,
+    explore_pct: float = 0.0,
+    reset_mode: bool = False,
+) -> SetupRecommendation:
+    """Run DE in 4 progressive stages + 1 polish pass over everything.
+
+    Returns the same SetupRecommendation shape as `recommend()` -- the
+    final polish pass produces it. Per-stage intermediate results are
+    not surfaced today (renderer treatment is a follow-up).
+    """
+    fittable = [
+        p for p in fittable_parameters(model.car, constraints)
+        if constraints.bounds(model.car, p) is not None
+    ]
+    by_stage = _partition_parameters_by_stage(fittable, model.ontology)
+
+    accumulated: dict[str, float] = {}
+    final_rec: SetupRecommendation | None = None
+
+    for stage_name in _STAGE_ORDER:
+        stage_params = by_stage.get(stage_name, [])
+        if not stage_params:
+            continue
+        # Build a constraint table where every fittable param OUTSIDE
+        # this stage is pinned -- to a previous stage's chosen value if
+        # it's already been optimized, otherwise to the model's training
+        # baseline.
+        stage_constraints = constraints
+        for p in fittable:
+            if p in stage_params:
+                continue
+            if p in accumulated:
+                pin_value = accumulated[p]
+            else:
+                bound = constraints.bounds(model.car, p)
+                baseline = float(model.baseline_setup.get(
+                    p, 0.5 * (bound[0] + bound[1]) if bound else 0.0,
+                ))
+                if bound is not None:
+                    baseline = min(max(baseline, bound[0]), bound[1])
+                pin_value = baseline
+            stage_constraints = stage_constraints.with_pin(
+                model.car, p, pin_value,
+            )
+
+        rec = recommend(
+            model, track, env, stage_constraints,
+            schedule=schedule, quali=quali, explore_pct=explore_pct,
+            reset_mode=reset_mode,
+        )
+
+        # Carry forward this stage's chosen values for the next stage's
+        # pin builder.
+        for p in stage_params:
+            if p in rec.parameters:
+                accumulated[p] = float(rec.parameters[p][0])
+        final_rec = rec
+
+    # Stage 5 -- polish: small DE over the full vector with explore widened
+    # to at least 5% on each side, seeded from the accumulated values.
+    # Catches cases where the stage cuts pushed us into a local optimum
+    # that's not globally best.
+    if final_rec is None:
+        # No stages ran (no fittable parameters). Fall back to single-pass.
+        return recommend(
+            model, track, env, constraints,
+            schedule=schedule, quali=quali, explore_pct=explore_pct,
+            reset_mode=reset_mode,
+        )
+    polish_explore = max(explore_pct, 5.0)
+    # Inject the accumulated values into model.baseline_setup so DE seeds
+    # from there. PhysicsModel is frozen+slots; dataclasses.replace gives
+    # a fresh model with overridden baseline_setup. (No __setstate__
+    # involvement -- this stays in-process.)
+    polish_baseline = dict(model.baseline_setup)
+    polish_baseline.update(accumulated)
+    polish_model = replace(model, baseline_setup=polish_baseline)
+    polish_rec = recommend(
+        polish_model, track, env, constraints,
+        schedule=schedule, quali=quali, explore_pct=polish_explore,
+        reset_mode=reset_mode,
+    )
+    return polish_rec
+
+
+__all__ = ["recommend", "recommend_staged"]

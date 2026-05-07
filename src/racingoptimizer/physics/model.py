@@ -218,7 +218,15 @@ class PhysicsModel:
         quali: bool = False,
         explore_pct: float = 0.0,
         reset_mode: bool = False,
+        staged: bool = False,
     ):
+        if staged:
+            from racingoptimizer.physics.recommend import recommend_staged
+            return recommend_staged(
+                self, track, env, constraints,
+                schedule=schedule, quali=quali, explore_pct=explore_pct,
+                reset_mode=reset_mode,
+            )
         from racingoptimizer.physics.recommend import recommend as _recommend
         return _recommend(
             self, track, env, constraints,
