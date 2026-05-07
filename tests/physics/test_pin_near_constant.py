@@ -164,6 +164,131 @@ def test_pin_with_zero_span_bound_is_safe() -> None:
     assert sub_bounds == bound
 
 
+# --------------------------------------------------------------------------
+# `--reset` mode: 30% widening around corpus envelope, skip pin check
+# --------------------------------------------------------------------------
+
+
+def test_reset_widens_envelope_around_corpus() -> None:
+    """Reset opens the bound to corpus-envelope +/- 30% of constraint span
+    on each side, clipped to the legal bound."""
+    bound = (0.0, 200.0)  # wide constraint
+    span = bound[1] - bound[0]
+    sub_bounds, was_pinned = _pin_or_trust_bounds(
+        bound=bound,
+        baseline=60.0,
+        regime="dense",
+        observed_std=5.0,
+        target_observed=(50.0, 60.0, 70.0),
+        empirical_range=20.0,
+        reset_mode=True,
+    )
+    assert was_pinned is False
+    lo, hi = sub_bounds
+    # Expected: [50 - 0.3*200, 70 + 0.3*200] = [-10, 130], clipped to [0, 130].
+    assert lo == 0.0
+    assert hi == 70.0 + 0.3 * span
+
+
+def test_reset_skips_pin_check_for_constant_observation() -> None:
+    """Reset must allow a parameter the driver always ran at one value
+    to move (skips the std-based pin check)."""
+    bound = (0.0, 200.0)
+    sub_bounds, was_pinned = _pin_or_trust_bounds(
+        bound=bound,
+        baseline=60.0,
+        regime="confident",
+        observed_std=0.0,  # would normally pin
+        target_observed=(60.0,),
+        empirical_range=0.0,
+        reset_mode=True,
+    )
+    assert was_pinned is False
+    lo, hi = sub_bounds
+    # Search window is wider than the legacy pin would allow.
+    assert (hi - lo) > 1.0
+
+
+def test_reset_clipped_to_legal_bounds() -> None:
+    """Widening past the legal constraint envelope clamps to the bound."""
+    bound = (10.0, 50.0)
+    sub_bounds, was_pinned = _pin_or_trust_bounds(
+        bound=bound,
+        baseline=30.0,
+        regime="dense",
+        observed_std=2.0,
+        target_observed=(20.0, 30.0, 40.0),
+        empirical_range=20.0,
+        reset_mode=True,
+    )
+    assert was_pinned is False
+    lo, hi = sub_bounds
+    assert lo == 10.0  # 20 - 0.3*40 = 8 -> clipped to 10
+    assert hi == 50.0  # 40 + 0.3*40 = 52 -> clipped to 50
+
+
+# --------------------------------------------------------------------------
+# `--explore N` widening
+# --------------------------------------------------------------------------
+
+
+def test_explore_widens_empirical_envelope_by_pct_each_side() -> None:
+    """`--explore 10` widens the corpus envelope by 10% of constraint span
+    on each side."""
+    bound = (0.0, 200.0)
+    sub_bounds, was_pinned = _pin_or_trust_bounds(
+        bound=bound,
+        baseline=60.0,
+        regime="dense",
+        observed_std=5.0,
+        target_observed=(50.0, 60.0, 70.0),
+        empirical_range=20.0,
+        explore_pct=10.0,
+    )
+    assert was_pinned is False
+    lo, hi = sub_bounds
+    # Expected envelope: [50 - 0.1*200, 70 + 0.1*200] = [30, 90].
+    # The trust radius for 'dense' is the full constraint, so the
+    # intersection is the empirical-envelope clip itself.
+    assert lo == 30.0
+    assert hi == 90.0
+
+
+def test_explore_clipped_to_constraint_bounds() -> None:
+    """Aggressive `--explore N` clamps to the legal envelope."""
+    bound = (10.0, 50.0)
+    sub_bounds, was_pinned = _pin_or_trust_bounds(
+        bound=bound,
+        baseline=30.0,
+        regime="dense",
+        observed_std=2.0,
+        target_observed=(20.0, 30.0, 40.0),
+        empirical_range=20.0,
+        explore_pct=80.0,  # 80% of 40 = 32 -> would push past both edges
+    )
+    assert was_pinned is False
+    lo, hi = sub_bounds
+    assert lo == bound[0]
+    assert hi == bound[1]
+
+
+def test_explore_zero_matches_strict_empirical() -> None:
+    """`--explore 0` (default) is strict empirical -- no widening."""
+    bound = (0.0, 200.0)
+    sub_bounds_no, _ = _pin_or_trust_bounds(
+        bound=bound,
+        baseline=60.0,
+        regime="dense",
+        observed_std=5.0,
+        target_observed=(50.0, 60.0, 70.0),
+        empirical_range=20.0,
+        explore_pct=0.0,
+    )
+    lo, hi = sub_bounds_no
+    assert lo == 50.0
+    assert hi == 70.0
+
+
 def test_full_recommend_pins_near_constant_param(bmw_model_session) -> None:
     """End-to-end: a model whose `parameter_observed_std` says everything is
     constant must produce a recommendation whose values stay at the

@@ -63,6 +63,33 @@ batch -- findings only.
 
 See `01_ingest.md` through `12_docs_tooling.md` for full per-slice file:line citations, wiring diagrams, and recommended actions.
 
+## Status update -- 2026-05-06 evening
+
+Followup commits landed against the 8-step "Suggested follow-up sequence" above:
+
+| # | Item | Status | Commit |
+|---|------|--------|--------|
+| 1 | Wire `apply_quality_mask` into production | done | `e90e8fd` |
+| 2 | Pass `schedule=` to `render_narrative` (telemetry Why-line for v4 cars) | done | `f7fe058` |
+| 3 | Fix Aston Martin -> BMW silent routing (and drop all GT3 routing -- GTP only) | done | `1a8c9a3` |
+| 4 | Wire `weight_corners` for v4 cars | done (corner-duration weighting) | `e90e8fd` |
+| 5 | Refresh CLAUDE.md (`--reset`, `optimize calibrate`, always-global trust envelope, new filename convention) | done | `f7fe058` |
+| 6 | Add tests for `--reset`, `--explore`, calibrate, race-fuel auto-pin, narrative renderer | mostly done -- pin/reset/explore tests green; CLI tests in flight | (phase 3 commit) |
+| 7 | ASCII sweep on `narrative.py` and `full_setup_card.py` | done | `f7fe058` |
+| 8 | Capture the 5 unbounded `constraints.md` rows from the iRacing UI | pending -- needs user data |
+
+Bonus fixes:
+* `_CAR_FEEL["heave_spring"]` keys were unreachable -- front heave-spring rendered with phase-themed defaults instead of the rich Effect/Trade table. Fixed via `("spring_rate", "front-heave", +/-)` keys + `_param_subtype` recognition (commit `f7fe058`).
+* `tests/explain/test_full_setup_card.py:94+` was asserting `15.5` against a wing-angle field that step-snaps to `16` (step=1.0) -- pre-existing brittle test, updated to assert post-snap value (commit `f7fe058`).
+* Renamed/short filename convention now also applies to `optimize calibrate` artefacts (`<car>-<short-track>-cal[-status]-<MMDD>-<HHMM>.txt`).
+
+Still open:
+* Slice F1 #4: `tests/cli/test_per_car_smoke.py:61` asserts `[confidence:` which only exists in `--detailed` output -- silent test gap (low-priority).
+* Slice E1 #1: `fit_per_car()` direct test coverage -- conftest factory still calls `fit()` (v3) for the per-car fixture.
+* Slice F2 #2: `--json` stderr-mixing live in production code -- saver block still writes `[saved to ...]` to stderr under JSON mode.
+* Slice E3 #2-#5: directional wind decomposition stranded; `_score_breakdown_per_car` returns 0.0 for empty states (indistinguishable from real disaster).
+* Slice 12 doc cleanups: 2026-04-28 specs unmarked as historical; `docs/VISION_COMPLIANCE.md` follow-up audit still missing 6 commits despite its 2026-05-06 currency note.
+
 ## Notes on this audit batch
 
 The 12 audit workers all hit a sandbox lockdown that denied Bash, PowerShell, and Write. Each worker performed full read-only static analysis (Read + Grep + Glob) and returned its findings as inline text rather than committing files. The findings here are consolidated from those reports, written from the main session that retained Write access.

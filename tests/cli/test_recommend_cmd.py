@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from racingoptimizer.cli import main
@@ -95,3 +96,75 @@ def test_json_output_is_valid(multi_lap_ibt: Path, tmp_corpus: Path) -> None:
     assert payload["track"] == "sebring_international"
     assert "parameters" in payload
     assert "confidence" in payload
+
+
+def test_quali_without_fuel_exits_2(multi_lap_ibt: Path, tmp_corpus: Path) -> None:
+    runner = CliRunner()
+    runner.invoke(main, ["learn", str(multi_lap_ibt), "--corpus-root", str(tmp_corpus)])
+    result = runner.invoke(
+        main,
+        ["bmw", "sebring", "--quali", "--corpus-root", str(tmp_corpus)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert "--fuel" in result.output
+
+
+@pytest.mark.slow
+def test_race_mode_auto_pins_fuel_to_past_session(
+    multi_lap_ibt: Path, tmp_corpus: Path,
+) -> None:
+    """Without `--quali` AND without `--fuel`, race mode should anchor
+    `fuel_level_l` to the most-recent past-session value at the target
+    track, with a stderr banner. Slow because it runs the full DE search."""
+    runner = CliRunner()
+    runner.invoke(main, ["learn", str(multi_lap_ibt), "--corpus-root", str(tmp_corpus)])
+    result = runner.invoke(
+        main,
+        ["bmw", "sebring", "--corpus-root", str(tmp_corpus)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert "Race fuel auto-pinned to past-session value" in result.stderr
+
+
+@pytest.mark.slow
+def test_reset_mode_emits_banner_and_runs(
+    multi_lap_ibt: Path, tmp_corpus: Path,
+) -> None:
+    """`--reset` prints a banner to stderr and produces a recommendation.
+    Slow because it runs the full DE search with widened envelope."""
+    runner = CliRunner()
+    runner.invoke(main, ["learn", str(multi_lap_ibt), "--corpus-root", str(tmp_corpus)])
+    result = runner.invoke(
+        main,
+        ["bmw", "sebring", "--reset", "--corpus-root", str(tmp_corpus)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert "RESET MODE" in result.stderr
+
+
+@pytest.mark.slow
+def test_detailed_flag_emits_legacy_block_format(
+    multi_lap_ibt: Path, tmp_corpus: Path,
+) -> None:
+    """`--detailed` selects render_recommendation_text -- which emits the
+    `[confidence: <regime>]` per-parameter tag the validator agent uses.
+    The default narrative emits no such tag."""
+    runner = CliRunner()
+    runner.invoke(main, ["learn", str(multi_lap_ibt), "--corpus-root", str(tmp_corpus)])
+    result_default = runner.invoke(
+        main,
+        ["bmw", "sebring", "--corpus-root", str(tmp_corpus)],
+        catch_exceptions=False,
+    )
+    result_detailed = runner.invoke(
+        main,
+        ["bmw", "sebring", "--detailed", "--corpus-root", str(tmp_corpus)],
+        catch_exceptions=False,
+    )
+    assert result_default.exit_code == 0
+    assert result_detailed.exit_code == 0
+    assert "[confidence:" not in result_default.output
+    assert "[confidence:" in result_detailed.output
