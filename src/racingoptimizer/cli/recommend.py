@@ -111,13 +111,13 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
 @click.option(
     "--reset", "reset_mode", is_flag=True, default=False,
     help=(
-        "Throw away the per-track trust radius and search the FULL "
-        "constraint envelope from each parameter's midpoint. Use when "
-        "you feel the current setup is fundamentally wrong and small "
-        "tweaks aren't moving the car. Recommendations diverge sharply "
-        "from your past setup, every parameter's confidence is "
-        "downgraded, and the briefing prints a banner. Verify on track "
-        "before pushing."
+        "Open the search to [corpus_min - 30%, corpus_max + 30%] of "
+        "constraint span on each side, skip the corpus-density pin "
+        "check (so observed-constants can move), and downgrade every "
+        "parameter's confidence to noisy. Use when the current setup "
+        "feels fundamentally wrong and small tweaks aren't moving the "
+        "car. The briefing prints a RESET MODE banner; verify on "
+        "track before pushing."
     ),
 )
 @click.option(
