@@ -1017,11 +1017,23 @@ def _archetype_for(schedule: list | None, corner_id: int) -> dict | None:
 
 def _dominant_impact_corner(j: SetupJustification) -> str:
     """Single-line `T11 braking apex` style -- the corner-phase with the
-    biggest absolute score delta across helps + hurts."""
+    biggest absolute score delta the driver will actually feel.
+
+    Prefers non-STRAIGHT phases first. With per-corner weights now
+    proportional to lap-time share (corner_duration_s, commit
+    e90e8fd), the longest straights at any track dominate raw score
+    delta -- but a camber or damper change is felt mid-corner, not
+    on the straight. Only fall back to STRAIGHT if every impact is
+    on a straight (true for aero parameters like wing + tyre P).
+    """
     candidates = list(j.corners_helped) + list(j.corners_hurt)
     if not candidates:
         return ""
-    top = max(candidates, key=lambda i: abs(i.score_delta))
+    on_corner = [
+        i for i in candidates if i.phase != Phase.STRAIGHT
+    ]
+    pool = on_corner if on_corner else candidates
+    top = max(pool, key=lambda i: abs(i.score_delta))
     phase_label = _PHASE_LABEL.get(top.phase, top.phase.value)
     return f"T{top.corner_id} {phase_label}"
 
