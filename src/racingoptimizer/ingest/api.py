@@ -29,6 +29,7 @@ def learn(
     corpus_root: Path | str | None = None,
     *,
     reparse: bool = False,
+    apply_quality_masks: bool = True,
 ) -> list[str]:
     """Ingest a .ibt file or every .ibt under a directory.
 
@@ -40,17 +41,83 @@ def learn(
     is already ``status=ok``. Use this after a parser change to refresh
     stale fields (e.g. ``recorded_at`` after the filename-derivation
     fix); normal incremental ingest skips already-ok sessions.
+
+    ``apply_quality_masks=True`` (default) applies the slice-D track-quality
+    mask to every newly-ingested session as a final step. Without this the
+    parquet's `data_quality_mask` column stays at the all-True default
+    written by the parser, and the curb / off-track filtering the track
+    model produces never reaches the fitter. The mask uses every session
+    on the same (car, track) for cross-session curb agreement, so the
+    deferred pass runs once per (car, track) combination touched. Pass
+    `False` to skip (e.g. if the track model is unavailable or you're
+    re-running ingest in a tight loop).
     """
     root = resolve_corpus_root(Path(corpus_root) if corpus_root else None)
     db = catalog_path(root)
 
     targets = list(_iter_ibt_paths(Path(path)))
     out: list[str] = []
+    written_this_run: list[str] = []
     with cat.open_catalog(db) as conn:
         for ibt in targets:
+            existing = None
+            try:
+                # Pre-check: was this session already status=ok?
+                existing_sid = session_id_from_bytes(ibt.read_bytes())
+                existing = cat.get_session(conn, existing_sid)
+            except OSError:
+                existing = None
             sid = _process_one(conn, root, ibt, reparse=reparse)
             out.append(sid)
+            short_circuited = (
+                existing is not None
+                and existing.status == "ok"
+                and not reparse
+            )
+            if not short_circuited:
+                written_this_run.append(sid)
+    if apply_quality_masks and written_this_run:
+        _apply_masks_for_session_ids(written_this_run, root=root)
     return out
+
+
+def _apply_masks_for_session_ids(
+    session_ids: list[str], *, root: Path,
+) -> None:
+    """Apply the slice-D quality mask to each session_id, batched per
+    (car, track) so the TrackModel only builds once per group."""
+    # Lazy import: track is a heavy module that pulls in numpy/polars
+    # for every callsite, and `learn` is called by tests that don't need
+    # the track machinery (e.g. ingest unit tests).
+    from racingoptimizer.track.builder import build_track_model
+    from racingoptimizer.track.rewrite import apply_quality_mask
+
+    with cat.open_catalog(catalog_path(root)) as conn:
+        rows = [cat.get_session(conn, sid) for sid in session_ids]
+    by_track: dict[tuple[str, str], list[str]] = {}
+    for row in rows:
+        if row is None or row.status != "ok":
+            continue
+        by_track.setdefault((row.car, row.track), []).append(row.session_id)
+    if not by_track:
+        return
+    for (car, track), batch_ids in by_track.items():
+        with cat.open_catalog(catalog_path(root)) as conn:
+            all_for_track = cat.query_sessions(
+                conn, car=car, track=track, valid_only=True,
+            )
+        all_sids = sorted({s.session_id for s in all_for_track})
+        if not all_sids:
+            continue
+        tm = build_track_model(track, all_sids, corpus_root=root, car=car)
+        for sid in batch_ids:
+            try:
+                apply_quality_mask(sid, track_model=tm, corpus_root=root)
+            except (FileNotFoundError, KeyError):
+                # Session row missing parquet path or session_id -- skip
+                # silently; the quality-mask pass is best-effort and
+                # never blocks ingest.
+                continue
 
 
 def sessions(

@@ -351,15 +351,30 @@ def _cached_weights(
     if key in _WEIGHTS_CACHE:
         return _WEIGHTS_CACHE[key]
     if int(model.feature_schema_version) >= 4 and schedule:
-        # Per-car: weight every target-track corner uniformly until
-        # `weight_corners` learns to consume a corner schedule. Future work
-        # can derive per-corner time sensitivity from the schedule's
-        # archetype values (longer corners + slower apex = higher weight).
-        corners = sorted({int(entry.corner_id) for entry in schedule})
-        weights = (
-            {c: 1.0 / len(corners) for c in corners}
-            if corners else {}
-        )
+        # Per-car v4: weight each target-track corner by its duration
+        # (`corner_duration_s` archetype key). A 5% improvement in a
+        # 12-second corner is worth more lap-time than the same 5% in
+        # a 2-second corner; weighting proportionally satisfies VISION
+        # §6 "weighted by each corner's TIME SENSITIVITY". Falls back
+        # to uniform weights when no archetype entry carries a positive
+        # duration (e.g. a degenerate cold-start schedule).
+        corner_durations: dict[int, float] = {}
+        for entry in schedule:
+            cid = int(entry.corner_id)
+            if cid in corner_durations:
+                continue
+            dur = float(entry.archetype.get("corner_duration_s", 0.0) or 0.0)
+            if dur > 0.0:
+                corner_durations[cid] = dur
+        total_dur = sum(corner_durations.values())
+        if total_dur > 0.0:
+            weights = {c: d / total_dur for c, d in corner_durations.items()}
+        else:
+            corners = sorted({int(entry.corner_id) for entry in schedule})
+            weights = (
+                {c: 1.0 / len(corners) for c in corners}
+                if corners else {}
+            )
     else:
         try:
             weights = weight_corners(track, model)

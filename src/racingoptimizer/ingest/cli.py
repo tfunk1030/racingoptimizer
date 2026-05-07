@@ -27,11 +27,31 @@ from racingoptimizer.ingest.api import learn as _learn
         "fields without manual catalog surgery."
     ),
 )
+@click.option(
+    "--no-quality-masks",
+    "no_quality_masks",
+    is_flag=True,
+    default=False,
+    help=(
+        "Skip the slice-D track-quality mask pass after ingest. By default, "
+        "every newly-ingested session has its `data_quality_mask` column "
+        "rewritten using a TrackModel built from every session on the "
+        "same (car, track), so the fitter masks out curb/off-track samples. "
+        "Disabling this leaves the all-True default in place; use only "
+        "when iterating quickly on the parser and you don't care about "
+        "fit-quality output."
+    ),
+)
 def learn_command(
-    path: Path, corpus_root: Path | None, reparse: bool,
+    path: Path, corpus_root: Path | None, reparse: bool, no_quality_masks: bool,
 ) -> None:
     """Ingest a .ibt file or every .ibt under a directory into the corpus."""
-    ids = _learn(path, corpus_root=corpus_root, reparse=reparse)
+    ids = _learn(
+        path,
+        corpus_root=corpus_root,
+        reparse=reparse,
+        apply_quality_masks=not no_quality_masks,
+    )
     click.echo(f"ingested {len(ids)} session(s)")
     for sid in ids:
         click.echo(f"  {sid}")
