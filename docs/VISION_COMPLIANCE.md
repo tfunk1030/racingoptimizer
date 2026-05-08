@@ -67,10 +67,79 @@ change below sits on `master` as of `7e3c172` (2026-05-06).
 - Pin warnings + clamp warnings continue to surface in the briefing's `Warnings:` section.
 
 ### Known regressions / gaps (still open)
-- `optimize <car> <track> --json` — JSON test fails because `[saved to ...]` stderr line bleeds into stdout via Click's `CliRunner.mix_stderr`. Text smoke test passes (the merge gate).
-- 4 corner_weight targets still `<TODO>` in `constraints.md`; render as `[past]` and appear in `untrained_parameters`.
+- `optimize <car> <track> --json` — `[saved to ...]` stderr line still bleeds into stdout. Production bug (not just test). Fix: when `as_json AND output_file is None`, default `output_file = Path("-")` to skip the saver block.
+- 4 corner_weight targets still `<TODO>` in `constraints.md`; render as `[past]` and appear in `untrained_parameters`. Plus diff coast/power %, brake ducts F+R, throttle/brake mapping = 5 unbounded families pending iRacing UI capture.
 - Wind directional decomposition deferred (needs per-corner heading data).
 - Driver-input output channels (throttle, brake, damper velocity) plateau at fit_quality ~0.50 (signal == noise) — structural ceiling for channels driver-controlled more than setup-controlled.
+
+---
+
+## 2026-05-07 follow-up audit (post-2026-05-06 codebase audit)
+
+The 12-unit codebase audit at `docs/audit_2026-05-06/` (commit `c8bd2fe`)
+flagged ~80 items across 12 slices. The follow-up sequence below closed
+~20 of them as of `bfc8dfb`. Remaining items are tracked in the
+ranked roadmap at `docs/audit_2026-05-06/99_punch_list.md`.
+
+### §1 Data Ingestion
+- GT3 routing dropped from `CAR_PREFIX_MAP` (`ingest/detect.py`, commit `1a8c9a3`). `bmwm4gt3`, `porsche992rgt3`, `amvantageevogt3` now raise `UnknownCarError`. The pre-fix AMV-GT3 → `bmw` placeholder was silently polluting the BMW per-car corpus with non-GTP setup data; visible in BMW Spa tyre-pressure recommendations drifting toward the 159 kPa GT3 corpus value.
+
+### §3 Physics Model
+- v4 `weight_corners` now consumes `corner_duration_s` archetype data (`physics/recommend.py::_cached_weights`, commit `e90e8fd`). VISION §6 "weighted by each corner's TIME SENSITIVITY" was previously satisfied only on Acura + Porsche (v3 path); v4 cars (BMW, Cadillac, Ferrari) ran uniform weights. Now all five cars use corner-duration-share weighting.
+
+### §4 Setup Evaluation / §5 Optimization
+- `--staged` 5-stage DE driver shipped (`physics/recommend.py::recommend_staged`, commit `00ca849`). Aero -> mechanical -> dampers -> detail -> polish, mirroring engineering setup workflow. `ConstraintsTable.with_pin(car, parameter, value)` factory closes the audit's `_by_car` leak (Slice 10 #7).
+- `_pin_or_trust_bounds` family-preferred-phase filter for the impact-corner picker (commit `7be3017`, `5f305b4`). Without this, raw score-delta max picked the heaviest-weighted corner (T5 at Spa from corner-duration weighting) for EVERY parameter's "Watch most" line and Why-line. Now each parameter family routes to its mechanically-relevant phase (camber → mid-corner; dampers → trail/mid/exit; diff → exit; brake bias → braking/trail).
+
+### §7 Output
+- `_CAR_FEEL["heave_spring"]` keys were unreachable -- front heave-spring rendered with phase-themed defaults instead of Effect/Trade table. Fixed via `("spring_rate", "front-heave", +/-)` keys + `_param_subtype` recognition (commit `f7fe058`).
+- `cli/recommend.py:381` was dropping `schedule=` from the `render_narrative` call -- every v4 `_telemetry_why` prediction silently raised and was swallowed. The documented "Telemetry-backed Why line" was dead in production for BMW/Cadillac/Ferrari. Fix: pass `schedule=schedule` (commit `f7fe058`).
+- ASCII sweep on `narrative.py` and `full_setup_card.py` (commits `f7fe058`, `06f0c23`). Em-dashes, middle-dots, en-dashes, `+/-` all rendered as `?` on Windows cp1252 console (visible in `bmw-spa-cal-0506-1015.txt:72` as `FULL SETUP CARD ? bmw @ spa`). Both files now encode cleanly under cp1252.
+- Mirror precedence: `_MIRRORED_LEAVES` checked BEFORE `opt_match` in the renderer (commit `06f0c23`). Previously the existing mirrors only worked because the right-side ParameterSpec didn't exist; for damper paths (which have per-corner specs), the mirror never fired. Now right-side dampers all 10 (5 modes × 2 axles) tag `[OPT mirror]` for road-circuit symmetry by default.
+- Per-axle damper mirroring extended to all 10 entries in `_MIRRORED_LEAVES` (commit `1a3a072`).
+
+### §8 User Experience
+- Race-mode auto-fuel-pin's filename mode-tag system landed (`<car>-<short_track>-<mode>[-<fuel>L]-<MMDD>-<HHMM>.<ext>`, commit `0a3f256`).
+- `optimize calibrate` subcommand shipped (commit `7e15db0`); CLI: `--status`, `--targets N`, `--output-file`. Output rendered with same naming convention.
+
+### §9 Track Model
+- `optimize learn` now applies `apply_quality_mask` to newly-ingested sessions as a final batched-per-(car, track) step (`ingest/api.py::_apply_masks_for_session_ids`, commit `e90e8fd`). Slice D's data-quality mask now actually reaches the parquet's `data_quality_mask` column. CLAUDE.md's "Track model is load-bearing for data quality" claim is no longer a no-op. `--no-quality-masks` opts out for tight-loop iteration.
+
+### Tests
+- Phase-3 test additions (commit `85b64f8`):
+  - `tests/physics/test_pin_near_constant.py`: 6 new tests for `--reset` widening + `--explore` widening (Slice E2 #1, #2 closed).
+  - `tests/cli/test_calibrate_cmd.py` (new): 4 tests for `optimize calibrate` (Slice F2 #1, Tests #1 closed).
+  - `tests/cli/test_recommend_cmd.py`: 4 new tests (`--quali` no-fuel exit 2, race-fuel auto-pin banner, `--reset` banner, `--detailed` flag; Slice F2 #4, #6, Tests #4 closed).
+
+### Cross-cutting
+- `ConstraintsTable.with_pin(car, param, value)` factory (commit `00ca849`) closes Slice 10 #7's `_by_car` leak.
+
+### Docs
+- `CLAUDE.md` refresh covering `--reset`, `optimize calibrate`, always-global trust envelope, new filename convention, race-fuel auto-pin block line numbers (commit `f7fe058`).
+- `CLAUDE.md` session-learnings additions: tooling quirks (Click 8.3 `mix_stderr` removal, `from racingoptimizer.physics import X` re-export shadowing, Windows multi-line python heredoc, background-stdout buffering), confidence-is-track-wide caveat, per-car v4 cross-track confounding pattern (commits `3c098bc`).
+- `GETTING_STARTED.md` refresh (commits `85b64f8`, `63a00f0`): drop "per-track trust radius" wording for `--reset`, document `--output-file PATH` and `-` to suppress.
+- New: ranked roadmap at `docs/audit_2026-05-06/99_punch_list.md` (commit `bfc8dfb`).
+
+### Known regressions / gaps (refreshed)
+Closed:
+- ✅ Heave_spring `_CAR_FEEL` fallthrough (was Slice F1 #1 CRITICAL)
+- ✅ Telemetry Why-line dead in production (was Slice F1 #2 CRITICAL)
+- ✅ `apply_quality_mask` never called in production (was Slice D #1 HIGH)
+- ✅ `weight_corners` dead for v4 cars (was Slice E3 #3 MAJOR)
+- ✅ Aston Martin GT3 / GT3-routing pollution (was Slice F2 #5, A #1)
+- ✅ Em-dash / middle-dot cp1252 corruption in setup card + narrative (was Slice F1 #5 MAJOR)
+- ✅ Watch-most + Why-line all-T5 dominance (was Slice F1 follow-up)
+- ✅ `--reset`, `--explore`, `optimize calibrate`, race-fuel auto-pin, `--detailed` test gaps (was Tests #1-4, #6 CRITICAL/MAJOR)
+
+Still open (see `99_punch_list.md` for full leverage-ranked list):
+- `--json` stderr-mixing in production (Tier 1) -- `cli/recommend.py:407-434`
+- `fit(track_model=...)` parameter still unused even after mask wiring (Tier 1) -- `physics/fitter.py:217-243`
+- `wet_baselines` ignores corpus baselines (Tier 1) -- `physics/wet_mode.py:74`
+- `_score_breakdown_per_car` returns 0.0 on empty states (Tier 1) -- `physics/score.py:709-711`
+- `tests/cli/test_per_car_smoke.py:61` asserts on stale `[confidence:` tag (Tier 1)
+- `fit_per_car` direct test coverage; ~120 lines copy-paste with `fit` (Tier 2/3)
+- Per-corner-LEVERAGE (vs DURATION) weighting for picker -- T5 still dominates corner-id even with family filter (Tier 4)
+- 5 unbounded `constraints.md` families -- needs iRacing UI capture (Tier 4)
 
 ---
 
