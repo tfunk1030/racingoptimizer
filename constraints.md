@@ -59,10 +59,14 @@ Car keys match `aero-maps/` filenames: `acura`, `bmw`, `cadillac`, `ferrari`, `p
 
 > **Tech-rule note (front heave slider):** iRacing fails tech inspection
 > when front heave slider deflection exceeds 45 mm. Slider deflection is
-> a downstream readout (not a setup input), so this limit cannot be
-> enforced as a search bound directly. Per-car heave-perch-offset bounds
-> below are tightened to corpus + small buffer to keep the optimizer
-> inside perch values that empirically produce legal slider deflection.
+> a DERIVED readout of `(perch_offset + spring_rate + pushrod + dynamic
+> load + ride_height)` -- not bounded by any single parameter -- so this
+> rule can NOT be enforced via per-parameter bounds in this file. The
+> fix is to predict slider deflection at the recommended setup vector
+> and validate (warn / reject if > 45 mm). See TODO in
+> `physics/model.py::predict_setup_readouts` -- only static ride
+> heights are predicted today; adding `setup_static_heave_slider_defl_mm`
+> as a fitted readout channel would close this gap.
 
 ### Static ride height
 | corner | min | max |
@@ -347,27 +351,15 @@ Discrete iRacing setting; structure varies per car (curve preset, shape index, o
 - **Heave spring rate:** 0.0 – 900.0 N/mm
 - **Rear third spring rate:** 0.0 – 900.0 N/mm
 - **Rear coil spring rate:** 105.0 – 280.0 N/mm
-- **Heave perch offset front:** -40.0 – 0.0 mm
-- **Spring perch offset rear:** 20.0 – 50.0 mm
-- **Third perch offset rear:** 25.0 – 60.0 mm
-
-> Perch ranges above are corpus + ~8 mm buffer. BMW corpus heave perch
-> front spans [-31.5, -6.5], rear spring perch [28, 41.5], third perch
-> [36, 52]. Pre-2026-05-07 the bounds were [-100, +100] which let the
-> optimizer roam to perch=+9 mm; combined with race loads that pushed
-> front heave slider deflection past the 45 mm tech limit (commit
-> ad2a3f0 / `bmw-spa-race-wing15-0507-1151.txt`).
+- **Spring perch offset rear:** -100.0 – 100.0 mm
+- **Third perch offset rear:** -100.0 – 100.0 mm
 
 ### cadillac
 - **Heave spring rate:** 0.0 – 700.0 N/mm
 - **Rear third spring rate:** 0.0 – 900.0 N/mm
 - **Rear coil spring rate:** 105.0 – 280.0 N/mm
-- **Heave perch offset front:** -40.0 – -5.0 mm
-- **Spring perch offset rear:** 20.0 – 55.0 mm
-- **Third perch offset rear:** 25.0 – 60.0 mm
-
-> Cadillac corpus heave perch front [-30.5, -14.5], rear spring perch
-> [30, 44.5], third perch [36, 52]. Same corpus + buffer logic as BMW.
+- **Spring perch offset rear:** -100.0 – 100.0 mm
+- **Third perch offset rear:** -100.0 – 100.0 mm
 
 ### ferrari
 Ferrari 499P diverges from BMW/Cadillac in several places per
