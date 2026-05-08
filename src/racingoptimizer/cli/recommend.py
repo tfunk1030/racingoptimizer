@@ -223,6 +223,18 @@ def recommend_cmd(
         )
         sys.exit(2)
     pinned_overrides = _parse_pins(pins, wing=wing, fuel=fuel)
+    # Mode 2 floor pin (PLAN.md Section 14.1): default-pin tyre cold
+    # pressure to the per-car constraint floor unless the user
+    # explicitly set it. The surrogate cannot see the peak-grip drop
+    # from a smaller contact patch and drifts off the floor by
+    # several kPa; this default keeps recommendations honest with
+    # community-known optimal pressure.
+    constraints_for_floor = load_constraints()
+    _floor_msg = _apply_tyre_pressure_floor_pin(
+        pinned_overrides, constraints_for_floor, car_key,
+    )
+    if _floor_msg is not None:
+        click.echo(_floor_msg, err=True)
     # Race-mode auto fuel pin: without --quali AND without an explicit
     # --fuel/--pin, anchor fuel to the most-recent past-session value
     # (typically the user's last race load, e.g. 58 L on BMW). The
@@ -907,6 +919,53 @@ def _parse_pins(
             )
             sys.exit(2)
     return out
+
+
+def _apply_tyre_pressure_floor_pin(
+    overrides: dict[str, float],
+    table: ConstraintsTable,
+    car: str,
+) -> str | None:
+    """Default-pin tyre cold pressure to the per-car constraint floor.
+
+    Per physics-rebuild PLAN.md Section 14.1 (Mode 2): the surrogate model
+    rewards platform stability (cleaner ride-height telemetry from higher
+    cold pressure) but cannot see the peak-grip drop from a smaller
+    contact patch. Recent recommendations on BMW Spa drift to 154-163 kPa
+    against the 152 floor; community wisdom is "stay at the floor."
+
+    This helper inserts `tyre_cold_pressure_kpa = <car_floor>` into
+    `overrides` IF AND ONLY IF the user did not already set it (any value,
+    including the floor itself, counts as user-set). The helper then
+    returns a one-line info message describing the insertion, or `None`
+    if no insertion happened. The caller (recommend_cmd) prints the
+    message to stderr so the user knows the optimizer is honouring the
+    floor.
+
+    The override is plumbed through `_apply_pins_to_constraints`, which
+    narrows the constraint to `[floor, floor]`; downstream the recommend
+    pipeline treats it as a fixed value.
+
+    To override the floor with a higher pressure (e.g. for tyre-warming
+    behaviour or wet conditions), pass `--pin tyre_cold_pressure_kpa=N`
+    explicitly. Setting it to the floor itself (e.g. `--pin
+    tyre_cold_pressure_kpa=152`) is also treated as user-set so the
+    helper stays a no-op (no info message).
+
+    Returns the info string, or None if the helper did nothing.
+    """
+    if "tyre_cold_pressure_kpa" in overrides:
+        return None
+    bounds = table.bounds(car, "tyre_cold_pressure_kpa")
+    if bounds is None:
+        # Defensive: no constraint registered for this car. Skip.
+        return None
+    floor, _hi = bounds
+    overrides["tyre_cold_pressure_kpa"] = float(floor)
+    return (
+        f"Tyre cold pressure auto-pinned to constraint floor: "
+        f"{floor:.1f} kPa (override with --pin tyre_cold_pressure_kpa=N)."
+    )
 
 
 def _apply_pins_to_constraints(
