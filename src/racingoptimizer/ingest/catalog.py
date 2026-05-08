@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   status            TEXT NOT NULL CHECK(status IN ('ok','partial','failed')),
   error             TEXT,
   dropped_channels  TEXT,                 -- JSON: {channel_name: reason}; VISION §1 audit trail
-  sample_rate_hz    REAL                  -- IBT recording rate (typically 60.0; can be 360.0)
+  sample_rate_hz    REAL,                 -- IBT recording rate (typically 60.0; can be 360.0)
+  held_out          INTEGER NOT NULL DEFAULT 0  -- physics-rebuild Section 7
 );
 
 CREATE TABLE IF NOT EXISTS laps (
@@ -65,6 +66,7 @@ class SessionRow(NamedTuple):
     error: str | None
     dropped_channels: str | None # JSON: {channel_name: reason}; VISION §1 audit trail
     sample_rate_hz: float | None # IBT recording rate (typically 60.0; can be 360.0)
+    held_out: int = 0            # physics-rebuild Section 7: 0=production, 1=gate-only
 
 
 class LapRow(NamedTuple):
@@ -84,6 +86,7 @@ class LapRow(NamedTuple):
 _ADDITIVE_SESSION_COLUMNS: tuple[tuple[str, str], ...] = (
     ("dropped_channels", "TEXT"),
     ("sample_rate_hz", "REAL"),
+    ("held_out", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 
@@ -111,13 +114,16 @@ def open_catalog(path: Path | str) -> Iterator[sqlite3.Connection]:
 
 
 def upsert_session(conn: sqlite3.Connection, row: SessionRow) -> None:
+    # `held_out` is intentionally NOT updated on conflict -- once a session
+    # is marked gate-only via `set_held_out_sessions`, re-ingesting the IBT
+    # must not silently flip it back to production.
     conn.execute(
         """
         INSERT INTO sessions (
             session_id, car, track, recorded_at, duration_s, lap_count,
             weather_summary, setup, source_path, ingested_at, parquet_path,
-            status, error, dropped_channels, sample_rate_hz
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            status, error, dropped_channels, sample_rate_hz, held_out
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(session_id) DO UPDATE SET
             car=excluded.car,
             track=excluded.track,
@@ -137,6 +143,30 @@ def upsert_session(conn: sqlite3.Connection, row: SessionRow) -> None:
         tuple(row),
     )
     conn.commit()
+
+
+def set_held_out_sessions(
+    conn: sqlite3.Connection,
+    session_ids: Iterable[str],
+    *,
+    held_out: bool = True,
+) -> int:
+    """Mark sessions as gate-only (held_out=1) or production (held_out=0).
+
+    Returns the number of rows actually changed. Used by Day 0 prep of the
+    physics-rebuild plan to mark the 5 hash-pinned IBTs in `holdout.sha256`
+    so that `query_sessions(... include_held_out=False)` skips them.
+    """
+    ids = list(session_ids)
+    if not ids:
+        return 0
+    placeholders = ",".join("?" * len(ids))
+    cur = conn.execute(
+        f"UPDATE sessions SET held_out=? WHERE session_id IN ({placeholders})",
+        (1 if held_out else 0, *ids),
+    )
+    conn.commit()
+    return cur.rowcount
 
 
 def update_session_status(
@@ -171,7 +201,7 @@ def insert_laps(conn: sqlite3.Connection, laps: Iterable[LapRow]) -> None:
 _SESSION_SELECT_COLS = (
     "session_id, car, track, recorded_at, duration_s, lap_count, "
     "weather_summary, setup, source_path, ingested_at, parquet_path, "
-    "status, error, dropped_channels, sample_rate_hz"
+    "status, error, dropped_channels, sample_rate_hz, held_out"
 )
 
 
@@ -181,7 +211,14 @@ def query_sessions(
     car: str | None = None,
     track: str | None = None,
     valid_only: bool = True,
+    include_held_out: bool = False,
 ) -> list[SessionRow]:
+    """Return sessions matching the filters.
+
+    `include_held_out` defaults to False so production paths (fitter,
+    recommend, learn) cannot accidentally see gate-only IBTs. Gate
+    validation scripts opt in explicitly.
+    """
     sql = f"SELECT {_SESSION_SELECT_COLS} FROM sessions"
     where: list[str] = []
     params: list[object] = []
@@ -193,6 +230,8 @@ def query_sessions(
         params.append(track)
     if valid_only:
         where.append("status IN ('ok','partial')")
+    if not include_held_out:
+        where.append("held_out = 0")
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY recorded_at"
@@ -201,6 +240,12 @@ def query_sessions(
 
 
 def get_session(conn: sqlite3.Connection, session_id: str) -> SessionRow | None:
+    """Direct lookup by session_id; returns held-out rows too.
+
+    The held-out filter applies to listing (`query_sessions`); a direct
+    lookup by id is used by the corner-state loader and gate scripts that
+    explicitly know the id they want.
+    """
     row = conn.execute(
         f"SELECT {_SESSION_SELECT_COLS} FROM sessions WHERE session_id=?",
         (session_id,),

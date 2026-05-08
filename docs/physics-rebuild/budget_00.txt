@@ -1,0 +1,13 @@
+# Day 00 token tracker -- physics-rebuild plan
+# Format: HH:MM tokens_delta cumulative description
+# Source-of-truth for the daily snapshot's tokens_used_today field.
+
+# Day 0 was prep + plan authoring spread across this turn; not separated
+# minute-by-minute. Cumulative session-token usage will be reported by the
+# user-side conversation tooling.
+
+cumulative_today: <conversation usage at end of Day 0; not separately metered>
+soft_cap: 2000000
+hard_cap: 4000000
+soft_cap_reached: false
+hard_cap_reached: false

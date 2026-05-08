@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from racingoptimizer.cli.recommend import CANONICAL_CARS
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IBT_DIR = REPO_ROOT / "ibtfiles"
 
@@ -12,6 +14,9 @@ IBT_DIR = REPO_ROOT / "ibtfiles"
 # Canonical fixture per car for the per-car smoke matrix. Each fixture must
 # contain ≥3 valid laps so slice E's `fit` produces ≥1 trained quadruple
 # (1-lap fixtures collapse to 1 row per (corner, phase) and yield no fitters).
+# Keys must match `CANONICAL_CARS` (single source of truth in
+# `cli/recommend.py`); `assert set(PER_CAR_FIXTURES) == set(CANONICAL_CARS)`
+# guards drift.
 PER_CAR_FIXTURES: dict[str, tuple[str, str]] = {
     # car -> (filename, expected track substring)
     "bmw": (
@@ -35,6 +40,10 @@ PER_CAR_FIXTURES: dict[str, tuple[str, str]] = {
         "algarve",
     ),
 }
+assert set(PER_CAR_FIXTURES) == set(CANONICAL_CARS), (
+    f"PER_CAR_FIXTURES drift vs CANONICAL_CARS: "
+    f"{set(PER_CAR_FIXTURES) ^ set(CANONICAL_CARS)}"
+)
 
 
 def fixture_path(car: str) -> Path | None:

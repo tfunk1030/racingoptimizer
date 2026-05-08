@@ -20,7 +20,12 @@ from racingoptimizer.constraints import (
     clamp,
     load_constraints,
 )
-from racingoptimizer.context import EnvironmentFrame
+from racingoptimizer.context import (
+    IBT_BOOL_CHANNELS,
+    IBT_FLOAT_CHANNELS,
+    IBT_INT_CHANNELS,
+    EnvironmentFrame,
+)
 from racingoptimizer.explain import (
     CornerPhaseDelta,
     SetupComparison,
@@ -720,23 +725,10 @@ def _filter_to_target_track(
     "spa_2024_up". Returns an empty frame when no track matches; caller
     decides whether to fall back to the full session set.
     """
-    raw = raw_track.strip().lower()
-    needle = slugify_track(raw) or raw
-    bare = needle.replace("_", "")
     available = sorted(set(sessions_df["track"].to_list()))
-    if needle in available:
-        match = needle
-    elif bare in available:
-        match = bare
-    else:
-        candidates = sorted({
-            slug for slug in available
-            if needle in slug or bare in slug.replace("_", "")
-        })
-        if len(candidates) == 1:
-            match = candidates[0]
-        else:
-            return sessions_df.head(0)
+    match, _ = _match_track_slug(raw_track, available)
+    if match is None:
+        return sessions_df.head(0)
     return sessions_df.filter(pl.col("track") == match)
 
 
@@ -787,6 +779,41 @@ def _safe_sessions(car: str, *, corpus_root: Path) -> pl.DataFrame:
         sys.exit(4)
 
 
+def _match_track_slug(
+    raw_track: str, available: list[str],
+) -> tuple[str | None, list[str]]:
+    """Resolve a user-typed track string against the available catalog slugs.
+
+    Returns ``(matched_slug, ambiguous_candidates)``:
+      - ``(slug, [])`` when the input matches uniquely (exact slug, bare
+        alphanum form, or a single substring hit).
+      - ``(None, [a, b, ...])`` when the substring scan finds multiple
+        plausible candidates — caller decides whether to error.
+      - ``(None, [])`` when nothing matches.
+
+    Same rules ingestion applies to IBT filenames (`slugify_track`), so
+    ``laguna-seca`` / ``Laguna Seca`` / ``laguna_seca`` collapse to the
+    catalog's canonical form, and ``lagunaseca`` matches the un-underscore
+    variant via the bare-form pass.
+    """
+    raw = raw_track.strip().lower()
+    needle = slugify_track(raw) or raw
+    bare = needle.replace("_", "")
+    if needle in available:
+        return needle, []
+    if bare in available:
+        return bare, []
+    candidates = sorted({
+        slug for slug in available
+        if needle in slug or bare in slug.replace("_", "")
+    })
+    if len(candidates) == 1:
+        return candidates[0], []
+    if len(candidates) > 1:
+        return None, candidates
+    return None, []
+
+
 def _resolve_track_or_extrapolate(
     track: str, sessions: pl.DataFrame, car_key: str,
 ) -> tuple[str, str | None]:
@@ -805,34 +832,27 @@ def _resolve_track_or_extrapolate(
     slug. Substring matching also tries the un-slugified bare alphanum form
     so ``lagunaseca`` matches a catalog entry stored as ``laguna_seca``.
     """
-    raw = track.strip().lower()
-    needle = slugify_track(raw) or raw
-    bare = needle.replace("_", "")
     available = sorted(set(sessions["track"].to_list()))
-    if needle in available:
-        return needle, None
-    if bare in available:
-        return bare, None
-    matches = [
-        slug for slug in available
-        if needle in slug or bare in slug.replace("_", "")
-    ]
-    matches = sorted(set(matches))
-    if len(matches) == 1:
-        return matches[0], None
-    if len(matches) > 1:
+    match, ambiguous = _match_track_slug(track, available)
+    if ambiguous:
         click.echo(
-            f"ambiguous track {track!r}; candidates: {', '.join(matches)}",
+            f"ambiguous track {track!r}; candidates: {', '.join(ambiguous)}",
             err=True,
         )
         sys.exit(2)
+    if match is not None:
+        return match, None
     if not available:
+        # `_match_track_slug` re-derives `needle` internally; recompute it
+        # here for the error message rather than threading it back.
+        needle = slugify_track(track.strip().lower()) or track.strip().lower()
         click.echo(
             f"model has no data on ({car_key}, {needle}); "
             f"run `optimize learn <ibt>` first",
             err=True,
         )
         sys.exit(2)
+    needle = slugify_track(track.strip().lower()) or track.strip().lower()
     counts = (
         sessions.group_by("track")
         .agg(pl.len().alias("n"))
@@ -948,28 +968,14 @@ def _build_per_car_pipeline(
     from racingoptimizer.physics.corner_schedule import build_corner_schedule
 
     # Track slug normalisation: same rules as the per-(car, track) path.
-    raw = track.strip().lower()
-    needle = slugify_track(raw) or raw
-    bare = needle.replace("_", "")
     available = sorted(set(catalog_sessions["track"].to_list()))
-    track_slug: str | None = None
-    if needle in available:
-        track_slug = needle
-    elif bare in available:
-        track_slug = bare
-    else:
-        matches = sorted({
-            slug for slug in available
-            if needle in slug or bare in slug.replace("_", "")
-        })
-        if len(matches) == 1:
-            track_slug = matches[0]
-        elif len(matches) > 1:
-            click.echo(
-                f"ambiguous track {track!r}; candidates: {', '.join(matches)}",
-                err=True,
-            )
-            sys.exit(2)
+    track_slug, ambiguous = _match_track_slug(track, available)
+    if ambiguous:
+        click.echo(
+            f"ambiguous track {track!r}; candidates: {', '.join(ambiguous)}",
+            err=True,
+        )
+        sys.exit(2)
 
     if track_slug is None:
         # Per-car has no sessions on the requested track. Before bailing,
@@ -1029,28 +1035,18 @@ def _maybe_borrow_cross_car_track(
     car-specific physics. The fitter itself still trains exclusively on
     `requested_car` sessions.
     """
-    raw = track.strip().lower()
-    needle = slugify_track(raw) or raw
-    bare = needle.replace("_", "")
-    for other_car in ("bmw", "cadillac", "ferrari", "porsche", "acura"):
+    for other_car in CANONICAL_CARS:
         if other_car == requested_car:
             continue
         other_sessions = _safe_sessions(other_car, corpus_root=root)
         if other_sessions.is_empty():
             continue
         other_tracks = sorted(set(other_sessions["track"].to_list()))
-        match: str | None = None
-        if needle in other_tracks:
-            match = needle
-        elif bare in other_tracks:
-            match = bare
-        else:
-            candidates = [
-                slug for slug in other_tracks
-                if needle in slug or bare in slug.replace("_", "")
-            ]
-            if len(candidates) == 1:
-                match = candidates[0]
+        # Cross-car borrow: silently skip ambiguity (the next car may have
+        # a clean match). _match_track_slug returns (None, [...]) when the
+        # substring scan finds multiple candidates; treat that as "no
+        # confident match here, try the next car."
+        match, _ambiguous = _match_track_slug(track, other_tracks)
         if match is not None:
             return match, other_sessions.filter(pl.col("track") == match)
     return None, pl.DataFrame()
@@ -1266,29 +1262,24 @@ def _env_from_overrides(
 
 
 # Per-sample env channel name in IBT/parquet -> EnvironmentFrame field key.
-# Wind direction is handled separately because circular medians cannot be
-# pooled with arithmetic medians.
-# Per-sample env channels (continuous floats) → EnvironmentFrame field key.
-# Aggregated via per-sample median across every clean sample in the corpus.
+# Sourced from the canonical IBT_*_CHANNELS tuples in
+# `racingoptimizer.context.environment` so the parser, the corner
+# aggregator, and the corpus-median override path stay in lockstep. Wind
+# direction is filtered out of the float dict because circular medians
+# cannot pool with arithmetic medians (handled separately via
+# `_WIND_DIR_CHANNEL`).
+_WIND_DIR_CHANNEL = "WindDir"
 _ENV_FLOAT_CHANNELS: dict[str, str] = {
-    "AirTemp": "air_temp_c",
-    "AirDensity": "air_density",
-    "AirPressure": "air_pressure_mbar",
-    "RelativeHumidity": "relative_humidity",
-    "WindVel": "wind_vel_ms",
-    "FogLevel": "fog_level",
-    "TrackTempCrew": "track_temp_c",
-    "TrackWetness": "track_wetness",
+    ibt: field
+    for ibt, field in IBT_FLOAT_CHANNELS
+    if ibt != _WIND_DIR_CHANNEL
 }
 # Discrete env channels (bool / int). Aggregated via .max() — any-wet wins.
-_ENV_DISCRETE_CHANNELS: dict[str, str] = {
-    "WeatherDeclaredWet": "weather_declared_wet",
-    "Precipitation": "precip_type",
-    "Skies": "skies",
-}
+_ENV_DISCRETE_CHANNELS: dict[str, str] = dict(
+    IBT_BOOL_CHANNELS + IBT_INT_CHANNELS
+)
 # Backward-compat alias used by tests.
 _ENV_CHANNELS = _ENV_FLOAT_CHANNELS
-_WIND_DIR_CHANNEL = "WindDir"
 
 # VISION §10 standard-atmosphere fallback when no clean samples exist.
 _ENV_DEFAULTS: dict[str, float | bool | int] = {

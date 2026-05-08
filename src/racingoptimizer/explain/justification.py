@@ -249,7 +249,18 @@ def _safe_score_breakdown(
     from racingoptimizer.physics.score import score_breakdown
     try:
         return score_breakdown(model, setup, track, env, schedule=schedule)
-    except Exception:
+    except (KeyError, ValueError, ZeroDivisionError) as exc:
+        # Narrowed from bare `except Exception`. Real categories that
+        # surface here: missing fitter records (KeyError), constraint
+        # violation (ValueError), degenerate weights (ZeroDivisionError).
+        # Anything else (TypeError, AttributeError) is a programming
+        # bug and SHOULD propagate so it doesn't silently mask as
+        # "synthetic neutral baseline" in the renderer.
+        import warnings
+        warnings.warn(
+            f"_safe_score_breakdown swallowed {type(exc).__name__}: {exc}",
+            stacklevel=2,
+        )
         return {}
 
 
@@ -289,7 +300,13 @@ def _safe_score_total(
 ) -> float:
     try:
         return float(model.score_setup(setup, track, env, schedule=schedule))
-    except Exception:
+    except (KeyError, ValueError, ZeroDivisionError) as exc:
+        # See _safe_score_breakdown for the narrowing rationale.
+        import warnings
+        warnings.warn(
+            f"_safe_score_total swallowed {type(exc).__name__}: {exc}",
+            stacklevel=2,
+        )
         return 0.0
 
 

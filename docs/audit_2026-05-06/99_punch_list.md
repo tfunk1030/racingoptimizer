@@ -36,7 +36,7 @@ Closed by this session (for the record):
 |---|------|---------------------|
 | T2.1 | `fit_per_car` no direct test coverage | `tests/physics/test_fit_per_car.py` (new) -- conftest factory currently calls `fit()` instead |
 | T2.2 | `render_narrative` no test file | `tests/explain/test_narrative.py` (new) -- ASCII guard, OVERALL DIRECTION aggregation, `_CAR_FEEL` coverage per active family |
-| T2.3 | `_maybe_borrow_cross_car_track` untested | `tests/cli/test_cross_car_schedule_fallback.py` (new) |
+| T2.3 | `_maybe_borrow_cross_car_track` untested | RESOLVED -- new `tests/cli/test_match_track_slug.py` (9 tests) covers the slug-resolution helper used by all four call sites including `_maybe_borrow_cross_car_track`, plus a `CANONICAL_CARS`-coupling regression that catches the audit T3.10 hardcoded-list pattern. |
 | T2.4 | `predict_setup_readouts` untested | `tests/explain/test_full_setup_card.py::test_predicted_static_rh_lines_get_predicted_tag` (extend) |
 | T2.5 | `tests/physics/test_per_car_recommend.py` is `pytest.mark.slow` -> merge gate skips it | Promote one BMW Sebring case to fast suite; keep full per-car loop as slow |
 
@@ -44,16 +44,16 @@ Closed by this session (for the record):
 
 | # | Item | Approach |
 |---|------|----------|
-| T3.1 | ~120-line copy-paste between `fit` (`fitter.py:214-422`) and `fit_per_car` (`fitter.py:626-868`) | Extract `_train_joint(...)` helper. Three real differences (group-by key, family_kind="rf" force, per-track observed build) become parameters. |
-| T3.2 | Slug-resolution duplicated 4x in `cli/recommend.py` | Single `_match_track_slug(needle, available)` helper. Drift already started (one site sorts alphabetically before substring scan, others don't). |
-| T3.3 | Three duplicate IBT-channel <-> field mappings | `context/environment.py:28-45`, `cli/recommend.py:1249-1264`, `physics/fitter.py:162-178`, `explain/render_json.py:112-128` -- consolidate to one source. |
-| T3.4 | `Confidence` regime thresholds hardcoded magic numbers | `confidence/confidence.py:65-75` -- promote `30`, `0.5`, `0.2` to named module constants. |
-| T3.5 | `_CAR_FEEL` hardcodes Spa landmarks ("Eau Rouge / Pouhon", "Kemmel compression", "T9, T13") | Genericize phrasing or drive from `_dominant_impact_corner`. Currently misleading at non-Spa tracks. |
-| T3.6 | `_CAR_FEEL` missing per-axle entries (rear torsion, ride_height, corner_weight) | Add the missing keys; verify via "every fittable user-settable param resolves to a hit" test. |
-| T3.7 | `bare except Exception` in `justification.py:251, 292` | Narrow to specific exception types so legitimate scoring failures aren't masked as "neutral baseline". |
-| T3.8 | `EnvironmentFrame.from_partial_row` dead production code | Delete or wire up. CLI uses `_env_from_overrides` instead. |
-| T3.9 | Implicit field-order coupling between `EnvironmentFrame` and `_env_to_array` | Add a "field order is part of v4 fitter contract" comment + round-trip regression test. |
-| T3.10 | `CANONICAL_CARS` defined three places | Single source of truth (`cli/recommend.py:47`); `tests/cli/conftest.py` and `_maybe_borrow_cross_car_track` both import from it. |
+| T3.1 | ~120-line copy-paste between `fit` (`fitter.py:214-422`) and `fit_per_car` (`fitter.py:626-868`) | DEFERRED-BY-RISK -- the two trainers diverge on grouping key, family routing, archetype attach, per-track observed, schema version, and accuracy-log labelling. Extracting a `_train_joint` helper would be possible but the regression surface is large (every per-car cache invalidates) and current behaviour is well-tested. Revisit if either trainer needs another change. |
+| T3.2 | Slug-resolution duplicated 4x in `cli/recommend.py` | RESOLVED -- new `_match_track_slug(raw_track, available) -> (slug, ambiguous)` helper called from `_filter_sessions_to_track`, `_resolve_track_or_extrapolate`, the per-car resolve path in `_resolve_per_car_target`, and `_maybe_borrow_cross_car_track`. Each call site applies its own ambiguity policy (silent skip vs. exit-2). |
+| T3.3 | Three duplicate IBT-channel <-> field mappings | RESOLVED -- `context/environment.py` exports `IBT_FLOAT_CHANNELS`, `IBT_BOOL_CHANNELS`, `IBT_INT_CHANNELS`; `cli/recommend.py` builds its `_ENV_FLOAT_CHANNELS` / `_ENV_DISCRETE_CHANNELS` dicts from those (filtering `WindDir` from the float dict because circular medians can't pool with arithmetic). `physics/fitter._ENV_COLUMNS` and `explain/render_json` already consume EnvironmentFrame attributes directly -- no IBT-name duplication there. The new T3.9 regression test pins the `_ENV_COLUMNS` length / order coupling against drift. |
+| T3.4 | `Confidence` regime thresholds hardcoded magic numbers | RESOLVED -- `_SPARSE_MIN_SAMPLES`, `_NOISY_NOISE_RATIO`, `_CONFIDENT_NOISE_RATIO` promoted to module constants. |
+| T3.5 | `_CAR_FEEL` hardcodes Spa landmarks ("Eau Rouge / Pouhon", "Kemmel compression", "T9, T13") | RESOLVED -- replaced with archetypal phrasing ("long throttle commits", "high-speed sweepers", "long mid-corner releases", etc.). |
+| T3.6 | `_CAR_FEEL` missing per-axle entries (rear torsion, ride_height, corner_weight) | RESOLVED -- added 8 entries: `("torsion_bar","rear",±)`, `("ride_height", front/rear, ±)`, `("corner_weight", front/rear, ±)`. |
+| T3.7 | `bare except Exception` in `justification.py:251, 292` | RESOLVED -- narrowed to `(KeyError, ValueError, ZeroDivisionError)` with `warnings.warn`; programming bugs now propagate. |
+| T3.8 | `EnvironmentFrame.from_partial_row` dead production code | WONT-FIX-BY-DESIGN -- existing docstring (`context/environment.py:84-89`) documents intent ("older IBT versions / synthetic fixtures"); a tested degraded-mode adapter is worth keeping for future ingest paths. |
+| T3.9 | Implicit field-order coupling between `EnvironmentFrame` and `_env_to_array` | RESOLVED -- added `test_env_field_order_matches_v4_fitter_contract` regression test pinning the EnvironmentFrame -> `_env_to_array` -> `_ENV_COLUMNS` ordering with 12 unique sentinel values. |
+| T3.10 | `CANONICAL_CARS` defined three places | RESOLVED -- `_maybe_borrow_cross_car_track` and `tests/cli/conftest.py` both import from `cli/recommend.py`; `assert set(PER_CAR_FIXTURES) == set(CANONICAL_CARS)` guards drift. |
 
 ## Tier 4 -- blocked / long-term (need external data or deeper work)
 
@@ -90,7 +90,7 @@ verified against current source.
 | CR.2 | MAJOR | Zero unit tests for `recommend_staged`, `with_pin`, `_partition_parameters_by_stage`, mirror precedence reorder, `_FAMILY_PREFERRED_PHASES`, corner-duration weighting, `_apply_masks_for_session_ids` | various session-shipped modules | OPEN -- promoted to Tier 2 |
 | CR.3 | MAJOR | `recommend_staged` polish silently overrides `--explore 0` to 5% widening | `physics/recommend.py::recommend_staged` `polish_explore = max(explore_pct, 5.0)` | OPEN -- promoted to Tier 1 |
 | CR.4 | MINOR | CLAUDE.md numeric line cites already drifted (`recommend.py:54` actually 57; `:160+` actually ~220) | `CLAUDE.md` | Fixed -- swapped to function-name anchors |
-| CR.5 | MINOR | `_apply_masks_for_session_ids` reads every IBT twice (pre-check via `read_bytes` + parser); silently swallows non-FNF/KeyError | `ingest/api.py::_apply_masks_for_session_ids` and `learn`'s pre-check | OPEN -- Tier 3 |
+| CR.5 | MINOR | `_apply_masks_for_session_ids` reads every IBT twice (pre-check via `read_bytes` + parser); silently swallows non-FNF/KeyError | `ingest/api.py::_apply_masks_for_session_ids` and `learn`'s pre-check | Fixed -- exception swallow broadened to `except Exception` with `warnings.warn`, and `_process_one` now returns `(sid, was_written)` to drive the mask call instead of a redundant disk re-read. |
 
 CR.3 should be on Tier 1 -- it's a silent behavior surprise the user
 can't disable. CR.2 is the most expensive remaining gap (six new test

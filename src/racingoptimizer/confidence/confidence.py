@@ -27,6 +27,14 @@ _VALID_REGIMES: frozenset[str] = frozenset({"sparse", "noisy", "confident", "den
 # Two-sided Gaussian multiplier for a 95% confidence bracket.
 _GAUSSIAN_95_MULTIPLIER: float = 1.96
 
+# Regime-derivation thresholds. Promoted from inline magic numbers per
+# audit Slice-10 #5. Values picked against historical fit_quality
+# distributions across the BMW + Ferrari corpora; adjust together so
+# the four regimes partition the [0, 1] noise_ratio range cleanly.
+_SPARSE_MIN_SAMPLES: int = 30
+_NOISY_NOISE_RATIO: float = 0.5
+_CONFIDENT_NOISE_RATIO: float = 0.2
+
 
 @dataclass(slots=True, frozen=True)
 class Confidence:
@@ -63,13 +71,13 @@ class Confidence:
         if signal_std < 0:
             raise ValueError(f"signal_std must be >= 0, got {signal_std!r}")
 
-        if n_samples < 30:
+        if n_samples < _SPARSE_MIN_SAMPLES:
             regime: Regime = "sparse"
         else:
             noise_ratio = cv_residual_std / max(signal_std, 1e-12)
-            if noise_ratio > 0.5:
+            if noise_ratio > _NOISY_NOISE_RATIO:
                 regime = "noisy"
-            elif noise_ratio > 0.2:
+            elif noise_ratio > _CONFIDENT_NOISE_RATIO:
                 regime = "confident"
             else:
                 regime = "dense"

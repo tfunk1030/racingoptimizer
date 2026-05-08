@@ -166,6 +166,48 @@ def test_from_partial_row_full_row_matches_from_row() -> None:
     assert EnvironmentFrame.from_partial_row(row) == EnvironmentFrame.from_row(row)
 
 
+def test_env_field_order_matches_v4_fitter_contract() -> None:
+    """Pin the EnvironmentFrame -> _env_to_array -> _ENV_COLUMNS coupling.
+
+    Per audit Slice-10 #9: the fitter (`physics/fitter._ENV_COLUMNS`)
+    consumed env columns in a specific order at training time; predict
+    re-builds the same vector from EnvironmentFrame via
+    `physics/model._env_to_array`. If the dataclass field order, the
+    `_env_to_array` body, or `_ENV_COLUMNS` drifts independently the
+    pickled per-car fitters would silently mis-feature.
+
+    This test uses 12 unique sentinel values so any swap surfaces.
+    """
+    import numpy as np
+
+    from racingoptimizer.physics.fitter import _ENV_COLUMNS
+    from racingoptimizer.physics.model import _env_to_array
+
+    env = EnvironmentFrame(
+        air_temp_c=10.0,
+        air_density=20.0,
+        air_pressure_mbar=30.0,
+        relative_humidity=40.0,
+        wind_vel_ms=50.0,
+        wind_dir_deg=60.0,
+        fog_level=70.0,
+        track_temp_c=80.0,
+        track_wetness=90.0,
+        weather_declared_wet=True,  # -> 1.0
+        precip_type=11,
+        skies=12,
+    )
+    arr = _env_to_array(env)
+    expected = np.array(
+        [10, 20, 30, 40, 50, 60, 70, 80, 90, 1, 11, 12], dtype=np.float64
+    )
+    np.testing.assert_array_equal(arr, expected)
+    assert len(_ENV_COLUMNS) == len(arr) == 12, (
+        "_ENV_COLUMNS length must match _env_to_array output length; "
+        "ENV_FEATURE_SCHEMA_VERSION needs a bump if either changes."
+    )
+
+
 def test_from_partial_row_empty_is_all_missing() -> None:
     """An empty row degrades to the all-sentinel default frame.
 
