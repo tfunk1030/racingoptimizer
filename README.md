@@ -8,6 +8,7 @@ uv pip install -e ".[dev]"
 uv run optimize learn ./ibtfiles
 uv run optimize bmw sebring                  # race setup
 uv run optimize bmw spa --quali --fuel 8     # quali-stint setup, 8 L pinned
+uv run optimize bmw spa --physics            # add a physics-view banner above the briefing
 uv run optimize ./my_session.ibt             # auto-detect car/track from IBT path
 ```
 
@@ -43,6 +44,7 @@ weather snapshot), `racingoptimizer.confidence.Confidence` (frozen
 * **`docs/VISION_COMPLIANCE.md`** — per-clause file:line audit.
 * **`CLAUDE.md`** — engineering conventions and per-car verification scope.
 * **`docs/superpowers/specs/`** — per-slice design specs.
+* **`docs/physics-rebuild/`** — 14-day physics-rebuild plan, daily snapshots, completion summary (2026-05-08).
 
 ## Tests
 

@@ -15,8 +15,14 @@ uv pip install -e ".[dev]"
 uv run optimize learn ./ibtfiles            # ingest your .ibt files
 uv run optimize cadillac lagunaseca         # recommend a race setup
 uv run optimize bmw spa --quali --fuel 8    # quali stint, 8 L pinned
+uv run optimize bmw spa --physics           # add physics-view banner above the briefing
 uv run optimize ./my_session.ibt            # OR drop in any .ibt — auto-detects
 ```
+
+The `--physics` flag prepends an informational banner showing per-car
+evaluator weights, geometry (wheelbase, weight distribution), and tyre
+floor pin status. Recommendation values are unchanged — the banner is
+read-only diagnostic context.
 
 The output has two parts:
 

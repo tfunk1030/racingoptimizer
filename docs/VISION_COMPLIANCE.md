@@ -1,5 +1,154 @@
 # VISION.md Compliance Report
 
+> **Currency note (2026-05-08):** post-rebuild. The 2026-05-08 14-day
+> physics-rebuild (`docs/physics-rebuild/COMPLETE.md`) added 8 new
+> modules across `physics/` and `aero/` and shipped 4 of 5 documented
+> failure modes. The 2026-05-08 section below captures the rebuild's
+> VISION-clause impact. The 2026-05-06 follow-up and 2026-05-01
+> second-pass scorecards remain as historical baseline.
+
+## 2026-05-08 post-rebuild update (physics-rebuild Days 0-14)
+
+The 14-day physics-rebuild landed 16 PRs (#70-85) on master. Per-clause
+VISION impact:
+
+### §1 Data Ingestion
+- New `held_out` BOOLEAN column on the `sessions` catalog
+  (`ingest/catalog.py`, additive migration). 5 hash-pinned IBTs
+  in `docs/physics-rebuild/holdout.sha256` are flagged held_out=1
+  and excluded from production queries by default. Gate scripts
+  opt in via `include_held_out=True`.
+- `cat.set_held_out_sessions(conn, ids, held_out=True)` helper.
+- `upsert_session` ON CONFLICT clause omits `held_out` so re-ingest
+  cannot silently flip a gate-only session back to production.
+- `scripts/verify_holdout.sh` runs 3 checks (hash match, catalog
+  flag, no pickle leak) for pre-work integrity.
+
+### §2 Corner-Phase Decomposition
+- New `physics/diagnostic_state.py` derives β (body slip), per-axle
+  kinematic slip angles, and chassis-level axle force decomposition
+  from VelocityX/Y, YawRate, SteeringWheelAngle, LatAccel, LongAccel.
+  Per-car geometry registry (wheelbase, weight distribution, sprung
+  mass, steering ratio) for all 5 GTP cars.
+- `corner_phase_states` aggregates already exposed `duration_s` per
+  (corner_id, phase) -- now consumed by Day 13's responsiveness
+  investigation.
+
+### §3 Physics Model
+- New `physics/bayes_retrofit.py` (closed-form empirical-Bayes
+  hierarchical model). Per-(parameter, track) Bayesian posteriors
+  with `BayesPosterior` dataclass: `mean_std` (uncertainty in
+  central tendency) + `predictive_std` (uncertainty in next
+  observation). Wired into `fit_per_car` -> `PhysicsModel.bayes_posteriors`.
+  `FITTERS_LAYOUT_VERSION` bumped 2 -> 3 to invalidate pre-Day-4 pickles.
+- New `physics/axle_grip.py` -- per-(car, axle) grip-margin model
+  (one parameter per axle, NOT Pacejka per Reviewer Agent 1's veto on
+  circular fits from telemetry alone). `mu_peak` is an *axle utilization
+  ratio* (not tire mu); fits empirically from observed Fy/Fz pairs.
+- New `physics/damper_force.fit_damper_curve_from_velocities` --
+  per-car (k_low_speed, knee_mm_s) refit from corpus shock-velocity
+  p30/p95 percentiles. Backward-compat seeded path retained.
+- Per-parameter local density confidence: `Confidence.with_local_density`
+  downgrades regime when recommended value is more than 3*step from
+  nearest observed value. Wired into `physics/recommend.py::_pin_or_trust_bounds`.
+- Lap-time-weighted samples: `_compute_lap_time_weights` +
+  `_weighted_median` / `_weighted_std` replace plain median/pstdev
+  in both `fit` and `fit_per_car` baseline computation. Closes
+  Mode 3 (driver-bias inheritance) in 11 of 47 BMW Sebring parameters.
+
+### §4 Setup Evaluation
+- Tyre pressure floor pin: `_apply_tyre_pressure_floor_pin` in
+  `cli/recommend.py` defaults `tyre_cold_pressure_kpa` to constraint
+  floor (152 kPa across all 5 cars) unless user passes `--pin
+  tyre_cold_pressure_kpa=`. Closes Mode 2 -- documented surrogate
+  failure to see peak-grip-vs-Fz curvature.
+- New `physics/evaluator.py` per-corner-phase composite physics score:
+  `axle_utilization * w_util + aero_balance * w_balance +
+  grip_headroom * w_head`. Per-car CALIBRATED weights from grid-
+  search against held-out corner-phase duration: BMW (0.2, 0.8, 0.0),
+  Cadillac (0.2, 0.3, 0.5), Ferrari (0.0, 0.0, 1.0). Calibration
+  reproducer at `scripts/day_12b_calibrate_evaluator.py`.
+- `GuardrailReport` + `guardrail_check(score, front_margin,
+  rear_margin)` flag risky setups (axle_util > 1.0, severe
+  imbalance, headroom divergence) -- the evaluator's primary value
+  reframed from lap-time-prediction (weak, Spearman 0.12-0.25 within
+  group) to safety-detection.
+
+### §5 Optimization
+- New `physics/hybrid_optimizer.py` -- phase-aware physics+surrogate
+  combination: `score = w_phase * physics + (1-w_phase) * surrogate`.
+  Per-phase weights derived from Day 13 investigation: mid_corner=0.40
+  (where physics has signal), other phases 0.05-0.10. Guardrail
+  penalty (over_axle_ceiling=-0.15, severely_off_balance=-0.075)
+  applied additively. Module ships as scoring function; DE wiring
+  deferred (see `COMPLETE.md` "Recommended next steps").
+- New `aero/residual_correction.py` -- per-car scalar correction on
+  aero-map peak-lat-G prediction. Authorized fallback triggered on
+  all 3 v4 cars (correction couldn't beat raw on this corpus); ships
+  as infrastructure for future refinement.
+
+### §6 Learning
+- `physics/recommend.py::_observed_values_for_param` returns per-track
+  observed values for v4 cars or synthesised baseline+/-std for v3 cars,
+  feeding `Confidence.with_local_density` for the per-parameter density
+  downgrade.
+- Cache key now includes `bayes_posteriors` schema (FITTERS_LAYOUT_VERSION=3)
+  so adding the field invalidates pre-Day-4 pickles cleanly.
+
+### §7 Output
+- New `--physics` CLI flag: prepends a "PHYSICS VIEW" banner to the
+  briefing. Banner shows per-car evaluator weights (Day 12b),
+  geometry registry (Day 8), tyre floor pin status (Day 1).
+  Recommendation values are unchanged; the banner is informational.
+
+### §8 User Experience
+- `optimize <car> <track> --physics` is the new flag. `optimize learn`
+  preserves existing behavior; held-out IBTs are skipped automatically
+  via the catalog flag without any user-facing change.
+
+### §9 / §10 Conditions, Confidence
+- `Confidence.with_local_density` downgrades regime when recommended
+  value is far from observed cluster -- closes Mode 4 ("dense reads
+  while extrapolating").
+- `BayesPosterior.mean_std` vs `predictive_std` distinction lets the
+  recommender's local-density check use mean-std (uncertainty in
+  central tendency) while held-out coverage tests use predictive-std
+  (uncertainty in next observation).
+
+### Test surface added by rebuild
+- 195 new tests across 14 days. Subdirectories:
+  `tests/physics/test_evaluator.py` (22),
+  `tests/physics/test_hybrid_optimizer.py` (16),
+  `tests/physics/test_axle_grip.py` (17),
+  `tests/physics/test_diagnostic_state.py` (24),
+  `tests/physics/test_lap_weighted.py` (14),
+  `tests/physics/test_bayes_retrofit.py` (16),
+  `tests/physics/test_bayes_wire_in.py` (9),
+  `tests/physics/test_local_density_integration.py` (8),
+  `tests/aero/test_residual_correction.py` (14),
+  `tests/confidence/test_local_density.py` (16),
+  `tests/cli/test_tyre_pressure_floor.py` (9),
+  `tests/cli/test_physics_flag.py` (6),
+  `tests/ingest/test_held_out.py` (9),
+  `tests/physics/test_damper_refit.py` (15).
+
+### Mode-by-mode rollup (from `docs/physics-rebuild/COMPLETE.md`)
+- **Mode 2** (tyre pressure misranking): CLOSED. All 5 cars pin to
+  152 kPa floor by default.
+- **Mode 3** (driver-bias inheritance): CLOSED. Lap-time-weighted
+  samples shifted 11 of 47 BMW Sebring parameters toward fast-lap
+  quartile.
+- **Mode 4** (confidence reads dense while extrapolating): CLOSED.
+  Per-parameter local density check downgrades regime when
+  recommended value is >3*step from observed cluster.
+- **Mode 1** (cross-track confounding): math correct (Day 3 canonical
+  case 100% improvement on synthetic Hockenheim 24*17 vs Spa 6*14.5);
+  empirics inconclusive on this corpus's held-out IBTs (Day 5 BMW
+  Spa MAE -7.3% vs +5% target). Held-out IBTs are themselves outlier
+  setups, not converged targets.
+- **Mode 5** (new car/track day-zero): infrastructure complete (Days
+  8-13); production DE-search wiring deferred per `COMPLETE.md`.
+
 > **Currency note (2026-05-06):** the per-clause scorecard below is from
 > the 2026-05-01 second-pass audit. The summary at the top of this file
 > has been refreshed with every change landed since (per-car v4 enabled
