@@ -312,6 +312,22 @@ def recommend(
             # downgrade so the briefing doesn't claim a confident
             # prediction for a value the regressor extrapolated to.
             confidence = replace(confidence, regime="noisy")
+        else:
+            # Per-parameter local density downgrade (PLAN.md Day 2,
+            # Mode 4): even outside reset mode, a recommended value
+            # that's > 3 step units from the nearest observed sample
+            # has effectively no training density supporting it; the
+            # global confidence label overstates trust. Downgrade by
+            # one tier (no-op when regime is already sparse).
+            observed = _observed_values_for_param(model, track, name)
+            spec = model.ontology.get(name)
+            step = float(spec.step) if (spec is not None and spec.step) else 0.0
+            if observed and step > 0:
+                confidence = confidence.with_local_density(
+                    recommended=float(clamped.value),
+                    observed_values=observed,
+                    step=step,
+                )
         parameters[name] = (float(clamped.value), confidence)
 
     _fill_untrained_baselines(parameters, model, full_baseline)
@@ -672,6 +688,51 @@ def _seed_population(
         for j, (lo, hi) in enumerate(bounds):
             pop[i, j] = rng.uniform(lo, hi)
     return pop
+
+
+def _observed_values_for_param(
+    model: PhysicsModel, track: str, parameter: str,
+) -> tuple[float, ...]:
+    """Return the observed values for `parameter` relevant to `track`.
+
+    For per-car (v4) models, prefers the per-track observed list (the
+    surrogate is track-agnostic but the trust radius and density check
+    are scoped to the target track). Falls back to the cross-track
+    median observed std as a coarse density proxy if per-track data is
+    absent (e.g. cross-car schedule borrow case).
+
+    For per-(car, track) (v3) models, the model's training corpus is
+    already track-scoped so we approximate with the baseline value plus
+    +/- 1 std as a 3-point synthetic cluster (the std bookkeeping is
+    per-parameter; we don't keep the raw values).
+
+    Returns an empty tuple when no observed data is available -- the
+    caller leaves the global regime label alone (Mode 5 territory:
+    untrained car/track; sparseness is set upstream).
+    """
+    per_track = getattr(model, "per_track_parameter_observed", None)
+    if per_track is not None:
+        per_param = per_track.get(track, {})
+        values = per_param.get(parameter)
+        if values:
+            return tuple(float(v) for v in values)
+    # v3 fallback: synthesise a 3-point cluster from baseline +/- std.
+    # This is coarse but correctly flags clearly out-of-cluster values
+    # (e.g. recommended 200 vs baseline 152 with std 1.5: distance ~32x
+    # std, downgrades regime).
+    baseline = model.baseline_setup.get(parameter)
+    std = (
+        getattr(model, "parameter_observed_std", {}) or {}
+    ).get(parameter, 0.0)
+    if baseline is None:
+        return ()
+    if std <= 0:
+        return (float(baseline),)
+    return (
+        float(baseline) - float(std),
+        float(baseline),
+        float(baseline) + float(std),
+    )
 
 
 def _parameter_confidence(model: PhysicsModel, parameter: str) -> Confidence:
