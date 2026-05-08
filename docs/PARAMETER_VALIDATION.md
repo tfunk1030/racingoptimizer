@@ -30,11 +30,11 @@ There is no ontology entry called `brake_duct_*`; the only `brake_duct` referenc
 
 | car | skipped | params | OK | MISMATCH | BLOCKED | READOUT | unmapped (blocked) | unmapped (readout) |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| acura | — | 42 | 16 | 0 | 26 | 0 | 41 | 24 |
-| bmw | — | 42 | 18 | 0 | 24 | 0 | 40 | 29 |
-| cadillac | — | 42 | 18 | 0 | 24 | 0 | 43 | 29 |
-| ferrari | — | 42 | 13 | 0 | 29 | 0 | 63 | 28 |
-| porsche | — | 42 | 18 | 0 | 24 | 0 | 51 | 27 |
+| acura | — | 49 | 37 | 2 | 10 | 0 | 38 | 24 |
+| bmw | — | 55 | 47 | 0 | 8 | 0 | 27 | 29 |
+| cadillac | — | 51 | 43 | 0 | 8 | 0 | 34 | 29 |
+| ferrari | — | 56 | 46 | 0 | 10 | 0 | 32 | 28 |
+| porsche | — | 49 | 29 | 12 | 8 | 0 | 48 | 27 |
 
 ## acura
 
@@ -55,23 +55,28 @@ Fixture: `ibtfiles/acuraarx06gtp_daytona 2011 road 2026-04-03 20-31-55.ibt`
 | `corner_weight_fr_kg` | `Chassis.RightFront.CornerWeight` | N | corner_weight | · | ✓ | '2706 N' | 2706 | BLOCKED |
 | `corner_weight_rl_kg` | `Chassis.LeftRear.CornerWeight` | N | corner_weight | · | ✓ | '3053 N' | 3053 | BLOCKED |
 | `corner_weight_rr_kg` | `Chassis.RightRear.CornerWeight` | N | corner_weight | · | ✓ | '3049 N' | 3049 | BLOCKED |
-| `damper_hsc_fl` | `Dampers.FrontHeave.HsCompDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_hsc_fr` | `Dampers.FrontHeave.HsCompDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_hsc_rl` | `Dampers.RearHeave.HsCompDamping` | click | damper | · | ✓ | '9 clicks' | 9 | BLOCKED |
-| `damper_hsc_rr` | `Dampers.RearHeave.HsCompDamping` | click | damper | · | ✓ | '9 clicks' | 9 | BLOCKED |
-| `damper_hsr_fl` | `Dampers.FrontHeave.HsRbdDamping` | click | damper | · | ✓ | '4 clicks' | 4 | BLOCKED |
-| `damper_hsr_fr` | `Dampers.FrontHeave.HsRbdDamping` | click | damper | · | ✓ | '4 clicks' | 4 | BLOCKED |
-| `damper_hsr_rl` | `Dampers.RearHeave.HsRbdDamping` | click | damper | · | ✓ | '7 clicks' | 7 | BLOCKED |
-| `damper_hsr_rr` | `Dampers.RearHeave.HsRbdDamping` | click | damper | · | ✓ | '7 clicks' | 7 | BLOCKED |
-| `damper_lsc_fl` | `Dampers.FrontHeave.LsCompDamping` | click | damper | · | ✓ | '3 clicks' | 3 | BLOCKED |
-| `damper_lsc_fr` | `Dampers.FrontHeave.LsCompDamping` | click | damper | · | ✓ | '3 clicks' | 3 | BLOCKED |
-| `damper_lsc_rl` | `Dampers.RearHeave.LsCompDamping` | click | damper | · | ✓ | '8 clicks' | 8 | BLOCKED |
-| `damper_lsc_rr` | `Dampers.RearHeave.LsCompDamping` | click | damper | · | ✓ | '8 clicks' | 8 | BLOCKED |
-| `damper_lsr_fl` | `Dampers.FrontHeave.LsRbdDamping` | click | damper | · | ✓ | '2 clicks' | 2 | BLOCKED |
-| `damper_lsr_fr` | `Dampers.FrontHeave.LsRbdDamping` | click | damper | · | ✓ | '2 clicks' | 2 | BLOCKED |
-| `damper_lsr_rl` | `Dampers.RearHeave.LsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsr_rr` | `Dampers.RearHeave.LsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
+| `damper_hsc_fl` | `Dampers.FrontHeave.HsCompDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsc_fr` | `Dampers.FrontHeave.HsCompDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsc_rl` | `Dampers.RearHeave.HsCompDamping` | click | damper | ✓ | ✓ | '9 clicks' | 9 | OK |
+| `damper_hsc_rr` | `Dampers.RearHeave.HsCompDamping` | click | damper | ✓ | ✓ | '9 clicks' | 9 | OK |
+| `damper_hsc_slope_fl` | `Dampers.FrontHeave.HsCompDampSlope` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_hsc_slope_fr` | `Dampers.FrontHeave.HsCompDampSlope` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_hsc_slope_rl` | `Dampers.RearHeave.HsCompDampSlope` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_hsc_slope_rr` | `Dampers.RearHeave.HsCompDampSlope` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_hsr_fl` | `Dampers.FrontHeave.HsRbdDamping` | click | damper | ✓ | ✓ | '4 clicks' | 4 | OK |
+| `damper_hsr_fr` | `Dampers.FrontHeave.HsRbdDamping` | click | damper | ✓ | ✓ | '4 clicks' | 4 | OK |
+| `damper_hsr_rl` | `Dampers.RearHeave.HsRbdDamping` | click | damper | ✓ | ✓ | '7 clicks' | 7 | OK |
+| `damper_hsr_rr` | `Dampers.RearHeave.HsRbdDamping` | click | damper | ✓ | ✓ | '7 clicks' | 7 | OK |
+| `damper_lsc_fl` | `Dampers.FrontHeave.LsCompDamping` | click | damper | ✓ | ✓ | '3 clicks' | 3 | OK |
+| `damper_lsc_fr` | `Dampers.FrontHeave.LsCompDamping` | click | damper | ✓ | ✓ | '3 clicks' | 3 | OK |
+| `damper_lsc_rl` | `Dampers.RearHeave.LsCompDamping` | click | damper | ✓ | ✓ | '8 clicks' | 8 | OK |
+| `damper_lsc_rr` | `Dampers.RearHeave.LsCompDamping` | click | damper | ✓ | ✓ | '8 clicks' | 8 | OK |
+| `damper_lsr_fl` | `Dampers.FrontHeave.LsRbdDamping` | click | damper | ✓ | ✓ | '2 clicks' | 2 | OK |
+| `damper_lsr_fr` | `Dampers.FrontHeave.LsRbdDamping` | click | damper | ✓ | ✓ | '2 clicks' | 2 | OK |
+| `damper_lsr_rl` | `Dampers.RearHeave.LsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsr_rr` | `Dampers.RearHeave.LsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
 | `diff_preload_nm` | `Systems.RearDiffSpec.Preload` | Nm | diff | ✓ | ✓ | '20 Nm' | 20 | OK |
+| `fuel_level_l` | `BrakesDriveUnit.Fuel.FuelLevel` | L | fuel | ✓ | ✓ | — |  | MISMATCH |
 | `heave_perch_offset_front_mm` | `Chassis.Front.HeavePerchOffset` | mm | perch_offset | ✓ | ✓ | '49.0 mm' | 49 | OK |
 | `heave_slider_mm` | `Chassis.Front.HeaveDamperDefl` | mm | heave_slider | ✓ | · | '5.1 mm 100.0 mm' | 5.1 | BLOCKED |
 | `heave_spring_mm` | `Chassis.Front.HeaveSpringDefl` | mm | heave_spring | ✓ | · | '8.5 mm 50.6 mm' | 8.5 | BLOCKED |
@@ -85,16 +90,20 @@ Fixture: `ibtfiles/acuraarx06gtp_daytona 2011 road 2026-04-03 20-31-55.ibt`
 | `static_ride_height_rear_mm` | `Chassis.LeftRear.RideHeight` | mm | ride_height | ✓ | · | '44.9 mm' | 44.9 | BLOCKED |
 | `third_perch_offset_rear_mm` | `Chassis.Rear.ThirdPerchOffset` | mm | perch_offset | · | ✓ | — |  | BLOCKED |
 | `third_spring_rate_n_per_mm` | `Chassis.Rear.HeaveSpring` | N/mm | spring_rate | ✓ | ✓ | '170 N/mm' | 170 | OK |
+| `toe_front_mm` | `Chassis.Front.ToeIn` | mm | camber | ✓ | ✓ | '-0.2 mm' | -0.2 | OK |
+| `toe_rl_mm` | `Chassis.LeftRear.ToeIn` | mm | camber | ✓ | ✓ | — |  | MISMATCH |
 | `tyre_cold_pressure_kpa` | `TiresAero.LeftFront.StartingPressure` | kPa | tyre_pressure | ✓ | ✓ | '152 kPa' | 152 | OK |
 
-_No fittable failures: every fittable parameter resolves to a numeric value._
+### Fittable failures (mapped but unresolved)
+
+- `fuel_level_l` → `BrakesDriveUnit.Fuel.FuelLevel`
+- `toe_rl_mm` → `Chassis.LeftRear.ToeIn`
 
 ### Unmapped user-settable leaves (potential coverage gaps)
 
 | path | value | reason |
 | --- | --- | --- |
 | `Chassis.Front.ArbSize` | 'Soft' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.Front.ToeIn` | '-0.2 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.LeftFront.TorsionBarOD` | '14.34 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.LeftFront.TorsionBarTurns` | '0.095 Turns' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.LeftRear.TorsionBarOD` | '15.14 mm' | user-settable garage input lacks verified optimizer mapping |
@@ -105,10 +114,8 @@ _No fittable failures: every fittable parameter resolves to a numeric value._
 | `Chassis.RightFront.TorsionBarTurns` | '0.095 Turns' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.TorsionBarOD` | '15.14 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.TorsionBarTurns` | '-0.115 Turns' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.FrontHeave.HsCompDampSlope` | '10 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Dampers.FrontRoll.HsDamping` | '4 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Dampers.FrontRoll.LsDamping` | '2 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RearHeave.HsCompDampSlope` | '10 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Dampers.RearRoll.HsDamping` | '8 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Dampers.RearRoll.LsDamping` | '9 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Systems.BrakeSpec.BrakeBiasMigration` | 0 | user-settable garage input lacks verified optimizer mapping |
@@ -174,6 +181,8 @@ Fixture: `ibtfiles/bmwlmdh_sebring international 2026-03-22 14-52-24.ibt`
 | --- | --- | --- | --- | :-: | :-: | --- | ---: | --- |
 | `anti_roll_bar_front` | `Chassis.Front.ArbBlades` | click | arb | ✓ | ✓ | 1 | 1 | OK |
 | `anti_roll_bar_rear` | `Chassis.Rear.ArbBlades` | click | arb | ✓ | ✓ | 1 | 1 | OK |
+| `arb_size_front` | `Chassis.Front.ArbSize` |  | arb | ✓ | ✓ | 'Soft' | 1 | OK |
+| `arb_size_rear` | `Chassis.Rear.ArbSize` |  | arb | ✓ | ✓ | 'Medium' | 2 | OK |
 | `brake_bias_pct` | `BrakesDriveUnit.BrakeSpec.BrakePressureBias` | pct | brake_bias | ✓ | ✓ | '46.50%' | 46.5 | OK |
 | `camber_fl_deg` | `Chassis.LeftFront.Camber` | deg | camber | ✓ | ✓ | '-2.9 deg' | -2.9 | OK |
 | `camber_fr_deg` | `Chassis.RightFront.Camber` | deg | camber | ✓ | ✓ | '-2.9 deg' | -2.9 | OK |
@@ -183,23 +192,30 @@ Fixture: `ibtfiles/bmwlmdh_sebring international 2026-03-22 14-52-24.ibt`
 | `corner_weight_fr_kg` | `Chassis.RightFront.CornerWeight` | N | corner_weight | · | ✓ | '2761 N' | 2761 | BLOCKED |
 | `corner_weight_rl_kg` | `Chassis.LeftRear.CornerWeight` | N | corner_weight | · | ✓ | '3079 N' | 3079 | BLOCKED |
 | `corner_weight_rr_kg` | `Chassis.RightRear.CornerWeight` | N | corner_weight | · | ✓ | '3079 N' | 3079 | BLOCKED |
-| `damper_hsc_fl` | `Chassis.LeftFront.HsCompDamping` | click | damper | · | ✓ | '9 clicks' | 9 | BLOCKED |
-| `damper_hsc_fr` | `Chassis.RightFront.HsCompDamping` | click | damper | · | ✓ | '9 clicks' | 9 | BLOCKED |
-| `damper_hsc_rl` | `Chassis.LeftRear.HsCompDamping` | click | damper | · | ✓ | '10 clicks' | 10 | BLOCKED |
-| `damper_hsc_rr` | `Chassis.RightRear.HsCompDamping` | click | damper | · | ✓ | '10 clicks' | 10 | BLOCKED |
-| `damper_hsr_fl` | `Chassis.LeftFront.HsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_hsr_fr` | `Chassis.RightFront.HsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_hsr_rl` | `Chassis.LeftRear.HsRbdDamping` | click | damper | · | ✓ | '6 clicks' | 6 | BLOCKED |
-| `damper_hsr_rr` | `Chassis.RightRear.HsRbdDamping` | click | damper | · | ✓ | '6 clicks' | 6 | BLOCKED |
-| `damper_lsc_fl` | `Chassis.LeftFront.LsCompDamping` | click | damper | · | ✓ | '10 clicks' | 10 | BLOCKED |
-| `damper_lsc_fr` | `Chassis.RightFront.LsCompDamping` | click | damper | · | ✓ | '10 clicks' | 10 | BLOCKED |
-| `damper_lsc_rl` | `Chassis.LeftRear.LsCompDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsc_rr` | `Chassis.RightRear.LsCompDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsr_fl` | `Chassis.LeftFront.LsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsr_fr` | `Chassis.RightFront.LsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsr_rl` | `Chassis.LeftRear.LsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsr_rr` | `Chassis.RightRear.LsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
+| `damper_hsc_fl` | `Chassis.LeftFront.HsCompDamping` | click | damper | ✓ | ✓ | '9 clicks' | 9 | OK |
+| `damper_hsc_fr` | `Chassis.RightFront.HsCompDamping` | click | damper | ✓ | ✓ | '9 clicks' | 9 | OK |
+| `damper_hsc_rl` | `Chassis.LeftRear.HsCompDamping` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_hsc_rr` | `Chassis.RightRear.HsCompDamping` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_hsc_slope_fl` | `Chassis.LeftFront.HsCompDampSlope` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsc_slope_fr` | `Chassis.RightFront.HsCompDampSlope` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsc_slope_rl` | `Chassis.LeftRear.HsCompDampSlope` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsc_slope_rr` | `Chassis.RightRear.HsCompDampSlope` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsr_fl` | `Chassis.LeftFront.HsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsr_fr` | `Chassis.RightFront.HsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsr_rl` | `Chassis.LeftRear.HsRbdDamping` | click | damper | ✓ | ✓ | '6 clicks' | 6 | OK |
+| `damper_hsr_rr` | `Chassis.RightRear.HsRbdDamping` | click | damper | ✓ | ✓ | '6 clicks' | 6 | OK |
+| `damper_lsc_fl` | `Chassis.LeftFront.LsCompDamping` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_lsc_fr` | `Chassis.RightFront.LsCompDamping` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_lsc_rl` | `Chassis.LeftRear.LsCompDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsc_rr` | `Chassis.RightRear.LsCompDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsr_fl` | `Chassis.LeftFront.LsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsr_fr` | `Chassis.RightFront.LsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsr_rl` | `Chassis.LeftRear.LsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsr_rr` | `Chassis.RightRear.LsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `diff_clutch_friction_plates` | `BrakesDriveUnit.RearDiffSpec.ClutchFrictionPlates` | plates | diff | ✓ | ✓ | 6 | 6 | OK |
+| `diff_coast_drive_ramps` | `BrakesDriveUnit.RearDiffSpec.CoastDriveRampAngles` |  | diff | ✓ | ✓ | '45/70' | 1 | OK |
 | `diff_preload_nm` | `BrakesDriveUnit.RearDiffSpec.Preload` | Nm | diff | ✓ | ✓ | '10 Nm' | 10 | OK |
+| `fuel_level_l` | `BrakesDriveUnit.Fuel.FuelLevel` | L | fuel | ✓ | ✓ | '88.1 L' | 88.1 | OK |
 | `heave_perch_offset_front_mm` | `Chassis.Front.HeavePerchOffset` | mm | perch_offset | ✓ | ✓ | '-30.5 mm' | -30.5 | OK |
 | `heave_slider_mm` | `Chassis.Front.HeaveSliderDefl` | mm | heave_slider | ✓ | · | '41.8 mm 200.0 mm' | 41.8 | BLOCKED |
 | `heave_spring_mm` | `Chassis.Front.HeaveSpringDefl` | mm | heave_spring | ✓ | · | '24.7 mm 97.7 mm' | 24.7 | BLOCKED |
@@ -213,6 +229,10 @@ Fixture: `ibtfiles/bmwlmdh_sebring international 2026-03-22 14-52-24.ibt`
 | `static_ride_height_rear_mm` | `Chassis.LeftRear.RideHeight` | mm | ride_height | ✓ | · | '48.2 mm' | 48.2 | BLOCKED |
 | `third_perch_offset_rear_mm` | `Chassis.Rear.ThirdPerchOffset` | mm | perch_offset | ✓ | ✓ | '36.0 mm' | 36 | OK |
 | `third_spring_rate_n_per_mm` | `Chassis.Rear.ThirdSpring` | N/mm | spring_rate | ✓ | ✓ | '380 N/mm' | 380 | OK |
+| `toe_front_mm` | `Chassis.Front.ToeIn` | mm | camber | ✓ | ✓ | '-1.0 mm' | -1 | OK |
+| `toe_rl_mm` | `Chassis.LeftRear.ToeIn` | mm | camber | ✓ | ✓ | '+0.3 mm' | 0.3 | OK |
+| `torsion_bar_od_fl_mm` | `Chassis.LeftFront.TorsionBarOD` | mm | torsion_bar | ✓ | ✓ | '14.34 mm' | 14.34 | OK |
+| `torsion_bar_turns_fl` | `Chassis.LeftFront.TorsionBarTurns` | turns | torsion_bar | ✓ | ✓ | '0.091 Turns' | 0.091 | OK |
 | `tyre_cold_pressure_kpa` | `TiresAero.LeftFront.StartingPressure` | kPa | tyre_pressure | ✓ | ✓ | '152 kPa' | 152 | OK |
 
 _No fittable failures: every fittable parameter resolves to a numeric value._
@@ -226,7 +246,6 @@ _No fittable failures: every fittable parameter resolves to a numeric value._
 | `BrakesDriveUnit.BrakeSpec.FrontMasterCyl` | '20.6 mm' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.BrakeSpec.PadCompound` | 'Medium' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.BrakeSpec.RearMasterCyl` | '22.2 mm' | user-settable garage input lacks verified optimizer mapping |
-| `BrakesDriveUnit.Fuel.FuelLevel` | '88.1 L' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.Fuel.FuelLowWarning` | '8.0 L' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.GearRatios.GearStack` | 'Short' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.GearRatios.SpeedInFifth` | '257.0 Km/h' | user-settable garage input lacks verified optimizer mapping |
@@ -238,22 +257,10 @@ _No fittable failures: every fittable parameter resolves to a numeric value._
 | `BrakesDriveUnit.GearRatios.SpeedInThird` | '184.2 Km/h' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.HybridConfig` | — | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.Lighting.RoofIdLightColor` | 'Orange' | user-settable garage input lacks verified optimizer mapping |
-| `BrakesDriveUnit.RearDiffSpec.ClutchFrictionPlates` | 6 | user-settable garage input lacks verified optimizer mapping |
-| `BrakesDriveUnit.RearDiffSpec.CoastDriveRampAngles` | '45/70' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.TractionControl.TractionControlGain` | '4 (TCLAT)' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.TractionControl.TractionControlSlip` | '3 (TCLON)' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.Front.ArbSize` | 'Soft' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.Front.ToeIn` | '-1.0 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftFront.HsCompDampSlope` | '5 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftFront.TorsionBarOD` | '14.34 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftFront.TorsionBarTurns` | '0.091 Turns' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftRear.HsCompDampSlope` | '11 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftRear.ToeIn` | '+0.3 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.Rear.ArbSize` | 'Medium' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.RightFront.HsCompDampSlope` | '5 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightFront.TorsionBarOD` | '14.34 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightFront.TorsionBarTurns` | '0.091 Turns' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.RightRear.HsCompDampSlope` | '11 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.SpringPerchOffset` | '30.0 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.SpringRate` | '160 N/mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.ToeIn` | '+0.3 mm' | user-settable garage input lacks verified optimizer mapping |
@@ -315,23 +322,28 @@ Fixture: `ibtfiles/cadillacvseriesrgtp_lagunaseca 2026-04-27 19-50-46.ibt`
 | `corner_weight_fr_kg` | `Chassis.RightFront.CornerWeight` | N | corner_weight | · | ✓ | '2655 N' | 2655 | BLOCKED |
 | `corner_weight_rl_kg` | `Chassis.LeftRear.CornerWeight` | N | corner_weight | · | ✓ | '2827 N' | 2827 | BLOCKED |
 | `corner_weight_rr_kg` | `Chassis.RightRear.CornerWeight` | N | corner_weight | · | ✓ | '2827 N' | 2827 | BLOCKED |
-| `damper_hsc_fl` | `Chassis.LeftFront.HsCompDamping` | click | damper | · | ✓ | '7 clicks' | 7 | BLOCKED |
-| `damper_hsc_fr` | `Chassis.RightFront.HsCompDamping` | click | damper | · | ✓ | '7 clicks' | 7 | BLOCKED |
-| `damper_hsc_rl` | `Chassis.LeftRear.HsCompDamping` | click | damper | · | ✓ | '10 clicks' | 10 | BLOCKED |
-| `damper_hsc_rr` | `Chassis.RightRear.HsCompDamping` | click | damper | · | ✓ | '10 clicks' | 10 | BLOCKED |
-| `damper_hsr_fl` | `Chassis.LeftFront.HsRbdDamping` | click | damper | · | ✓ | '6 clicks' | 6 | BLOCKED |
-| `damper_hsr_fr` | `Chassis.RightFront.HsRbdDamping` | click | damper | · | ✓ | '6 clicks' | 6 | BLOCKED |
-| `damper_hsr_rl` | `Chassis.LeftRear.HsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_hsr_rr` | `Chassis.RightRear.HsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsc_fl` | `Chassis.LeftFront.LsCompDamping` | click | damper | · | ✓ | '6 clicks' | 6 | BLOCKED |
-| `damper_lsc_fr` | `Chassis.RightFront.LsCompDamping` | click | damper | · | ✓ | '6 clicks' | 6 | BLOCKED |
-| `damper_lsc_rl` | `Chassis.LeftRear.LsCompDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsc_rr` | `Chassis.RightRear.LsCompDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsr_fl` | `Chassis.LeftFront.LsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsr_fr` | `Chassis.RightFront.LsRbdDamping` | click | damper | · | ✓ | '5 clicks' | 5 | BLOCKED |
-| `damper_lsr_rl` | `Chassis.LeftRear.LsRbdDamping` | click | damper | · | ✓ | '4 clicks' | 4 | BLOCKED |
-| `damper_lsr_rr` | `Chassis.RightRear.LsRbdDamping` | click | damper | · | ✓ | '4 clicks' | 4 | BLOCKED |
+| `damper_hsc_fl` | `Chassis.LeftFront.HsCompDamping` | click | damper | ✓ | ✓ | '7 clicks' | 7 | OK |
+| `damper_hsc_fr` | `Chassis.RightFront.HsCompDamping` | click | damper | ✓ | ✓ | '7 clicks' | 7 | OK |
+| `damper_hsc_rl` | `Chassis.LeftRear.HsCompDamping` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_hsc_rr` | `Chassis.RightRear.HsCompDamping` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_hsc_slope_fl` | `Chassis.LeftFront.HsCompDampSlope` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsc_slope_fr` | `Chassis.RightFront.HsCompDampSlope` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsc_slope_rl` | `Chassis.LeftRear.HsCompDampSlope` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsc_slope_rr` | `Chassis.RightRear.HsCompDampSlope` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsr_fl` | `Chassis.LeftFront.HsRbdDamping` | click | damper | ✓ | ✓ | '6 clicks' | 6 | OK |
+| `damper_hsr_fr` | `Chassis.RightFront.HsRbdDamping` | click | damper | ✓ | ✓ | '6 clicks' | 6 | OK |
+| `damper_hsr_rl` | `Chassis.LeftRear.HsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_hsr_rr` | `Chassis.RightRear.HsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsc_fl` | `Chassis.LeftFront.LsCompDamping` | click | damper | ✓ | ✓ | '6 clicks' | 6 | OK |
+| `damper_lsc_fr` | `Chassis.RightFront.LsCompDamping` | click | damper | ✓ | ✓ | '6 clicks' | 6 | OK |
+| `damper_lsc_rl` | `Chassis.LeftRear.LsCompDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsc_rr` | `Chassis.RightRear.LsCompDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsr_fl` | `Chassis.LeftFront.LsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsr_fr` | `Chassis.RightFront.LsRbdDamping` | click | damper | ✓ | ✓ | '5 clicks' | 5 | OK |
+| `damper_lsr_rl` | `Chassis.LeftRear.LsRbdDamping` | click | damper | ✓ | ✓ | '4 clicks' | 4 | OK |
+| `damper_lsr_rr` | `Chassis.RightRear.LsRbdDamping` | click | damper | ✓ | ✓ | '4 clicks' | 4 | OK |
 | `diff_preload_nm` | `BrakesDriveUnit.DiffSpec.Preload` | Nm | diff | ✓ | ✓ | '30 Nm' | 30 | OK |
+| `fuel_level_l` | `BrakesDriveUnit.Fuel.FuelLevel` | L | fuel | ✓ | ✓ | '6.5 L' | 6.5 | OK |
 | `heave_perch_offset_front_mm` | `Chassis.Front.HeavePerchOffset` | mm | perch_offset | ✓ | ✓ | '-27.5 mm' | -27.5 | OK |
 | `heave_slider_mm` | `Chassis.Front.HeaveSliderDefl` | mm | heave_slider | ✓ | · | '33.1 mm 200.0 mm' | 33.1 | BLOCKED |
 | `heave_spring_mm` | `Chassis.Front.HeaveSpringDefl` | mm | heave_spring | ✓ | · | '13.0 mm 97.7 mm' | 13 | BLOCKED |
@@ -345,6 +357,10 @@ Fixture: `ibtfiles/cadillacvseriesrgtp_lagunaseca 2026-04-27 19-50-46.ibt`
 | `static_ride_height_rear_mm` | `Chassis.LeftRear.RideHeight` | mm | ride_height | ✓ | · | '46.8 mm' | 46.8 | BLOCKED |
 | `third_perch_offset_rear_mm` | `Chassis.Rear.ThirdPerchOffset` | mm | perch_offset | ✓ | ✓ | '39.5 mm' | 39.5 | OK |
 | `third_spring_rate_n_per_mm` | `Chassis.Rear.ThirdSpring` | N/mm | spring_rate | ✓ | ✓ | '320 N/mm' | 320 | OK |
+| `toe_front_mm` | `Chassis.Front.ToeIn` | mm | camber | ✓ | ✓ | '-0.1 mm' | -0.1 | OK |
+| `toe_rl_mm` | `Chassis.LeftRear.ToeIn` | mm | camber | ✓ | ✓ | '-0.1 mm' | -0.1 | OK |
+| `torsion_bar_od_fl_mm` | `Chassis.LeftFront.TorsionBarOD` | mm | torsion_bar | ✓ | ✓ | '15.51 mm' | 15.51 | OK |
+| `torsion_bar_turns_fl` | `Chassis.LeftFront.TorsionBarTurns` | turns | torsion_bar | ✓ | ✓ | '0.093 Turns' | 0.093 | OK |
 | `tyre_cold_pressure_kpa` | `TiresAero.LeftFront.StartingPressure` | kPa | tyre_pressure | ✓ | ✓ | '152 kPa' | 152 | OK |
 
 _No fittable failures: every fittable parameter resolves to a numeric value._
@@ -361,7 +377,6 @@ _No fittable failures: every fittable parameter resolves to a numeric value._
 | `BrakesDriveUnit.DiffSpec.ClutchFrictionPlates` | 4 | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.DiffSpec.DiffCoastRampAngle` | '40 deg' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.DiffSpec.DiffDriveRampAngle` | '65 deg' | user-settable garage input lacks verified optimizer mapping |
-| `BrakesDriveUnit.Fuel.FuelLevel` | '6.5 L' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.Fuel.FuelLowWarning` | '7.5 L' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.Fuel.FuelTarget` | '2.79 L' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.GearRatios.GearStack` | 'Short' | user-settable garage input lacks verified optimizer mapping |
@@ -378,17 +393,9 @@ _No fittable failures: every fittable parameter resolves to a numeric value._
 | `BrakesDriveUnit.TcAndThrottle.TractionControlSlip` | '3 (TC A)' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.Front.ArbSize` | 'Soft' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.Front.PowerSteeringAssist` | '8 (EPAS)' | unmapped garage leaf requires explicit classification |
-| `Chassis.Front.ToeIn` | '-0.1 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftFront.HsCompDampSlope` | '5 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftFront.TorsionBarOD` | '15.51 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftFront.TorsionBarTurns` | '0.093 Turns' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftRear.HsCompDampSlope` | '11 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftRear.ToeIn` | '-0.1 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.Rear.ArbSize` | 'Medium' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.RightFront.HsCompDampSlope` | '5 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightFront.TorsionBarOD` | '15.51 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightFront.TorsionBarTurns` | '0.093 Turns' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.RightRear.HsCompDampSlope` | '11 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.SpringPerchOffset` | '32.5 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.SpringRate` | '175 N/mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.ToeIn` | '-0.1 mm' | user-settable garage input lacks verified optimizer mapping |
@@ -441,6 +448,8 @@ Fixture: `ibtfiles/ferrari499p_hockenheim gp 2026-03-31 15-49-42.ibt`
 | --- | --- | --- | --- | :-: | :-: | --- | ---: | --- |
 | `anti_roll_bar_front` | `Chassis.Front.ArbBlades` | click | arb | ✓ | ✓ | 1 | 1 | OK |
 | `anti_roll_bar_rear` | `Chassis.Rear.ArbBlades` | click | arb | ✓ | ✓ | 3 | 3 | OK |
+| `arb_size_front` | `Chassis.Front.ArbSize` |  | arb | ✓ | ✓ | 'A' | 1 | OK |
+| `arb_size_rear` | `Chassis.Rear.ArbSize` |  | arb | ✓ | ✓ | 'C' | 3 | OK |
 | `brake_bias_pct` | `Systems.BrakeSpec.BrakePressureBias` | pct | brake_bias | ✓ | ✓ | '53.00%' | 53 | OK |
 | `camber_fl_deg` | `Chassis.LeftFront.Camber` | deg | camber | ✓ | ✓ | '-2.8 deg' | -2.8 | OK |
 | `camber_fr_deg` | `Chassis.RightFront.Camber` | deg | camber | ✓ | ✓ | '-2.8 deg' | -2.8 | OK |
@@ -450,27 +459,33 @@ Fixture: `ibtfiles/ferrari499p_hockenheim gp 2026-03-31 15-49-42.ibt`
 | `corner_weight_fr_kg` | `Chassis.RightFront.CornerWeight` | N | corner_weight | · | ✓ | '2582 N' | 2582 | BLOCKED |
 | `corner_weight_rl_kg` | `Chassis.LeftRear.CornerWeight` | N | corner_weight | · | ✓ | '2845 N' | 2845 | BLOCKED |
 | `corner_weight_rr_kg` | `Chassis.RightRear.CornerWeight` | N | corner_weight | · | ✓ | '2845 N' | 2845 | BLOCKED |
-| `damper_hsc_fl` | `Chassis.LeftFront.HsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsc_fr` | `Chassis.RightFront.HsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsc_rl` | `Chassis.LeftRear.HsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsc_rr` | `Chassis.RightRear.HsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsr_fl` | `Chassis.LeftFront.HsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsr_fr` | `Chassis.RightFront.HsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsr_rl` | `Chassis.LeftRear.HsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsr_rr` | `Chassis.RightRear.HsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsc_fl` | `Chassis.LeftFront.LsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsc_fr` | `Chassis.RightFront.LsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsc_rl` | `Chassis.LeftRear.LsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsc_rr` | `Chassis.RightRear.LsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsr_fl` | `Chassis.LeftFront.LsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsr_fr` | `Chassis.RightFront.LsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsr_rl` | `Chassis.LeftRear.LsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsr_rr` | `Chassis.RightRear.LsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
+| `damper_hsc_fl` | `Dampers.LeftFrontDamper.HsCompDamping` | click | damper | ✓ | ✓ | '20 clicks' | 20 | OK |
+| `damper_hsc_fr` | `Dampers.RightFrontDamper.HsCompDamping` | click | damper | ✓ | ✓ | '20 clicks' | 20 | OK |
+| `damper_hsc_rl` | `Dampers.LeftRearDamper.HsCompDamping` | click | damper | ✓ | ✓ | '32 clicks' | 32 | OK |
+| `damper_hsc_rr` | `Dampers.RightRearDamper.HsCompDamping` | click | damper | ✓ | ✓ | '32 clicks' | 32 | OK |
+| `damper_hsc_slope_fl` | `Dampers.LeftFrontDamper.HsCompDampSlope` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsc_slope_fr` | `Dampers.RightFrontDamper.HsCompDampSlope` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsc_slope_rl` | `Dampers.LeftRearDamper.HsCompDampSlope` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsc_slope_rr` | `Dampers.RightRearDamper.HsCompDampSlope` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsr_fl` | `Dampers.LeftFrontDamper.HsRbdDamping` | click | damper | ✓ | ✓ | '28 clicks' | 28 | OK |
+| `damper_hsr_fr` | `Dampers.RightFrontDamper.HsRbdDamping` | click | damper | ✓ | ✓ | '28 clicks' | 28 | OK |
+| `damper_hsr_rl` | `Dampers.LeftRearDamper.HsRbdDamping` | click | damper | ✓ | ✓ | '35 clicks' | 35 | OK |
+| `damper_hsr_rr` | `Dampers.RightRearDamper.HsRbdDamping` | click | damper | ✓ | ✓ | '35 clicks' | 35 | OK |
+| `damper_lsc_fl` | `Dampers.LeftFrontDamper.LsCompDamping` | click | damper | ✓ | ✓ | '20 clicks' | 20 | OK |
+| `damper_lsc_fr` | `Dampers.RightFrontDamper.LsCompDamping` | click | damper | ✓ | ✓ | '20 clicks' | 20 | OK |
+| `damper_lsc_rl` | `Dampers.LeftRearDamper.LsCompDamping` | click | damper | ✓ | ✓ | '16 clicks' | 16 | OK |
+| `damper_lsc_rr` | `Dampers.RightRearDamper.LsCompDamping` | click | damper | ✓ | ✓ | '16 clicks' | 16 | OK |
+| `damper_lsr_fl` | `Dampers.LeftFrontDamper.LsRbdDamping` | click | damper | ✓ | ✓ | '24 clicks' | 24 | OK |
+| `damper_lsr_fr` | `Dampers.RightFrontDamper.LsRbdDamping` | click | damper | ✓ | ✓ | '24 clicks' | 24 | OK |
+| `damper_lsr_rl` | `Dampers.LeftRearDamper.LsRbdDamping` | click | damper | ✓ | ✓ | '34 clicks' | 34 | OK |
+| `damper_lsr_rr` | `Dampers.RightRearDamper.LsRbdDamping` | click | damper | ✓ | ✓ | '34 clicks' | 34 | OK |
 | `diff_preload_nm` | `Systems.RearDiffSpec.Preload` | Nm | diff | ✓ | ✓ | '25 Nm' | 25 | OK |
+| `front_diff_preload_nm` | `Systems.FrontDiffSpec.Preload` | Nm | diff | ✓ | ✓ | '-50 Nm' | -50 | OK |
+| `fuel_level_l` | `Systems.Fuel.FuelLevel` | L | fuel | ✓ | ✓ | '9.0 L' | 9 | OK |
 | `heave_perch_offset_front_mm` | `Chassis.Front.HeavePerchOffset` | mm | perch_offset | ✓ | ✓ | '-16.5 mm' | -16.5 | OK |
 | `heave_slider_mm` | `Chassis.Front.HeaveSliderDefl` | mm | heave_slider | ✓ | · | '41.4 mm 200.0 mm' | 41.4 | BLOCKED |
 | `heave_spring_mm` | `Chassis.Front.HeaveSpringDefl` | mm | heave_spring | ✓ | · | '10.3 mm 80.3 mm' | 10.3 | BLOCKED |
-| `heave_spring_rate_n_per_mm` | `Chassis.Front.HeaveSpring` | index | spring_rate | · | ✓ | 3 | 3 | BLOCKED |
+| `heave_spring_rate_n_per_mm` | `Chassis.Front.HeaveSpring` | index | spring_rate | ✓ | ✓ | 3 | 3 | OK |
 | `pushrod_length_offset_front_mm` | `Chassis.Front.PushrodLengthDelta` | mm | pushrod | ✓ | ✓ | '0.0 mm' | 0 | OK |
 | `pushrod_length_offset_rear_mm` | `Chassis.Rear.PushrodLengthDelta` | mm | pushrod | ✓ | ✓ | '4.0 mm' | 4 | OK |
 | `rear_coil_spring_rate_n_per_mm` | `Chassis.LeftRear.SpringRate` | N/mm | spring_rate | · | ✓ | — |  | BLOCKED |
@@ -478,8 +493,14 @@ Fixture: `ibtfiles/ferrari499p_hockenheim gp 2026-03-31 15-49-42.ibt`
 | `spring_perch_offset_rear_mm` | `Chassis.LeftRear.SpringPerchOffset` | mm | perch_offset | · | ✓ | — |  | BLOCKED |
 | `static_ride_height_front_mm` | `Chassis.LeftFront.RideHeight` | mm | ride_height | ✓ | · | '30.1 mm' | 30.1 | BLOCKED |
 | `static_ride_height_rear_mm` | `Chassis.LeftRear.RideHeight` | mm | ride_height | ✓ | · | '44.2 mm' | 44.2 | BLOCKED |
-| `third_perch_offset_rear_mm` | `Chassis.Rear.ThirdPerchOffset` | mm | perch_offset | · | ✓ | — |  | BLOCKED |
-| `third_spring_rate_n_per_mm` | `Chassis.Rear.HeaveSpring` | index | spring_rate | · | ✓ | 5 | 5 | BLOCKED |
+| `third_perch_offset_rear_mm` | `Chassis.Rear.HeavePerchOffset` | mm | perch_offset | ✓ | ✓ | '-112.5 mm' | -112.5 | OK |
+| `third_spring_rate_n_per_mm` | `Chassis.Rear.HeaveSpring` | index | spring_rate | ✓ | ✓ | 5 | 5 | OK |
+| `toe_front_mm` | `Chassis.Front.ToeIn` | mm | camber | ✓ | ✓ | '-0.7 mm' | -0.7 | OK |
+| `toe_rl_mm` | `Chassis.LeftRear.ToeIn` | mm | camber | ✓ | ✓ | '+0.3 mm' | 0.3 | OK |
+| `torsion_bar_od_fl_mm` | `Chassis.LeftFront.TorsionBarOD` | index | torsion_bar | ✓ | ✓ | 2 | 2 | OK |
+| `torsion_bar_od_rl_mm` | `Chassis.LeftRear.TorsionBarOD` | index | torsion_bar | ✓ | ✓ | 2 | 2 | OK |
+| `torsion_bar_turns_fl` | `Chassis.LeftFront.TorsionBarTurns` | turns | torsion_bar | ✓ | ✓ | '0.089 Turns' | 0.089 | OK |
+| `torsion_bar_turns_rl` | `Chassis.LeftRear.TorsionBarTurns` | turns | torsion_bar | ✓ | ✓ | '0.040 Turns' | 0.04 | OK |
 | `tyre_cold_pressure_kpa` | `TiresAero.LeftFront.StartingPressure` | kPa | tyre_pressure | ✓ | ✓ | '152 kPa' | 152 | OK |
 
 _No fittable failures: every fittable parameter resolves to a numeric value._
@@ -488,48 +509,17 @@ _No fittable failures: every fittable parameter resolves to a numeric value._
 
 | path | value | reason |
 | --- | --- | --- |
-| `Chassis.Front.ArbSize` | 'A' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.Front.ToeIn` | '-0.7 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftFront.TorsionBarOD` | 2 | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftFront.TorsionBarTurns` | '0.089 Turns' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftRear.ToeIn` | '+0.3 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftRear.TorsionBarOD` | 2 | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftRear.TorsionBarTurns` | '0.040 Turns' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.Rear.ArbSize` | 'C' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.Rear.FuelLevel` | '9.0 L' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.Rear.HeavePerchOffset` | '-112.5 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightFront.TorsionBarOD` | 2 | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightFront.TorsionBarTurns` | '0.089 Turns' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.ToeIn` | '+0.3 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.TorsionBarOD` | 2 | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.TorsionBarTurns` | '0.040 Turns' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftFrontDamper.HsCompDampSlope` | '11 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftFrontDamper.HsCompDamping` | '20 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftFrontDamper.HsRbdDamping` | '28 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftFrontDamper.LsCompDamping` | '20 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftFrontDamper.LsRbdDamping` | '24 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftRearDamper.HsCompDampSlope` | '11 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftRearDamper.HsCompDamping` | '32 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftRearDamper.HsRbdDamping` | '35 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftRearDamper.LsCompDamping` | '16 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.LeftRearDamper.LsRbdDamping` | '34 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightFrontDamper.HsCompDampSlope` | '11 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightFrontDamper.HsCompDamping` | '20 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightFrontDamper.HsRbdDamping` | '28 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightFrontDamper.LsCompDamping` | '20 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightFrontDamper.LsRbdDamping` | '24 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightRearDamper.HsCompDampSlope` | '11 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightRearDamper.HsCompDamping` | '32 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightRearDamper.HsRbdDamping` | '35 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightRearDamper.LsCompDamping` | '16 clicks' | user-settable garage input lacks verified optimizer mapping |
-| `Dampers.RightRearDamper.LsRbdDamping` | '34 clicks' | user-settable garage input lacks verified optimizer mapping |
 | `Systems.BrakeSpec.BiasMigration` | 6 | user-settable garage input lacks verified optimizer mapping |
 | `Systems.BrakeSpec.BiasMigrationGain` | -1.0 | user-settable garage input lacks verified optimizer mapping |
 | `Systems.BrakeSpec.FrontMasterCyl` | '19.1 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Systems.BrakeSpec.PadCompound` | 'Medium' | user-settable garage input lacks verified optimizer mapping |
 | `Systems.BrakeSpec.RearMasterCyl` | '19.1 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Systems.FrontDiffSpec.Preload` | '-50 Nm' | user-settable garage input lacks verified optimizer mapping |
-| `Systems.Fuel.FuelLevel` | '9.0 L' | user-settable garage input lacks verified optimizer mapping |
 | `Systems.Fuel.FuelLowWarning` | '10.0 L' | user-settable garage input lacks verified optimizer mapping |
 | `Systems.Fuel.FuelTarget` | '2.80 L' | user-settable garage input lacks verified optimizer mapping |
 | `Systems.GearRatios.GearStack` | 'Short' | user-settable garage input lacks verified optimizer mapping |
@@ -604,23 +594,28 @@ Fixture: `ibtfiles/porsche963gtp_algarve gp 2026-04-07 15-49-17.ibt`
 | `corner_weight_fr_kg` | `Chassis.RightFront.CornerWeight` | N | corner_weight | · | ✓ | '2604 N' | 2604 | BLOCKED |
 | `corner_weight_rl_kg` | `Chassis.LeftRear.CornerWeight` | N | corner_weight | · | ✓ | '2920 N' | 2920 | BLOCKED |
 | `corner_weight_rr_kg` | `Chassis.RightRear.CornerWeight` | N | corner_weight | · | ✓ | '2920 N' | 2920 | BLOCKED |
-| `damper_hsc_fl` | `Dampers.FrontHeave.HsCompDamping` | click | damper | · | ✓ | '7 clicks' | 7 | BLOCKED |
-| `damper_hsc_fr` | `Dampers.FrontHeave.HsCompDamping` | click | damper | · | ✓ | '7 clicks' | 7 | BLOCKED |
-| `damper_hsc_rl` | `Dampers.RearHeave.HsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsc_rr` | `Dampers.RearHeave.HsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsr_fl` | `Dampers.FrontHeave.HsRbdDamping` | click | damper | · | ✓ | '11 clicks' | 11 | BLOCKED |
-| `damper_hsr_fr` | `Dampers.FrontHeave.HsRbdDamping` | click | damper | · | ✓ | '11 clicks' | 11 | BLOCKED |
-| `damper_hsr_rl` | `Dampers.RearHeave.HsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_hsr_rr` | `Dampers.RearHeave.HsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsc_fl` | `Dampers.FrontHeave.LsCompDamping` | click | damper | · | ✓ | '11 clicks' | 11 | BLOCKED |
-| `damper_lsc_fr` | `Dampers.FrontHeave.LsCompDamping` | click | damper | · | ✓ | '11 clicks' | 11 | BLOCKED |
-| `damper_lsc_rl` | `Dampers.RearHeave.LsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsc_rr` | `Dampers.RearHeave.LsCompDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsr_fl` | `Dampers.FrontHeave.LsRbdDamping` | click | damper | · | ✓ | '10 clicks' | 10 | BLOCKED |
-| `damper_lsr_fr` | `Dampers.FrontHeave.LsRbdDamping` | click | damper | · | ✓ | '10 clicks' | 10 | BLOCKED |
-| `damper_lsr_rl` | `Dampers.RearHeave.LsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
-| `damper_lsr_rr` | `Dampers.RearHeave.LsRbdDamping` | click | damper | · | ✓ | — |  | BLOCKED |
+| `damper_hsc_fl` | `Dampers.FrontHeave.HsCompDamping` | click | damper | ✓ | ✓ | '7 clicks' | 7 | OK |
+| `damper_hsc_fr` | `Dampers.FrontHeave.HsCompDamping` | click | damper | ✓ | ✓ | '7 clicks' | 7 | OK |
+| `damper_hsc_rl` | `Dampers.RearHeave.HsCompDamping` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_hsc_rr` | `Dampers.RearHeave.HsCompDamping` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_hsc_slope_fl` | `Dampers.FrontHeave.HsCompDampSlope` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_hsc_slope_fr` | `Dampers.FrontHeave.HsCompDampSlope` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_hsc_slope_rl` | `Dampers.RearHeave.HsCompDampSlope` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_hsc_slope_rr` | `Dampers.RearHeave.HsCompDampSlope` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_hsr_fl` | `Dampers.FrontHeave.HsRbdDamping` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsr_fr` | `Dampers.FrontHeave.HsRbdDamping` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_hsr_rl` | `Dampers.RearHeave.HsRbdDamping` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_hsr_rr` | `Dampers.RearHeave.HsRbdDamping` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_lsc_fl` | `Dampers.FrontHeave.LsCompDamping` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_lsc_fr` | `Dampers.FrontHeave.LsCompDamping` | click | damper | ✓ | ✓ | '11 clicks' | 11 | OK |
+| `damper_lsc_rl` | `Dampers.RearHeave.LsCompDamping` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_lsc_rr` | `Dampers.RearHeave.LsCompDamping` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_lsr_fl` | `Dampers.FrontHeave.LsRbdDamping` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_lsr_fr` | `Dampers.FrontHeave.LsRbdDamping` | click | damper | ✓ | ✓ | '10 clicks' | 10 | OK |
+| `damper_lsr_rl` | `Dampers.RearHeave.LsRbdDamping` | click | damper | ✓ | ✓ | — |  | MISMATCH |
+| `damper_lsr_rr` | `Dampers.RearHeave.LsRbdDamping` | click | damper | ✓ | ✓ | — |  | MISMATCH |
 | `diff_preload_nm` | `BrakesDriveUnit.RearDiffSpec.Preload` | Nm | diff | ✓ | ✓ | '90 Nm' | 90 | OK |
+| `fuel_level_l` | `BrakesDriveUnit.Fuel.FuelLevel` | L | fuel | ✓ | ✓ | '9.0 L' | 9 | OK |
 | `heave_perch_offset_front_mm` | `Chassis.Front.HeavePerchOffset` | mm | perch_offset | ✓ | ✓ | '60.0 mm' | 60 | OK |
 | `heave_slider_mm` | `Chassis.Front.HeaveSliderDefl` | mm | heave_slider | ✓ | · | '18.2 mm 94.0 mm' | 18.2 | BLOCKED |
 | `heave_spring_mm` | `Chassis.Front.HeaveSpringDefl` | mm | heave_spring | ✓ | · | '16.6 mm 64.5 mm' | 16.6 | BLOCKED |
@@ -634,9 +629,24 @@ Fixture: `ibtfiles/porsche963gtp_algarve gp 2026-04-07 15-49-17.ibt`
 | `static_ride_height_rear_mm` | `Chassis.LeftRear.RideHeight` | mm | ride_height | ✓ | · | '49.1 mm' | 49.1 | BLOCKED |
 | `third_perch_offset_rear_mm` | `Chassis.Rear.ThirdPerchOffset` | mm | perch_offset | ✓ | ✓ | '121.5 mm' | 121.5 | OK |
 | `third_spring_rate_n_per_mm` | `Chassis.Rear.ThirdSpring` | N/mm | spring_rate | ✓ | ✓ | '320 N/mm' | 320 | OK |
+| `toe_front_mm` | `Chassis.Front.ToeIn` | mm | camber | ✓ | ✓ | '-1.0 mm' | -1 | OK |
+| `toe_rl_mm` | `Chassis.LeftRear.ToeIn` | mm | camber | ✓ | ✓ | '-1.0 mm' | -1 | OK |
 | `tyre_cold_pressure_kpa` | `TiresAero.LeftFront.StartingPressure` | kPa | tyre_pressure | ✓ | ✓ | '152 kPa' | 152 | OK |
 
-_No fittable failures: every fittable parameter resolves to a numeric value._
+### Fittable failures (mapped but unresolved)
+
+- `damper_hsc_rl` → `Dampers.RearHeave.HsCompDamping`
+- `damper_hsc_rr` → `Dampers.RearHeave.HsCompDamping`
+- `damper_hsc_slope_fl` → `Dampers.FrontHeave.HsCompDampSlope`
+- `damper_hsc_slope_fr` → `Dampers.FrontHeave.HsCompDampSlope`
+- `damper_hsc_slope_rl` → `Dampers.RearHeave.HsCompDampSlope`
+- `damper_hsc_slope_rr` → `Dampers.RearHeave.HsCompDampSlope`
+- `damper_hsr_rl` → `Dampers.RearHeave.HsRbdDamping`
+- `damper_hsr_rr` → `Dampers.RearHeave.HsRbdDamping`
+- `damper_lsc_rl` → `Dampers.RearHeave.LsCompDamping`
+- `damper_lsc_rr` → `Dampers.RearHeave.LsCompDamping`
+- `damper_lsr_rl` → `Dampers.RearHeave.LsRbdDamping`
+- `damper_lsr_rr` → `Dampers.RearHeave.LsRbdDamping`
 
 ### Unmapped user-settable leaves (potential coverage gaps)
 
@@ -647,7 +657,6 @@ _No fittable failures: every fittable parameter resolves to a numeric value._
 | `BrakesDriveUnit.BrakeSpec.FrontMasterCyl` | '20.6 mm' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.BrakeSpec.PadCompound` | 'Medium' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.BrakeSpec.RearMasterCyl` | '22.2 mm' | user-settable garage input lacks verified optimizer mapping |
-| `BrakesDriveUnit.Fuel.FuelLevel` | '9.0 L' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.Fuel.FuelLowWarning` | '10.0 L' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.Fuel.FuelTarget` | '3.30 L' | user-settable garage input lacks verified optimizer mapping |
 | `BrakesDriveUnit.GearRatios.GearStack` | 'Short' | user-settable garage input lacks verified optimizer mapping |
@@ -666,8 +675,6 @@ _No fittable failures: every fittable parameter resolves to a numeric value._
 | `Chassis.Front.ArbSetting` | 'Connected' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.Front.RollPerchOffset` | '15.0 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.Front.RollSpring` | '100 N/mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.Front.ToeIn` | '-1.0 mm' | user-settable garage input lacks verified optimizer mapping |
-| `Chassis.LeftRear.ToeIn` | '-1.0 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.Rear.ArbSize` | 'Stiff' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.SpringPerchOffset` | '100.0 mm' | user-settable garage input lacks verified optimizer mapping |
 | `Chassis.RightRear.SpringRate` | '180 N/mm' | user-settable garage input lacks verified optimizer mapping |
