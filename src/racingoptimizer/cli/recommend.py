@@ -888,26 +888,22 @@ def _apply_pins_to_constraints(
     """Return a constraints table with pinned parameters narrowed to [v, v]."""
     if not pins:
         return table
-    # ConstraintsTable doesn't expose a mutator; re-build via the dataclass
-    # field. The leaky access is intentional and confined to this helper.
-    by_car: dict[str, dict[str, tuple[float, float] | None]] = {
-        k: dict(v) for k, v in table._by_car.items()  # noqa: SLF001
-    }
-    by_car.setdefault(car, {})
-    for key, value in pins.items():
-        if key not in table.parameters():
+    known = set(table.parameters())
+    for key in pins:
+        if key not in known:
             click.echo(
                 f"unknown --pin parameter {key!r}; "
-                f"known parameters: {', '.join(table.parameters())}",
+                f"known parameters: {', '.join(sorted(known))}",
                 err=True,
             )
             sys.exit(2)
-        # Narrowest legal interval — recommender treats it as a fixed value.
+    for key, value in pins.items():
+        # Narrowest legal interval -- recommender treats it as a fixed value.
         original = table.bounds(car, key)
         if original is not None:
             value = max(original[0], min(original[1], float(value)))
-        by_car[car][key] = (float(value), float(value))
-    return ConstraintsTable(_by_car=by_car)
+        table = table.with_pin(car, key, float(value))
+    return table
 
 
 def _build_per_car_pipeline(

@@ -40,7 +40,7 @@ uv run ruff check src tests                 # lint (must stay clean)
 
 VISION.md is decomposed into six slices plus three cross-cutting modules. Status reflects what is **merged** AND what has been **verified across all 5 GTP cars** (BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, Ferrari 499P) versus only single-car (BMW Sebring fixture) smoke. Per VISION.md "do not assume a unified setup schema across cars" — the five cars have different suspension architectures, IBT YAML setup-blob shapes, and aero-map step sizes. **A green BMW test is not a "works" claim.**
 
-**Two recommend code paths.** `optimize <car> <track>` routes by `PER_CAR_MODEL_CARS` (`src/racingoptimizer/cli/recommend.py:57`):
+**Two recommend code paths.** `optimize <car> <track>` routes by `PER_CAR_MODEL_CARS` (top of `src/racingoptimizer/cli/recommend.py`):
 
 - **v4 (per-car, track-agnostic)** — currently `{"cadillac", "bmw", "ferrari"}`. `fit_per_car()` pools every session for the car across every track into one fitter; cache file `corpus/models/<car>__per-car__<digest>.pickle`. Adding a car requires (a) per-car constraint overrides in `constraints.md` (BMWBounds.md / Cadillacbounds.md / Ferraribounds.md as the source of truth), (b) car key added to `PER_CAR_MODEL_CARS`, (c) for tracks the car has never been driven on, the CLI's cross-car schedule fallback (`_maybe_borrow_cross_car_track`) borrows corner geometry from any other car's sessions on that track — so Ferrari@Spa works even though Ferrari has no Spa IBTs.
 - **v3 (per-(car, track))** — Acura + Porsche. Trains per pair, uses donor-track extrapolation when target is unseen.
@@ -77,7 +77,7 @@ Two orthogonal axes feed `physics.score._conditions_adjusted_baselines`:
 - **Dry vs wet** (VISION §10): `physics.wet_mode.classify_conditions(env)` returns `dry / damp / wet / full_rain` from `track_wetness` + `weather_declared_wet` + `precip_type`. Non-dry regimes swap baselines (lower max grip + aero baseline, higher wheelspin tolerance) **and** phase weights (less aero_eff, more platform + grip).
 - **Race vs quali** (VISION §4 / §5): `--quali` swaps to `physics.quali_mode.quali_phase_weights` — `grip` x1.15, `aero_eff` x1.20, `platform` x0.55 (re-normalised so each phase still sums to 1.0). Quali takes precedence over the wet phase-weight pick (a wet quali still wants outright pace on a wet-adjusted baseline). Quali requires `--fuel N` (no auto fuel; quali fuel is per-track).
 
-**Race-mode fuel auto-pin** (`cli/recommend.py:213-244`): without `--quali` AND without `--fuel`, the CLI anchors `fuel_level_l` to the most-recent past-session value for the target track (typically ~58 L on the BMW M Hybrid V8). Substring-matches the user-typed track to the catalog slug (so `optimize bmw spa` finds `spa_2024_up`); falls back to all-car sessions only when the target track has none. Without this, the optimizer would treat fuel as a freely-fittable input and minimize mass for one-lap pace -- recommending fuel loads that won't cover a race.
+**Race-mode fuel auto-pin** (`cli/recommend.py::recommend_cmd` race-fuel block, search `Race fuel auto-pinned`): without `--quali` AND without `--fuel`, the CLI anchors `fuel_level_l` to the most-recent past-session value for the target track (typically ~58 L on the BMW M Hybrid V8). Substring-matches the user-typed track to the catalog slug (so `optimize bmw spa` finds `spa_2024_up`); falls back to all-car sessions only when the target track has none. Without this, the optimizer would treat fuel as a freely-fittable input and minimize mass for one-lap pace -- recommending fuel loads that won't cover a race.
 
 Wind enters `physics.score.aero_eff` via `physics.wind.aero_wind_modifier` as a *magnitude* downforce penalty (treats `wind_vel_ms` as a tailwind worst case). Directional decomposition is deferred per `physics/wind.py` docstring — needs per-corner heading data the corner schedule doesn't carry yet.
 
@@ -195,7 +195,7 @@ Categorical params (ARB size, diff coast/drive ramps) are encoded as ordinal ind
 
 The picker reads `model.per_track_parameter_observed[track]` (populated by `fit_per_car`); proposals are step-snapped to the parameter's UI step or `discrete_values` set; targets that would step-snap onto the past value get re-routed to the second-largest gap.
 
-## Recommendation filename convention (`cli/recommend.py:407+`, `cli/calibrate.py:346+`)
+## Recommendation filename convention (`cli/recommend.py::recommend_cmd` output-file block; `cli/calibrate.py::_maybe_save`)
 
 Default output path: `recommendations/<car>-<short-track>-<mode>[-<fuel>L]-<MMDD>-<HHMM>.<ext>`. `<short-track>` strips variant suffixes via `_short_track` (`spa_2024_up` -> `spa`, `hockenheim_gp` -> `hockenheim`, `sebring_international` -> `sebring`, `daytona_2011_road` -> `daytona`). Mode tag is one of `race` / `quali` / `reset` / `cal` / `cal-status`. Fuel suffix only for quali stints (race auto-pins, would clutter every name). Pass `--output-file -` to suppress file output (e.g. when piping JSON).
 

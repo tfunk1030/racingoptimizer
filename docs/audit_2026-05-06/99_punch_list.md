@@ -77,6 +77,24 @@ Closed by this session (for the record):
 7. **Tier 3** when touching the relevant code anyway
 8. **Tier 4** parked until external data arrives
 
+## Code-reviewer findings (2026-05-07, post-session subagent review)
+
+A fresh code-review subagent on the post-audit commits (`c8bd2fe..HEAD`)
+surfaced 5 items, 3 of which were NEW (not in the original audit). All
+verified against current source.
+
+| # | Severity | Item | File | Status |
+|---|----------|------|------|--------|
+| CR.1 | MAJOR | `_apply_pins_to_constraints` still uses `_by_car` directly even after `with_pin` factory landed in `00ca849` | `cli/recommend.py::_apply_pins_to_constraints` | Fixed -- see commit below |
+| CR.2 | MAJOR | Zero unit tests for `recommend_staged`, `with_pin`, `_partition_parameters_by_stage`, mirror precedence reorder, `_FAMILY_PREFERRED_PHASES`, corner-duration weighting, `_apply_masks_for_session_ids` | various session-shipped modules | OPEN -- promoted to Tier 2 |
+| CR.3 | MAJOR | `recommend_staged` polish silently overrides `--explore 0` to 5% widening | `physics/recommend.py::recommend_staged` `polish_explore = max(explore_pct, 5.0)` | OPEN -- promoted to Tier 1 |
+| CR.4 | MINOR | CLAUDE.md numeric line cites already drifted (`recommend.py:54` actually 57; `:160+` actually ~220) | `CLAUDE.md` | Fixed -- swapped to function-name anchors |
+| CR.5 | MINOR | `_apply_masks_for_session_ids` reads every IBT twice (pre-check via `read_bytes` + parser); silently swallows non-FNF/KeyError | `ingest/api.py::_apply_masks_for_session_ids` and `learn`'s pre-check | OPEN -- Tier 3 |
+
+CR.3 should be on Tier 1 -- it's a silent behavior surprise the user
+can't disable. CR.2 is the most expensive remaining gap (six new test
+files / new tests to write). CR.5 is hygiene.
+
 ## Verification rule
 
 After closing any item: cross-check the per-slice audit doc that flagged it, mark it [resolved by `<commit>`] in this file, and update the status row in `00_summary.md`.
