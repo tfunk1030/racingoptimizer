@@ -958,9 +958,23 @@ def _telemetry_why(
 
     # Dominant Helps corner-phase -- where this parameter does the most
     # work. Falls back to the worst Hurts when there are no helps.
+    # Apply the same family-preferred-phase filter the Watch-most picker
+    # uses (commit 7be3017): without this, raw score-delta max picks the
+    # heaviest-weighted corner (T5 at Spa from corner-duration weighting)
+    # for EVERY parameter, making every Why line anchor at the same
+    # corner regardless of what the parameter mechanically affects.
     impacts = list(j.corners_helped) or list(j.corners_hurt)
     if not impacts:
         return ""
+    preferred = _FAMILY_PREFERRED_PHASES.get(family or "")
+    if preferred:
+        in_preferred = [i for i in impacts if i.phase in preferred]
+        if in_preferred:
+            impacts = in_preferred
+    else:
+        on_corner = [i for i in impacts if i.phase != Phase.STRAIGHT]
+        if on_corner:
+            impacts = on_corner
     top = max(impacts, key=lambda i: abs(i.score_delta))
 
     # Counterfactual setup: rec values everywhere except this param.
