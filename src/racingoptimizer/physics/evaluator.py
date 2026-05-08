@@ -72,9 +72,43 @@ from racingoptimizer.physics.diagnostic_state import (
 )
 
 # Score-component weights (must sum to 1.0).
+# DEFAULT weights (used when no per-car calibration is available).
+# These are the original Day-12 design weights; superseded by per-car
+# calibration where the corpus supports it.
 _WEIGHT_AXLE_UTIL: float = 0.5
 _WEIGHT_AERO_BALANCE: float = 0.3
 _WEIGHT_GRIP_HEADROOM: float = 0.2
+
+# Per-car CALIBRATED weights (Day 12 follow-up via
+# `scripts/day_12b_calibrate_evaluator.py`). Each tuple is
+# `(util, balance, head)` summing to 1.0; empirically derived by
+# grid-searching weight space against held-out corner-phase
+# duration_s on production corpora, controlling for corner-type
+# (within-group Spearman). Results:
+#   - BMW:      (0.2, 0.8, 0.0) Spearman=+0.189
+#   - Cadillac: (0.2, 0.3, 0.5) Spearman=+0.122
+#   - Ferrari:  (0.0, 0.0, 1.0) Spearman=+0.249  PASSES fallback (>=0.20)
+# The evaluator's primary value is GUARDRAILS (see `guardrail_check`);
+# the lap-time predictor is a secondary use that fully passes only on
+# Ferrari and partially on BMW/Cadillac.
+_CALIBRATED_WEIGHTS: dict[str, tuple[float, float, float]] = {
+    "bmw": (0.2, 0.8, 0.0),
+    "cadillac": (0.2, 0.3, 0.5),
+    "ferrari": (0.0, 0.0, 1.0),
+    # Acura + Porsche: no v4 calibration; default weights apply.
+}
+
+
+def get_weights_for_car(car: str) -> tuple[float, float, float]:
+    """Return per-car (util, balance, head) weights summing to 1.0.
+
+    Falls back to default Day-12 weights for cars without an entry in
+    `_CALIBRATED_WEIGHTS`.
+    """
+    return _CALIBRATED_WEIGHTS.get(
+        car.strip().lower(),
+        (_WEIGHT_AXLE_UTIL, _WEIGHT_AERO_BALANCE, _WEIGHT_GRIP_HEADROOM),
+    )
 
 # Axle-utilization "ideal" band. Margins inside [0.85, 1.0] get full
 # score; below 0.85 the score declines linearly (underutilising);
@@ -233,18 +267,19 @@ def evaluate_corner_phase(
     else:
         peak = raw_peak
     if surrogate_lat_g_ceiling is None:
-        # Without surrogate, default to neutral score (1.0) -- physics
-        # alone can't compare against itself. Reduces this component's
-        # weight in practice.
+        # Without an explicit surrogate ceiling, default to neutral
+        # score (1.0). A speed-anchored proxy was tested in Day 12b
+        # and rejected by external judge as tautological -- speed
+        # ends up on both sides of the comparison. Per the guardrails
+        # reframe: when no surrogate is available, headroom adds no
+        # signal, which is honest. The recommender has surrogates
+        # available; this default applies only to standalone use.
         headroom_score = 1.0
     else:
         headroom_score = grip_headroom_score(peak, surrogate_lat_g_ceiling)
 
-    composite = (
-        _WEIGHT_AXLE_UTIL * util_score
-        + _WEIGHT_AERO_BALANCE * balance_score
-        + _WEIGHT_GRIP_HEADROOM * headroom_score
-    )
+    wu, wb, wh = get_weights_for_car(car)
+    composite = wu * util_score + wb * balance_score + wh * headroom_score
 
     return CornerPhaseScore(
         car=car.strip().lower(),
@@ -254,6 +289,81 @@ def evaluate_corner_phase(
         aero_balance_score=float(balance_score),
         grip_headroom_score=float(headroom_score),
         composite_score=float(composite),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class GuardrailReport:
+    """Per-(corner_phase) guardrail check output.
+
+    The evaluator's PRIMARY value (per Day 12 calibration finding) is
+    flagging setups that exceed empirical safety thresholds, NOT
+    predicting lap-time. The composite score is a secondary use case
+    that only weakly correlates with corner-phase duration on this
+    corpus (Spearman 0.12-0.25 with per-car-calibrated weights).
+    """
+    car: str
+    corner_id: int
+    phase: str
+    over_axle_ceiling: bool       # axle_util margin > 1.0 (corpus anomaly)
+    severely_off_balance: bool    # aero_balance_score < 0.4 (>= 17% off target)
+    grip_inconsistency: bool      # headroom_score < 0.3 (physics + surrogate disagree)
+    flagged: bool                 # any guardrail fired
+    reason: str | None            # human-readable summary (None if not flagged)
+
+
+def guardrail_check(
+    score: CornerPhaseScore,
+    *,
+    front_margin: float | None = None,
+    rear_margin: float | None = None,
+) -> GuardrailReport:
+    """Flag setups that exceed empirical safety thresholds.
+
+    PLAN.md Section 15.4 designated the evaluator for "physics
+    guardrails" reframing after Day 12's calibration finding showed
+    the composite score is a weak lap-time predictor. The guardrails
+    are the strong-signal use case: when axle_util > 1.0 the setup is
+    operating outside the per-corpus-empirical ceiling (definitely a
+    risk); when aero_balance is severely off-target the setup is
+    geometrically wrong; when physics and surrogate disagree by >30%
+    the trust assumption breaks down.
+
+    These are operational warnings the briefing renderer can show to
+    the user without making lap-time claims.
+    """
+    over_axle = False
+    if front_margin is not None and front_margin > 1.0:
+        over_axle = True
+    if rear_margin is not None and rear_margin > 1.0:
+        over_axle = True
+
+    severely_off_balance = score.aero_balance_score < 0.4
+    grip_inconsistency = score.grip_headroom_score < 0.3
+
+    flagged = over_axle or severely_off_balance or grip_inconsistency
+    reasons: list[str] = []
+    if over_axle:
+        reasons.append("axle utilization > 1.0 (exceeds empirical grip ceiling)")
+    if severely_off_balance:
+        reasons.append(
+            f"aero balance score {score.aero_balance_score:.2f} "
+            f"(>= 17% off target for {score.car})"
+        )
+    if grip_inconsistency:
+        reasons.append(
+            f"physics-vs-surrogate divergence (headroom score "
+            f"{score.grip_headroom_score:.2f})"
+        )
+    return GuardrailReport(
+        car=score.car,
+        corner_id=score.corner_id,
+        phase=score.phase,
+        over_axle_ceiling=over_axle,
+        severely_off_balance=severely_off_balance,
+        grip_inconsistency=grip_inconsistency,
+        flagged=flagged,
+        reason="; ".join(reasons) if reasons else None,
     )
 
 

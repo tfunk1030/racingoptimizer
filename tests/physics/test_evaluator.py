@@ -146,7 +146,12 @@ def test_evaluate_corner_phase_returns_score() -> None:
 
 
 def test_evaluate_corner_phase_composite_weighted_sum() -> None:
-    """Composite = 0.5*util + 0.3*balance + 0.2*headroom."""
+    """Composite uses per-car calibrated weights (Day 12 follow-up).
+
+    BMW calibrated weights are (0.2, 0.8, 0.0) per the evaluator
+    docstring; this test pins that contract.
+    """
+    from racingoptimizer.physics.evaluator import get_weights_for_car
     score = evaluate_corner_phase(
         car="bmw",
         corner_id=1, phase="mid_corner",
@@ -157,23 +162,95 @@ def test_evaluate_corner_phase_composite_weighted_sum() -> None:
         rear_ceiling=_ceiling("bmw", "rear"),
         surrogate_lat_g_ceiling=1.5,  # consistent -> headroom=1.0
     )
+    wu, wb, wh = get_weights_for_car("bmw")
     expected = (
-        _WEIGHT_AXLE_UTIL * score.axle_utilization
-        + _WEIGHT_AERO_BALANCE * score.aero_balance_score
-        + _WEIGHT_GRIP_HEADROOM * score.grip_headroom_score
+        wu * score.axle_utilization
+        + wb * score.aero_balance_score
+        + wh * score.grip_headroom_score
     )
     assert score.composite_score == pytest.approx(expected)
 
 
+def test_per_car_calibrated_weights_documented() -> None:
+    """Pin the per-car weight values so a future commit doesn't
+    silently drift them."""
+    from racingoptimizer.physics.evaluator import get_weights_for_car
+    assert get_weights_for_car("bmw") == (0.2, 0.8, 0.0)
+    assert get_weights_for_car("cadillac") == (0.2, 0.3, 0.5)
+    assert get_weights_for_car("ferrari") == (0.0, 0.0, 1.0)
+    # Acura/Porsche fall back to default (0.5, 0.3, 0.2).
+    assert get_weights_for_car("acura") == (
+        _WEIGHT_AXLE_UTIL, _WEIGHT_AERO_BALANCE, _WEIGHT_GRIP_HEADROOM,
+    )
+
+
+def test_guardrail_check_axle_over_ceiling() -> None:
+    """Flag setups where front or rear margin exceeds 1.0."""
+    from racingoptimizer.physics.evaluator import guardrail_check
+    score = evaluate_corner_phase(
+        car="bmw", corner_id=1, phase="mid_corner",
+        lat_g=2.5, long_g=0.0, speed_ms=70.0,  # high lat_g
+        aero_balance_pct=54.0, aero_ld_ratio=4.0,
+        front_ceiling=_ceiling("bmw", "front", mu=0.5),  # very low ceiling
+        rear_ceiling=_ceiling("bmw", "rear", mu=0.5),
+        surrogate_lat_g_ceiling=1.5,
+    )
+    # Front margin will be > 1.0 for sure with mu=0.5 and high lat_g.
+    report = guardrail_check(score, front_margin=1.5, rear_margin=1.4)
+    assert report.over_axle_ceiling is True
+    assert report.flagged is True
+    assert "exceeds empirical grip ceiling" in (report.reason or "")
+
+
+def test_guardrail_check_balance_off_target() -> None:
+    """Flag setups with aero balance > 17% off target."""
+    from racingoptimizer.physics.evaluator import guardrail_check
+    score = evaluate_corner_phase(
+        car="bmw", corner_id=1, phase="mid_corner",
+        lat_g=1.0, long_g=0.0, speed_ms=50.0,
+        aero_balance_pct=80.0,  # very off-target (target ~54)
+        aero_ld_ratio=4.0,
+        front_ceiling=_ceiling("bmw", "front"),
+        rear_ceiling=_ceiling("bmw", "rear"),
+        surrogate_lat_g_ceiling=1.5,
+    )
+    report = guardrail_check(score, front_margin=0.7, rear_margin=0.7)
+    assert report.severely_off_balance is True
+    assert report.flagged is True
+
+
+def test_guardrail_check_clean_setup_no_flags() -> None:
+    """A well-behaved setup has no guardrail flags."""
+    from racingoptimizer.physics.evaluator import guardrail_check
+    score = evaluate_corner_phase(
+        car="bmw", corner_id=1, phase="mid_corner",
+        lat_g=1.4, long_g=0.0, speed_ms=50.0,
+        aero_balance_pct=54.0,  # ideal
+        aero_ld_ratio=4.0,
+        front_ceiling=_ceiling("bmw", "front"),
+        rear_ceiling=_ceiling("bmw", "rear"),
+        surrogate_lat_g_ceiling=2.2,  # matches predict_peak_lat_g(4.0, 50.0) ~ 2.2
+    )
+    # Margin around 0.93 (under 1.0)
+    report = guardrail_check(score, front_margin=0.93, rear_margin=0.93)
+    assert report.flagged is False
+    assert report.reason is None
+
+
 def test_evaluate_corner_phase_no_surrogate_neutral_headroom() -> None:
-    """Without surrogate ceiling, headroom score defaults to 1.0
-    (physics alone can't compare to itself)."""
+    """Without surrogate ceiling, headroom defaults to neutral 1.0.
+
+    A speed-anchored proxy was tested in Day 12b and rejected by
+    external judge as tautological. The neutral default is honest
+    when standalone (no surrogate available); the recommender
+    integration always has surrogates, so the default is rarely hit
+    in production paths.
+    """
     score = evaluate_corner_phase(
         car="bmw",
         corner_id=1, phase="mid_corner",
         lat_g=1.5, long_g=0.0, speed_ms=50.0,
-        aero_balance_pct=54.0,
-        aero_ld_ratio=4.0,
+        aero_balance_pct=54.0, aero_ld_ratio=4.0,
         front_ceiling=_ceiling("bmw", "front"),
         rear_ceiling=_ceiling("bmw", "rear"),
         surrogate_lat_g_ceiling=None,
