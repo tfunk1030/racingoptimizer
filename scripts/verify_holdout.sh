@@ -29,18 +29,16 @@ if [[ ! -f "$MANIFEST" ]]; then
   exit 4
 fi
 
-# 1. Hash check
+# 1. Hash check.
+# Parse manifest with awk: column 1 is the hash; everything after it up to a
+# trailing "  # ..." comment is the path. The path itself contains spaces
+# (e.g. "bmwlmdh_spa 2024 up 2026-05-07 11-59-06.ibt"), so we cannot split
+# on whitespace -- the awk pattern strips column 1 then the comment suffix.
 HASH_FAIL=0
 HASH_LINES=0
-while IFS= read -r line; do
-  # skip comments + blanks
-  [[ -z "${line// }" || "$line" =~ ^# ]] && continue
+while IFS='|' read -r expected path; do
+  [[ -z "$expected" || -z "$path" ]] && continue
   HASH_LINES=$((HASH_LINES + 1))
-  expected="${line%% *}"
-  rest="${line#* }"
-  rest="${rest# }"  # trim leading spaces
-  path="${rest%%  #*}"
-  path="${path%% }"
   if [[ ! -f "$REPO_ROOT/$path" ]]; then
     echo "verify_holdout: missing IBT: $path" >&2
     HASH_FAIL=1
@@ -61,7 +59,7 @@ while IFS= read -r line; do
     echo "  actual:   $actual" >&2
     HASH_FAIL=1
   fi
-done < "$MANIFEST"
+done < <(awk '!/^#/ && NF>=2 { hash=$1; $1=""; sub(/^[ \t]+/, ""); sub(/[ \t]+#.*$/, ""); print hash "|" $0 }' "$MANIFEST")
 
 if [[ $HASH_LINES -eq 0 ]]; then
   echo "verify_holdout: manifest has no hash lines" >&2
