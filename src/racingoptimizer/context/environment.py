@@ -23,9 +23,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 # IBT channel name -> EnvironmentFrame field name. Single source of truth
-# so `from_row` and `from_partial_row` stay in sync, and so the parser /
-# corner aggregator can iterate over the same set without drift.
-_FLOAT_CHANNELS: tuple[tuple[str, str], ...] = (
+# so `from_row` / `from_partial_row` stay in sync, and so the parser /
+# corner aggregator / cli env-overrides path iterate over the same set
+# without drift. Exposed as the module-public IBT_*_CHANNELS tuples so
+# downstream modules don't re-list channel names. Wind direction is in
+# the float channel set here but cli/recommend.py filters it out of the
+# corpus-aggregated overrides because circular medians cannot pool with
+# arithmetic medians (handled via `_WIND_DIR_CHANNEL` separately).
+IBT_FLOAT_CHANNELS: tuple[tuple[str, str], ...] = (
     ("AirTemp", "air_temp_c"),
     ("AirDensity", "air_density"),
     ("AirPressure", "air_pressure_mbar"),
@@ -36,13 +41,17 @@ _FLOAT_CHANNELS: tuple[tuple[str, str], ...] = (
     ("TrackTempCrew", "track_temp_c"),
     ("TrackWetness", "track_wetness"),
 )
-_BOOL_CHANNELS: tuple[tuple[str, str], ...] = (
+IBT_BOOL_CHANNELS: tuple[tuple[str, str], ...] = (
     ("WeatherDeclaredWet", "weather_declared_wet"),
 )
-_INT_CHANNELS: tuple[tuple[str, str], ...] = (
+IBT_INT_CHANNELS: tuple[tuple[str, str], ...] = (
     ("Precipitation", "precip_type"),
     ("Skies", "skies"),
 )
+# Legacy private aliases kept for in-module use (from_row / from_partial_row).
+_FLOAT_CHANNELS = IBT_FLOAT_CHANNELS
+_BOOL_CHANNELS = IBT_BOOL_CHANNELS
+_INT_CHANNELS = IBT_INT_CHANNELS
 
 
 @dataclass(slots=True, frozen=True)

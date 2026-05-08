@@ -36,7 +36,7 @@ Closed by this session (for the record):
 |---|------|---------------------|
 | T2.1 | `fit_per_car` no direct test coverage | `tests/physics/test_fit_per_car.py` (new) -- conftest factory currently calls `fit()` instead |
 | T2.2 | `render_narrative` no test file | `tests/explain/test_narrative.py` (new) -- ASCII guard, OVERALL DIRECTION aggregation, `_CAR_FEEL` coverage per active family |
-| T2.3 | `_maybe_borrow_cross_car_track` untested | `tests/cli/test_cross_car_schedule_fallback.py` (new) |
+| T2.3 | `_maybe_borrow_cross_car_track` untested | RESOLVED -- new `tests/cli/test_match_track_slug.py` (9 tests) covers the slug-resolution helper used by all four call sites including `_maybe_borrow_cross_car_track`, plus a `CANONICAL_CARS`-coupling regression that catches the audit T3.10 hardcoded-list pattern. |
 | T2.4 | `predict_setup_readouts` untested | `tests/explain/test_full_setup_card.py::test_predicted_static_rh_lines_get_predicted_tag` (extend) |
 | T2.5 | `tests/physics/test_per_car_recommend.py` is `pytest.mark.slow` -> merge gate skips it | Promote one BMW Sebring case to fast suite; keep full per-car loop as slow |
 
@@ -44,9 +44,9 @@ Closed by this session (for the record):
 
 | # | Item | Approach |
 |---|------|----------|
-| T3.1 | ~120-line copy-paste between `fit` (`fitter.py:214-422`) and `fit_per_car` (`fitter.py:626-868`) | Extract `_train_joint(...)` helper. Three real differences (group-by key, family_kind="rf" force, per-track observed build) become parameters. |
-| T3.2 | Slug-resolution duplicated 4x in `cli/recommend.py` | Single `_match_track_slug(needle, available)` helper. Drift already started (one site sorts alphabetically before substring scan, others don't). |
-| T3.3 | Three duplicate IBT-channel <-> field mappings | `context/environment.py:28-45`, `cli/recommend.py:1249-1264`, `physics/fitter.py:162-178`, `explain/render_json.py:112-128` -- consolidate to one source. |
+| T3.1 | ~120-line copy-paste between `fit` (`fitter.py:214-422`) and `fit_per_car` (`fitter.py:626-868`) | DEFERRED-BY-RISK -- the two trainers diverge on grouping key, family routing, archetype attach, per-track observed, schema version, and accuracy-log labelling. Extracting a `_train_joint` helper would be possible but the regression surface is large (every per-car cache invalidates) and current behaviour is well-tested. Revisit if either trainer needs another change. |
+| T3.2 | Slug-resolution duplicated 4x in `cli/recommend.py` | RESOLVED -- new `_match_track_slug(raw_track, available) -> (slug, ambiguous)` helper called from `_filter_sessions_to_track`, `_resolve_track_or_extrapolate`, the per-car resolve path in `_resolve_per_car_target`, and `_maybe_borrow_cross_car_track`. Each call site applies its own ambiguity policy (silent skip vs. exit-2). |
+| T3.3 | Three duplicate IBT-channel <-> field mappings | RESOLVED -- `context/environment.py` exports `IBT_FLOAT_CHANNELS`, `IBT_BOOL_CHANNELS`, `IBT_INT_CHANNELS`; `cli/recommend.py` builds its `_ENV_FLOAT_CHANNELS` / `_ENV_DISCRETE_CHANNELS` dicts from those (filtering `WindDir` from the float dict because circular medians can't pool with arithmetic). `physics/fitter._ENV_COLUMNS` and `explain/render_json` already consume EnvironmentFrame attributes directly -- no IBT-name duplication there. The new T3.9 regression test pins the `_ENV_COLUMNS` length / order coupling against drift. |
 | T3.4 | `Confidence` regime thresholds hardcoded magic numbers | RESOLVED -- `_SPARSE_MIN_SAMPLES`, `_NOISY_NOISE_RATIO`, `_CONFIDENT_NOISE_RATIO` promoted to module constants. |
 | T3.5 | `_CAR_FEEL` hardcodes Spa landmarks ("Eau Rouge / Pouhon", "Kemmel compression", "T9, T13") | RESOLVED -- replaced with archetypal phrasing ("long throttle commits", "high-speed sweepers", "long mid-corner releases", etc.). |
 | T3.6 | `_CAR_FEEL` missing per-axle entries (rear torsion, ride_height, corner_weight) | RESOLVED -- added 8 entries: `("torsion_bar","rear",±)`, `("ride_height", front/rear, ±)`, `("corner_weight", front/rear, ±)`. |

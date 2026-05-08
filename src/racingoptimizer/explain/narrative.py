@@ -512,7 +512,7 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
         "More rear bias: rotates faster on entry; more turn-in "
         "feel; shorter braking distance if rear has grip.",
         "Snap-oversteer risk under heavy braking; rear can lock at "
-        "T1, T11, T18 entries.",
+        "heavy-braking entries.",
     ),
 
     # --- Diff ---
