@@ -68,8 +68,104 @@ VISION.md is decomposed into six slices plus three cross-cutting modules. Status
 Cross-cutting modules (master-plan §2) — all merged:
 
 - `racingoptimizer.context.EnvironmentFrame` — per-corner-phase atmospheric snapshot (12 channels: `AirTemp`, `AirDensity`, `AirPressure`, `RelativeHumidity`, `WindVel`, `WindDir`, `FogLevel`, `TrackTempCrew`, `TrackWetness`, `WeatherDeclaredWet`, `PrecipType`, `Skies`).
-- `racingoptimizer.confidence.Confidence` — frozen `(value, lo, hi, n_samples, regime)` with `Confidence.derive(...)` regime-derivation classmethod (sparse short-circuits noisy at `n_samples < 30`).
+- `racingoptimizer.confidence.Confidence` — frozen `(value, lo, hi, n_samples, regime)` with `Confidence.derive(...)` regime-derivation classmethod (sparse short-circuits noisy at `n_samples < 30`). `Confidence.with_local_density(recommended, observed, step)` downgrades regime by one tier when value is more than 3*step from nearest observed (Mode 4 closure, 2026-05-08).
 - `racingoptimizer.constraints.{ConstraintsTable, load_constraints, clamp}` — markdown parser for `constraints.md` plus per-car-shadowing `clamp(value, parameter, car)`.
+
+## Physics-rebuild modules (2026-05-08, Days 8-13 of the 14-day plan)
+
+Eight new modules across `physics/` and `aero/` shipped via the
+physics-rebuild plan (`docs/physics-rebuild/PLAN.md`,
+`docs/physics-rebuild/COMPLETE.md`). Production wiring varies by
+module:
+
+- **`physics.diagnostic_state`** — body slip β = atan2(Vy, Vx),
+  per-axle kinematic slip angles (bicycle model with per-car wheelbase
+  + steering ratio), chassis-level axle force decomposition. Per-car
+  geometry registry `_CAR_GEOMETRY` for all 5 GTP cars. *Used by*:
+  `physics.axle_grip`, future Mode 5 features. *Not yet wired into
+  recommend pipeline.*
+- **`physics.axle_grip`** — per-(car, axle) grip-margin model. ONE
+  parameter per axle (`AxleGripCeiling.mu_peak`), NOT Pacejka. Per
+  Reviewer Agent 1's veto: tire-model fit from telemetry alone is
+  circular without measured forces. `mu_peak` is an *axle utilization
+  ratio* (Fy/Fz), not tire mu — observed values 2.5-3.0 are normal
+  because chassis-level Fz in the denominator excludes aero downforce.
+  *Used by*: `physics.evaluator`, `physics.hybrid_optimizer`.
+- **`physics.bayes_retrofit`** — closed-form empirical-Bayes hierarchical
+  retrofit (NOT MCMC; conjugate-Gaussian one-way random-effects model
+  has identical math). Per-(parameter, track) `BayesPosterior` with
+  `mean_std` (uncertainty in central tendency, used by recommender
+  trust-radius) + `predictive_std` (uncertainty in next observation,
+  used by held-out coverage tests). Wired into `fit_per_car` →
+  `PhysicsModel.bayes_posteriors`. **`FITTERS_LAYOUT_VERSION = 3`**
+  (was 2 pre-Day-4) so existing pickles invalidate.
+- **`physics.evaluator`** — per-corner-phase composite physics score:
+  `axle_utilization * w + aero_balance * w + grip_headroom * w`.
+  **Per-car CALIBRATED weights** (Day 12b): BMW (0.2, 0.8, 0.0),
+  Cadillac (0.2, 0.3, 0.5), Ferrari (0.0, 0.0, 1.0). Acura/Porsche
+  fall back to default (0.5, 0.3, 0.2). `get_weights_for_car(car)`.
+  **PRIMARY VALUE IS GUARDRAILS**, not lap-time prediction
+  (Spearman within-group only 0.12-0.25 on this corpus).
+  `guardrail_check(score, front_margin, rear_margin) → GuardrailReport`
+  flags axle_util > 1.0, severe imbalance, surrogate divergence.
+- **`physics.hybrid_optimizer`** — phase-aware physics+surrogate
+  combination: `score = w_phase * physics + (1-w_phase) * surrogate`.
+  Per-phase weights from Day 13 investigation:
+  `mid_corner=0.40, braking=0.10, exit=0.10, trail_brake=0.05,
+  straight=0.05`. **Mid_corner has 3-30x stronger physics signal**
+  (steady-state cornering vs driver-input-dominated phases).
+  Guardrail penalty additive: `over_axle_ceiling = -0.15`,
+  `severely_off_balance = -0.075`; floors at 0. *Module ships as
+  scoring function; not yet wired into DE search* — see COMPLETE.md
+  "Recommended next steps."
+- **`physics.damper_force.DamperCurve`** + `fit_damper_curve_from_corpus(car)`
+  — per-car (k_low_speed, knee_mm_s) refit from corpus shock-velocity
+  p30/p95 percentiles (`*shockVel` is in m/s; multiply by 1000).
+  Backward-compat: `estimate_damper_force_n(velocity, *, car=None,
+  curve=None)` — `curve` overrides seeded values when provided.
+- **`aero.residual_correction`** — per-car scalar correction on
+  aero-map peak-lat-G prediction. **Authorized fallback triggered
+  on all 3 v4 cars** on this corpus; ships as infrastructure for
+  future refinement.
+- **CLI `--physics` flag** (`cli/recommend.py::_render_physics_banner`):
+  prepends a "PHYSICS VIEW" banner to the briefing. Recommendation
+  values unchanged — banner is informational. Surfaces per-car
+  evaluator weights, geometry, tyre floor pin status.
+
+## Held-out IBT system (2026-05-08, Day 0 prep)
+
+5 hash-pinned IBTs in `docs/physics-rebuild/holdout.sha256` are
+flagged `held_out=1` in the catalog and excluded from production
+queries by default. Used by gate scripts (which opt in via
+`include_held_out=True`):
+- H1 BMW Spa (3f0a05d3f44527bd)
+- H2 Cadillac Laguna (d236a089300fc0ea)
+- H3 Ferrari Hockenheim (fc96805e3b1a27cc)
+- H4 Acura Daytona, banked (72f43fa4527c4260)
+- H5 Porsche Algarve (a3d43056a952ff99)
+
+`scripts/verify_holdout.sh` runs three checks: hash match, catalog
+flag, no pickle leak. Run before any work that depends on held-out
+isolation.
+
+`cat.set_held_out_sessions(conn, ids, held_out=True)` is the
+helper to mark sessions gate-only; `upsert_session`'s ON CONFLICT
+clause omits `held_out` so re-ingesting an IBT cannot silently
+flip a gate-only row back to production.
+
+## Tyre pressure floor pin (2026-05-08, Day 1)
+
+`cli/recommend.py::_apply_tyre_pressure_floor_pin` defaults
+`tyre_cold_pressure_kpa` to the per-car constraint floor (152 kPa
+for all 5 cars per `constraints.md`) unless the user passes
+`--pin tyre_cold_pressure_kpa=`. Override an explicit value
+(e.g. `--pin tyre_cold_pressure_kpa=180` for tyre warming) and
+the helper is a no-op. Closes Mode 2 (surrogate cannot see
+peak-grip-vs-Fz curvature, drifts to 154-163 kPa otherwise).
+
+Info message printed on stderr when the auto-pin fires:
+`Tyre cold pressure auto-pinned to constraint floor: 152.0 kPa
+(override with --pin tyre_cold_pressure_kpa=N).`
 
 ## Stint mode + conditions branching (`physics/wet_mode.py`, `physics/quali_mode.py`)
 
@@ -101,7 +197,7 @@ Cache files at `corpus/models/<car>__per-car__<digest>.pickle` (or `<car>__<trac
 1. `session_ids` — adding a session = new training data
 2. `ontology` fingerprint — `(name, family, fittable, user_settable, json_path)` per spec. **The `json_path` is critical** — without it, a leaf-path correction (e.g. moving `fuel_level_l` from `Chassis.Fuel` to `BrakesDriveUnit.Fuel`) silently reuses the OLD pickle that trained against the wrong YAML field, masking the fix.
 3. `constraints.md` content hash — bounds are baked into the pickle at fit time; editing them must invalidate the cache so DE doesn't search against stale bounds.
-4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`).
+4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`, **currently 3** as of 2026-05-08 Day 4) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`), OR when PhysicsModel gains a new field that production paths read (forces refit so the field populates rather than default-empty).
 5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4).
 
 Editing `constraints.md` invalidates EVERY per-car cache (constraint content hash is a cache-key ingredient). Next recommend per car triggers a ~15-min refit. Plan constraint edits in batches.
