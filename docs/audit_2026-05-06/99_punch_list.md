@@ -47,13 +47,13 @@ Closed by this session (for the record):
 | T3.1 | ~120-line copy-paste between `fit` (`fitter.py:214-422`) and `fit_per_car` (`fitter.py:626-868`) | Extract `_train_joint(...)` helper. Three real differences (group-by key, family_kind="rf" force, per-track observed build) become parameters. |
 | T3.2 | Slug-resolution duplicated 4x in `cli/recommend.py` | Single `_match_track_slug(needle, available)` helper. Drift already started (one site sorts alphabetically before substring scan, others don't). |
 | T3.3 | Three duplicate IBT-channel <-> field mappings | `context/environment.py:28-45`, `cli/recommend.py:1249-1264`, `physics/fitter.py:162-178`, `explain/render_json.py:112-128` -- consolidate to one source. |
-| T3.4 | `Confidence` regime thresholds hardcoded magic numbers | `confidence/confidence.py:65-75` -- promote `30`, `0.5`, `0.2` to named module constants. |
-| T3.5 | `_CAR_FEEL` hardcodes Spa landmarks ("Eau Rouge / Pouhon", "Kemmel compression", "T9, T13") | Genericize phrasing or drive from `_dominant_impact_corner`. Currently misleading at non-Spa tracks. |
-| T3.6 | `_CAR_FEEL` missing per-axle entries (rear torsion, ride_height, corner_weight) | Add the missing keys; verify via "every fittable user-settable param resolves to a hit" test. |
-| T3.7 | `bare except Exception` in `justification.py:251, 292` | Narrow to specific exception types so legitimate scoring failures aren't masked as "neutral baseline". |
-| T3.8 | `EnvironmentFrame.from_partial_row` dead production code | Delete or wire up. CLI uses `_env_from_overrides` instead. |
-| T3.9 | Implicit field-order coupling between `EnvironmentFrame` and `_env_to_array` | Add a "field order is part of v4 fitter contract" comment + round-trip regression test. |
-| T3.10 | `CANONICAL_CARS` defined three places | Single source of truth (`cli/recommend.py:47`); `tests/cli/conftest.py` and `_maybe_borrow_cross_car_track` both import from it. |
+| T3.4 | `Confidence` regime thresholds hardcoded magic numbers | RESOLVED -- `_SPARSE_MIN_SAMPLES`, `_NOISY_NOISE_RATIO`, `_CONFIDENT_NOISE_RATIO` promoted to module constants. |
+| T3.5 | `_CAR_FEEL` hardcodes Spa landmarks ("Eau Rouge / Pouhon", "Kemmel compression", "T9, T13") | RESOLVED -- replaced with archetypal phrasing ("long throttle commits", "high-speed sweepers", "long mid-corner releases", etc.). |
+| T3.6 | `_CAR_FEEL` missing per-axle entries (rear torsion, ride_height, corner_weight) | RESOLVED -- added 8 entries: `("torsion_bar","rear",±)`, `("ride_height", front/rear, ±)`, `("corner_weight", front/rear, ±)`. |
+| T3.7 | `bare except Exception` in `justification.py:251, 292` | RESOLVED -- narrowed to `(KeyError, ValueError, ZeroDivisionError)` with `warnings.warn`; programming bugs now propagate. |
+| T3.8 | `EnvironmentFrame.from_partial_row` dead production code | WONT-FIX-BY-DESIGN -- existing docstring (`context/environment.py:84-89`) documents intent ("older IBT versions / synthetic fixtures"); a tested degraded-mode adapter is worth keeping for future ingest paths. |
+| T3.9 | Implicit field-order coupling between `EnvironmentFrame` and `_env_to_array` | RESOLVED -- added `test_env_field_order_matches_v4_fitter_contract` regression test pinning the EnvironmentFrame -> `_env_to_array` -> `_ENV_COLUMNS` ordering with 12 unique sentinel values. |
+| T3.10 | `CANONICAL_CARS` defined three places | RESOLVED -- `_maybe_borrow_cross_car_track` and `tests/cli/conftest.py` both import from `cli/recommend.py`; `assert set(PER_CAR_FIXTURES) == set(CANONICAL_CARS)` guards drift. |
 
 ## Tier 4 -- blocked / long-term (need external data or deeper work)
 

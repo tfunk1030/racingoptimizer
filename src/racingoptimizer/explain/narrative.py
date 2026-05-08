@@ -144,13 +144,82 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
         "More pitch dive on entry; slower turn-in; aero platform "
         "wanders more on bumpy entries.",
     ),
+    # Rear torsion bars behave like rear springs for pitch / roll, with a
+    # per-corner anti-roll component on cars that have rear torsion bars
+    # (Ferrari all-4 and several GTP rears). Both turns and OD share the
+    # stiffer-direction axis.
+    ("torsion_bar", "rear", "+"): (
+        "Stiffer rear platform: less rear roll, less squat under "
+        "throttle, sharper rotation through high-speed corners.",
+        "Less rear single-wheel compliance over kerbs; snap-oversteer "
+        "risk if rear grip is exceeded on power.",
+    ),
+    ("torsion_bar", "rear", "-"): (
+        "Softer rear platform: more rear mechanical grip, smoother "
+        "throttle pickup, better traction off slow corners.",
+        "More squat on power; rear platform sinks deeper; rotation "
+        "can feel lazy on entry.",
+    ),
+
+    # --- Ride height (catch-all when the optimizer changes ride height
+    #     directly rather than via perch / pushrod). Same vocabulary as
+    #     the perch/pushrod families, normalised to height direction:
+    #     "+" = raises, "-" = lowers (matches `_DIRECTION_VERB`).
+    ("ride_height", "front", "+"): (
+        "Higher front static ride height: more bump clearance, less "
+        "front aero load.",
+        "Less front downforce in fast corners; more pitch sensitivity.",
+    ),
+    ("ride_height", "front", "-"): (
+        "Lower front static ride height: more downforce up front, "
+        "stiffer aero platform, sharper turn-in.",
+        "Bottoming risk on long compressions and high-speed crests; "
+        "harsh over kerbs.",
+    ),
+    ("ride_height", "rear", "+"): (
+        "Higher rear static ride height: more rear compliance, less "
+        "rear downforce, more rotation under throttle.",
+        "Rear aero stall risk in high-speed corners; less rear "
+        "stability through long compressions.",
+    ),
+    ("ride_height", "rear", "-"): (
+        "Lower rear static ride height: more rear downforce, more "
+        "stable rear aero platform.",
+        "Bottoming risk on heavy-throttle exits; rear can stall over "
+        "large kerbs.",
+    ),
+
+    # --- Corner weight (cross-weight redistribution). Front / rear axle
+    #     bias from individual corner weights; same vocabulary as the
+    #     other axle-bias families.
+    ("corner_weight", "front", "+"): (
+        "More weight on the front axle: more front mechanical grip "
+        "static, sharper turn-in feel.",
+        "Less rear traction off corners; can promote lift-off "
+        "oversteer on entry.",
+    ),
+    ("corner_weight", "front", "-"): (
+        "Less weight on the front axle: more rear traction static; "
+        "smoother power-down.",
+        "Mid-corner understeer risk; lazier turn-in.",
+    ),
+    ("corner_weight", "rear", "+"): (
+        "More weight on the rear axle: more rear traction static; "
+        "smoother power-down out of slow corners.",
+        "Mid-corner understeer; lazier transient response.",
+    ),
+    ("corner_weight", "rear", "-"): (
+        "Less weight on the rear axle: sharper rotation, more turn-in "
+        "feel.",
+        "Less rear traction on power exit; can promote snap-oversteer.",
+    ),
 
     # --- Springs (rear platform) ---
     ("spring_rate", "rear", "+"): (
         "Less rear squat under throttle; faster on-throttle response; "
-        "rear platform settles less deep on Kemmel exit.",
+        "rear platform settles less deep on long throttle commits.",
         "Snap-oversteer risk if rear grip is exceeded on power exit; "
-        "harsher over rear kerbs (T8, T15).",
+        "harsher over rear-loaded kerbs.",
     ),
     ("spring_rate", "rear", "-"): (
         "More rear compliance; smoother throttle pickup; better "
@@ -169,7 +238,7 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
         "More rear-heave compliance; better mechanical grip in "
         "low-speed corners; smoother power-down.",
         "Rear platform less stable in high-speed compression; "
-        "aero-platform yaw on Kemmel exit.",
+        "aero-platform yaw on long throttle commits.",
     ),
 
     # --- Perches (ride height direction; iRacing convention: -ve perch
@@ -177,8 +246,8 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ("perch_offset", "front", "+"): (
         "Lower front static ride height: more downforce up front, "
         "stiffer aero platform.",
-        "Bottoming risk on Kemmel compression / Eau Rouge entry; "
-        "harsh over big kerbs (T3, T16).",
+        "Bottoming risk on long compressions and high-speed crests; "
+        "harsh over high-load kerbs.",
     ),
     ("perch_offset", "front", "-"): (
         "Higher front static ride height: more bump clearance, "
@@ -188,14 +257,14 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ("perch_offset", "rear", "+"): (
         "Lower rear static ride height: more rear downforce, more "
         "stable rear aero platform.",
-        "Bottoming risk on T1 exit / Kemmel; rear can stall over "
-        "large kerbs.",
+        "Bottoming risk on heavy-throttle exits and long straights; "
+        "rear can stall over large kerbs.",
     ),
     ("perch_offset", "rear", "-"): (
         "Higher rear static ride height: more rear compliance, "
         "less rear downforce, more rotation under throttle.",
         "Rear aero stall risk in high-speed corners; less rear "
-        "stability on Kemmel compression.",
+        "stability through long compressions.",
     ),
     # Pushrod has OPPOSITE polarity to perch (longer pushrod = car UP).
     ("pushrod", "front", "+"): (
@@ -207,8 +276,8 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ("pushrod", "front", "-"): (
         "Lower front static ride height: more front downforce, "
         "stiffer aero platform, sharper turn-in.",
-        "Bottoming risk on Kemmel compression / Eau Rouge; harsh "
-        "over kerbs.",
+        "Bottoming risk on long compressions and high-speed crests; "
+        "harsh over kerbs.",
     ),
     ("pushrod", "rear", "+"): (
         "Higher rear static ride height: more rear bump clearance.",
@@ -217,7 +286,8 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ("pushrod", "rear", "-"): (
         "Lower rear static ride height: more rear downforce, more "
         "stable platform.",
-        "Rear bottoming risk on Kemmel and Eau Rouge exit.",
+        "Rear bottoming risk on long throttle commits and high-speed "
+        "compressions.",
     ),
 
     # --- Dampers (mode, axis, direction). LSC = brake/throttle apply,
@@ -247,12 +317,12 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ),
     ("damper", "hsc", "front", "+"): (
         "Less compliance over bumps and kerbs; sharper kerb response.",
-        "Chassis can skip across kerbs (T3, T7); aero platform less "
+        "Chassis can skip across kerbs on entry; aero platform less "
         "stable on bumpy entries.",
     ),
     ("damper", "hsc", "front", "-"): (
         "More compliance over kerbs and high-frequency bumps; better "
-        "front grip retention through Eau Rouge bumps.",
+        "front grip retention through high-speed bumps.",
         "More pitch noise mid-corner; aero platform wanders.",
     ),
     ("damper", "hsc", "rear", "+"): (
@@ -270,7 +340,7 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
         "Slower front rebound after pitch -- keeps weight on the "
         "front longer through entry.",
         "Front 'sticks down' after braking; can promote mid-corner "
-        "understeer on T9 / T13 release.",
+        "understeer on long mid-corner releases.",
     ),
     ("damper", "lsr", "front", "-"): (
         "Faster front rebound; weight returns to neutral quicker; "
@@ -322,7 +392,7 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ("damper", "hsc_slope", "front", "-"): (
         "Later transition to HS damping; more LS regime through "
         "moderate bumps.",
-        "Loses high-velocity bump control on big hits (Kemmel kink).",
+        "Loses high-velocity bump control on big hits (high-speed kinks).",
     ),
     ("damper", "hsc_slope", "rear", "+"): (
         "Rear transitions to HS damping earlier -- stiffer through "
@@ -386,7 +456,7 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     # the per-corner sign convention varies but the family + sign +
     # axis maps to handling effect cleanly.)
     ("camber", "toe-front", "+"):  (  # less negative, toward toe-in
-        "More front straight-line stability; less darty on Kemmel.",
+        "More front straight-line stability; less darty on long straights.",
         "Lazier turn-in response; reduced rotation.",
     ),
     ("camber", "toe-front", "-"): (  # more negative, toward toe-out
@@ -400,20 +470,20 @@ _CAR_FEEL: dict[tuple, tuple[str, str]] = {
     ),
     ("camber", "toe-rear", "-"): (
         "More rear rotation; better turn-in feel.",
-        "Less straight-line stability; rear can step out on Kemmel "
+        "Less straight-line stability; rear can step out on high-speed "
         "transitions.",
     ),
 
     # --- Aero ---
     ("rear_wing", None, "+"): (
-        "More downforce in fast corners (Eau Rouge, Pouhon, "
-        "Blanchimont); higher mid-corner peak grip.",
-        "Higher straight-line drag; ~0.05-0.10 s slower on Kemmel "
-        "per click.",
+        "More downforce in fast corners (high-speed sweepers); "
+        "higher mid-corner peak grip.",
+        "Higher straight-line drag; ~0.05-0.10 s slower per click on "
+        "long straights.",
     ),
     ("rear_wing", None, "-"): (
-        "Less drag = faster top speed on Kemmel and Pit straight; "
-        "lower fuel burn.",
+        "Less drag = faster top speed on long straights; lower fuel "
+        "burn.",
         "Less downforce in fast corners; aero-stall risk in pitch; "
         "less rear stability under throttle.",
     ),

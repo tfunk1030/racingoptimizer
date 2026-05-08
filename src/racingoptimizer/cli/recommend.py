@@ -1032,7 +1032,7 @@ def _maybe_borrow_cross_car_track(
     raw = track.strip().lower()
     needle = slugify_track(raw) or raw
     bare = needle.replace("_", "")
-    for other_car in ("bmw", "cadillac", "ferrari", "porsche", "acura"):
+    for other_car in CANONICAL_CARS:
         if other_car == requested_car:
             continue
         other_sessions = _safe_sessions(other_car, corpus_root=root)
