@@ -119,11 +119,21 @@ def sessions(
     track: str | None = None,
     valid_only: bool = True,
     corpus_root: Path | str | None = None,
+    *,
+    include_held_out: bool = False,
 ) -> pl.DataFrame:
-    """Return one row per session, ordered by recorded_at."""
+    """Return one row per session, ordered by recorded_at.
+
+    `include_held_out` defaults to False so production paths never see
+    gate-only IBTs marked via `set_held_out_sessions` (physics-rebuild
+    PLAN.md Section 7). Gate validation scripts opt in explicitly.
+    """
     root = resolve_corpus_root(Path(corpus_root) if corpus_root else None)
     with cat.open_catalog(catalog_path(root)) as conn:
-        rows = cat.query_sessions(conn, car=car, track=track, valid_only=valid_only)
+        rows = cat.query_sessions(
+            conn, car=car, track=track, valid_only=valid_only,
+            include_held_out=include_held_out,
+        )
     return pl.DataFrame(
         {
             "session_id": [r.session_id for r in rows],
@@ -140,6 +150,7 @@ def sessions(
             "parquet_path": [r.parquet_path for r in rows],
             "dropped_channels": [r.dropped_channels for r in rows],
             "sample_rate_hz": [r.sample_rate_hz for r in rows],
+            "held_out": [r.held_out for r in rows],
         }
     )
 

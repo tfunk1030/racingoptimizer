@@ -1,0 +1,21 @@
+# Held-out IBT manifest -- physics-rebuild plan, PLAN.md Section 7.
+#
+# Format: <sha256>  <path>  # <label> (<bytes>)
+#
+# These five IBTs are reserved for gate validation. They MUST NOT be loaded
+# into any fit, train, or recommend pipeline. The catalog's `held_out=1`
+# flag (set by Day 0 prep) makes `query_sessions(... include_held_out=False)`
+# skip them; this manifest is the file-level integrity check.
+#
+# scripts/verify_holdout.sh re-hashes the listed paths against this manifest
+# and FAILS if any has changed. Run it as part of every day's pre-work
+# checklist (PLAN.md Section 8.1).
+#
+# Each session_id below is the first 16 hex chars of the SHA-256 of the
+# corresponding IBT (the project's filename-independent session-id rule).
+
+3f0a05d3f44527bdf5b3ebf694e5477095d1c37c6f0fc4f620c6b7a5936d889a  ibtfiles/bmwlmdh_spa 2024 up 2026-05-07 11-59-06.ibt  # H1 (36685224 bytes) session_id=3f0a05d3f44527bd
+d236a089300fc0ea6671909e16b10670e8781fd88f6dd24f7ad6ca71640fb0c3  ibtfiles/cadillacvseriesrgtp_lagunaseca 2026-04-29 23-48-56.ibt  # H2 (17935097 bytes) session_id=d236a089300fc0ea
+fc96805e3b1a27cc7a22414f412fd434487955c9a4bb61b657e06cdfbe56f4bc  ibtfiles/ferrari499p_hockenheim gp 2026-03-31 12-32-40.ibt  # H3 (26550256 bytes) session_id=fc96805e3b1a27cc
+72f43fa4527c42601f880a1728a1b3afb0daeabd0ebe1a7275f1701cb84916af  ibtfiles/acuraarx06gtp_daytona 2011 road 2026-04-03 20-39-40.ibt  # H4 (70770613 bytes) session_id=72f43fa4527c4260
+a3d43056a952ff99dede68ec37cf06a9e4af4f5d06bfc4c9b1f6bf5341109e71  ibtfiles/porsche963gtp_algarve gp 2026-04-04 12-30-44.ibt  # H5 (27731713 bytes) session_id=a3d43056a952ff99

@@ -74,11 +74,12 @@ def test_canonical_cars_drives_cross_car_borrow_loop() -> None:
     coupling here surfaces drift if the loop is ever hardcoded again
     (audit T3.10 regression guard).
     """
+    import inspect
+
     from racingoptimizer.cli.recommend import (
         CANONICAL_CARS,
         _maybe_borrow_cross_car_track,
     )
-    import inspect
     src = inspect.getsource(_maybe_borrow_cross_car_track)
     assert "CANONICAL_CARS" in src, (
         "_maybe_borrow_cross_car_track must iterate CANONICAL_CARS so the "
