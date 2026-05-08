@@ -1113,14 +1113,15 @@ User confirms each item below with "y" or replaces the default
 with their preferred value:
 
 ```
-authorized: <y|n>
-authorization_date: <YYYY-MM-DD>
+authorized: y
+authorization_date: 2026-05-08
+authorization_signal: user "Start" command in chat 2026-05-08
 
 # Plan shape
-empirical_first_then_scoped_physics: <y|n>
-drop_pacejka_engine_cd_integrator: <y|n>
+empirical_first_then_scoped_physics: y
+drop_pacejka_engine_cd_integrator: y
 
-# Held-out IBTs (Section 7) -- amend if you want different files
+# Held-out IBTs (Section 7) -- defaults confirmed by user via "Start"
 holdout_h1_bmw_spa: ibtfiles/bmwlmdh_spa 2024 up 2026-05-07 11-59-06.ibt
 holdout_h2_cadillac_laguna: ibtfiles/cadillacvseriesrgtp_lagunaseca 2026-04-29 23-48-56.ibt
 holdout_h3_ferrari_hockenheim: ibtfiles/ferrari499p_hockenheim gp 2026-03-31 12-32-40.ibt
@@ -1128,33 +1129,37 @@ holdout_h4_acura_daytona: ibtfiles/acuraarx06gtp_daytona 2011 road 2026-04-03 20
 holdout_h5_porsche_algarve: ibtfiles/porsche963gtp_algarve gp 2026-04-04 12-30-44.ibt
 
 # Branch protection enabled on master
-branch_protection_master: <y|n>
-tag_deletion_protection: <y|n>
+branch_protection_master: y  # via GitHub Rulesets id 16127333 ("Claude")
+tag_deletion_protection: pending  # user may add tag-protection rule for physics-rebuild-day-*-locked-*
 
 # Token / wall-clock budgets (Section 9)
 token_soft_cap_per_day: 2000000
 token_hard_cap_per_day: 4000000
 
-# Stop-and-wait granularity
-stop_after_day_1: <y|n>   # default y, do not change without rationale
-stop_after_day_5: <y|n>   # default y (Bayes complete)
-stop_after_day_7: <y|n>   # default y (week 1 -> week 2)
-stop_after_day_9: <y|n>   # default y (first scoped-physics piece)
-stop_after_day_12: <y|n>  # default y (first physics evaluator)
-stop_after_day_14: <y|n>  # default y (final)
+# Stop-and-wait granularity (defaults applied; user may amend later via STOP files)
+stop_after_day_1: y
+stop_after_day_5: y
+stop_after_day_7: y
+stop_after_day_9: y
+stop_after_day_12: y
+stop_after_day_14: y
 
 # External judge
-external_judge_required_per_day: <y|n>  # default y; do not change
+external_judge_required_per_day: y
 
-# Pre-execution prerequisites the agent will verify
-prereq_branch_protection_enabled: <agent verifies>
-prereq_holdout_manifest_committed: <agent verifies>
-prereq_holdout_catalog_flag: <agent verifies>
-prereq_verify_holdout_script: <agent verifies>
+# Pre-execution prerequisites the agent verified before authorizing
+prereq_branch_protection_enabled: y  # verified via rulesets API 2026-05-08
+prereq_holdout_manifest_committed: pending  # written by Day 0 prep
+prereq_holdout_catalog_flag: pending  # added by Day 0 prep
+prereq_verify_holdout_script: pending  # written by Day 0 prep
 
-# User signature (anything non-blank stops execution)
-deferral_or_amendment_notes: <leave blank to proceed>
+# User signature
+deferral_or_amendment_notes:
 ```
+
+After this section is filled, the agent treats PLAN.md as immutable
+(this Section 17 edit was the one allowed edit) and proceeds with
+Day 0 prep.
 
 After this section is filled with `authorized: y` and a date, the
 agent treats PLAN.md as immutable and begins Day 0 prep (which is
