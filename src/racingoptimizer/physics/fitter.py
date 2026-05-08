@@ -370,18 +370,27 @@ def fit(
     # every observed session ran 152 kPa. The recommender uses this dict
     # to pin such parameters to the observed median (see
     # `physics/recommend.py::_pin_or_trust_bounds`).
+    # Lap-time-weighted samples (PLAN.md Day 6, Mode 3): same weighting
+    # logic as fit_per_car but track-scoped (v3 trains on one track).
+    session_weights = _compute_lap_time_weights(
+        sorted_ids, track_per_session=track_models_used, corpus_root=root,
+    )
+
     baseline: dict[str, float] = {}
     parameter_observed_std: dict[str, float] = {}
     for name in fit_params:
-        observed = [
-            setup_snapshots[sid].get(name) for sid in sorted_ids
+        pairs = [
+            (setup_snapshots[sid].get(name), session_weights.get(sid, 1.0))
+            for sid in sorted_ids
         ]
-        observed = [v for v in observed if v is not None]
-        if not observed:
+        pairs = [(float(v), float(w)) for (v, w) in pairs if v is not None]
+        if not pairs:
             continue
-        baseline[name] = float(median(observed))
+        values = [v for v, _ in pairs]
+        weights = [w for _, w in pairs]
+        baseline[name] = _weighted_median(values, weights)
         parameter_observed_std[name] = (
-            float(pstdev(observed)) if len(observed) >= 2 else 0.0
+            _weighted_std(values, weights) if len(values) >= 2 else 0.0
         )
 
     car_baselines = derive_baselines(car_key, training)
@@ -793,16 +802,31 @@ def fit_per_car(
 
     aero_available = _try_load_aero(car_key)
 
+    # Lap-time-weighted samples (PLAN.md Day 6, Mode 3): bias the
+    # per-session contribution toward fast laps so a conservative
+    # recent stint doesn't drag the baseline conservative. Weight per
+    # session = 1 / (session_best_lap - track_min_in_corpus + 0.5s).
+    # Sessions with no valid laps fall back to weight 1.0 (defensive).
+    # See `_compute_lap_time_weights` for the formula and rationale.
+    session_weights = _compute_lap_time_weights(
+        sorted_ids, track_per_session=track_models_used, corpus_root=root,
+    )
+
     baseline: dict[str, float] = {}
     parameter_observed_std: dict[str, float] = {}
     for name in fit_params:
-        observed = [setup_snapshots[sid].get(name) for sid in sorted_ids]
-        observed = [v for v in observed if v is not None]
-        if not observed:
+        pairs = [
+            (setup_snapshots[sid].get(name), session_weights.get(sid, 1.0))
+            for sid in sorted_ids
+        ]
+        pairs = [(float(v), float(w)) for (v, w) in pairs if v is not None]
+        if not pairs:
             continue
-        baseline[name] = float(median(observed))
+        values = [v for v, _ in pairs]
+        weights = [w for _, w in pairs]
+        baseline[name] = _weighted_median(values, weights)
         parameter_observed_std[name] = (
-            float(pstdev(observed)) if len(observed) >= 2 else 0.0
+            _weighted_std(values, weights) if len(values) >= 2 else 0.0
         )
 
     car_baselines = derive_baselines(car_key, training)
@@ -1127,6 +1151,165 @@ def _dominant_track(track_models_used: dict[str, str]) -> str:
     if not counts:
         return "unknown"
     return max(counts.items(), key=lambda kv: (kv[1], kv[0]))[0]
+
+
+# ---- Lap-time-weighted samples (PLAN.md Day 6, Mode 3) -----------
+
+
+# Floor on the lap-time gap denominator. Without this, a session whose best
+# lap matches the track minimum would have weight 1/0 = inf, dominating
+# every aggregate. 0.5s is the smallest gap that's still meaningful for GTP
+# (typical pace deltas across stints are 0.5-2.0s).
+_LAP_WEIGHT_EPSILON_S: float = 0.5
+
+# Hard floor on what counts as a "real" lap time. Some sessions have
+# `valid=1` laps in the catalog that are <30s -- partial laps, outlap
+# fragments, or restart artifacts that the validity heuristic misclassed.
+# 60s is below every plausible GTP race lap on every catalog track
+# (Sebring ~110s, Daytona road ~95s, Algarve ~105s, etc.) and well above
+# the outlier short laps we observed. Anything shorter is filtered out
+# of the lap-weight calculation so the "best lap" doesn't accidentally
+# point at a junk row.
+_LAP_TIME_MIN_VALID_S: float = 60.0
+
+
+def _compute_lap_time_weights(
+    session_ids: list[str],
+    *,
+    track_per_session: dict[str, str],
+    corpus_root: Path,
+) -> dict[str, float]:
+    """Per-session weight = 1 / (session_best_lap - track_min + epsilon).
+
+    Closes Mode 3 (driver-bias inheritance, PLAN.md Section 14.4): without
+    weighting, a slow recent stint pulls the baseline toward conservative
+    setups regardless of historical fast laps. Weighting by inverse-gap-
+    to-track-min biases the baseline toward setups associated with the
+    user's fastest laps on each track, while still using the full corpus.
+
+    Implementation note: PLAN.md §14.4 specified lap_time as the
+    weighting axis. The catalog has data-quality issues (some `valid=1`
+    laps are partial laps / restart artifacts shorter than any real GTP
+    race lap), so we use the session's MEDIAN valid lap time instead of
+    its MIN. Median is robust to outliers AND captures "typical pace"
+    rather than a one-off best, which is arguably a better signal for
+    "what setup were they driving when they were going fast." Hard floor
+    `_LAP_TIME_MIN_VALID_S` filters out sub-60s rows (always junk on
+    every catalog track for GTP).
+
+    For each session:
+    - Pull all valid laps with lap_time >= _LAP_TIME_MIN_VALID_S.
+    - Compute the session's median lap time as its pace measure.
+    - Compute track_min as the minimum across all input session_ids on
+      that same track.
+    - Sessions with no valid laps after filtering fall back to weight
+      1.0 (defensive -- include at uniform weight rather than drop).
+
+    Returns a dict keyed by session_id; missing session_ids would receive
+    1.0 if looked up via .get(sid, 1.0) at the call site.
+    """
+    # Per-session best lap times.
+    session_best: dict[str, float] = {}
+    for sid in session_ids:
+        try:
+            laps_df = ingest_api.laps(
+                session_id=sid, valid_only=True, corpus_root=corpus_root,
+            )
+        except Exception:
+            continue
+        if laps_df.height == 0:
+            continue
+        times = [
+            float(t) for t in laps_df["lap_time_s"].to_list()
+            if t is not None and t >= _LAP_TIME_MIN_VALID_S
+        ]
+        if not times:
+            continue
+        session_best[sid] = float(median(times))
+
+    # Per-track minimum across the input batch.
+    track_min: dict[str, float] = {}
+    for sid in session_ids:
+        if sid not in session_best:
+            continue
+        track = track_per_session.get(sid)
+        if not track:
+            continue
+        prev = track_min.get(track)
+        cur = session_best[sid]
+        if prev is None or cur < prev:
+            track_min[track] = cur
+
+    # Compute weights.
+    weights: dict[str, float] = {}
+    for sid in session_ids:
+        if sid not in session_best:
+            weights[sid] = 1.0
+            continue
+        track = track_per_session.get(sid)
+        if not track or track not in track_min:
+            weights[sid] = 1.0
+            continue
+        gap = session_best[sid] - track_min[track]
+        weights[sid] = 1.0 / (gap + _LAP_WEIGHT_EPSILON_S)
+    return weights
+
+
+def _weighted_median(values: list[float], weights: list[float]) -> float:
+    """Weighted median = smallest value whose cumulative weight >= half.
+
+    Stable across permutations of the input. `values` and `weights` MUST
+    be the same length; non-positive weights are treated as 0.
+    """
+    if not values:
+        raise ValueError("_weighted_median: empty values")
+    if len(values) != len(weights):
+        raise ValueError(
+            f"_weighted_median: len(values)={len(values)} != "
+            f"len(weights)={len(weights)}"
+        )
+    paired = sorted(
+        ((float(v), max(0.0, float(w))) for v, w in zip(values, weights, strict=True)),
+        key=lambda p: p[0],
+    )
+    total = sum(w for _, w in paired)
+    if total <= 0:
+        # All weights zero or negative: fall back to plain median.
+        return float(median(values))
+    half = total / 2.0
+    cum = 0.0
+    for v, w in paired:
+        cum += w
+        if cum >= half:
+            return float(v)
+    return float(paired[-1][0])
+
+
+def _weighted_std(values: list[float], weights: list[float]) -> float:
+    """Population (biased) weighted std.
+
+    sqrt( sum_i w_i * (x_i - x_bar_w)^2 / sum_i w_i ),
+    where x_bar_w is the weighted mean.
+
+    Returns 0.0 when weights sum to <=0 (defensive); same fallback as
+    statistics.pstdev when fewer than 2 samples.
+    """
+    if len(values) < 2:
+        return 0.0
+    if len(values) != len(weights):
+        raise ValueError(
+            f"_weighted_std: len(values)={len(values)} != "
+            f"len(weights)={len(weights)}"
+        )
+    total = sum(max(0.0, float(w)) for w in weights)
+    if total <= 0:
+        return float(pstdev(values))
+    wmean = sum(float(v) * max(0.0, float(w)) for v, w in zip(values, weights, strict=True)) / total
+    var = sum(
+        max(0.0, float(w)) * (float(v) - wmean) ** 2
+        for v, w in zip(values, weights, strict=True)
+    ) / total
+    return float(var ** 0.5)
 
 
 __all__ = [
