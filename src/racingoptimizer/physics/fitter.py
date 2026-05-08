@@ -836,6 +836,18 @@ def fit_per_car(
         for track, by_param in per_track_observed.items()
     }
 
+    # Hierarchical-Bayesian retrofit (PLAN.md Day 4, Mode 1). Per
+    # parameter, fit a one-way random-intercept Gaussian model across
+    # tracks and store per-(parameter, track) posteriors on the model.
+    # The recommender prefers the posterior mean over baseline_setup
+    # for the trust-radius anchor when a posterior is available -- this
+    # is what closes Mode 1 cross-track confounding (a low-sample-count
+    # track no longer inherits a high-sample-count track's median).
+    # The retrofit operates on the SAME per-track observed dict the
+    # surrogate's trust radius already consumes; no new data ingest.
+    from racingoptimizer.physics.bayes_retrofit import fit_all_parameters
+    bayes_posteriors = fit_all_parameters(per_track_observed_frozen)
+
     model = PhysicsModel(
         car=car_key,
         session_ids=tuple(sorted_ids),
@@ -851,6 +863,7 @@ def fit_per_car(
         car_baselines=car_baselines,
         feature_schema_version=ENV_FEATURE_SCHEMA_VERSION_PER_CAR,
         per_track_parameter_observed=per_track_observed_frozen,
+        bayes_posteriors=bayes_posteriors,
     )
 
     if fit_records_for_log:

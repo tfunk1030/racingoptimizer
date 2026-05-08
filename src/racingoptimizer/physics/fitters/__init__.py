@@ -16,12 +16,22 @@ from racingoptimizer.physics.fitters.gp import GPFitter
 from racingoptimizer.physics.fitters.ridge import RidgeFitter
 
 # Bump when the fitters package layout changes in a way that breaks
-# pickle revival (class added/removed, module path renamed, etc.). The
-# per-car model cache key folds this so a layout change invalidates
-# pre-existing pickles instead of leaving them with a valid digest that
-# no longer loads (e.g. `ModuleNotFoundError:
-# racingoptimizer.physics.fitters.ridge` after a rename).
-FITTERS_LAYOUT_VERSION: int = 2
+# pickle revival (class added/removed, module path renamed, etc.) OR
+# when PhysicsModel itself gains a non-trivial field that production
+# code paths read (forces a refit so the field is populated rather than
+# default-empty). The per-car model cache key folds this so a layout
+# change invalidates pre-existing pickles instead of leaving them with
+# a valid digest that no longer loads (e.g. `ModuleNotFoundError:
+# racingoptimizer.physics.fitters.ridge` after a rename) OR with the
+# new field empty (e.g. `bayes_posteriors` added by physics-rebuild
+# Day 4 -- pre-Day-4 pickles default-revive with `bayes_posteriors={}`,
+# which would defeat Mode 1 closure on cached models).
+#
+# Version history:
+#   1 -- pre-Stage-3 layout
+#   2 -- Stage-3 joint multi-input model
+#   3 -- physics-rebuild Day 4: PhysicsModel.bayes_posteriors field
+FITTERS_LAYOUT_VERSION: int = 3
 
 __all__ = [
     "FITTERS_LAYOUT_VERSION",
