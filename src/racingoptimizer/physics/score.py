@@ -499,7 +499,7 @@ def _conditions_adjusted_baselines(
     regime = classify_conditions(env)
     baselines = (
         model.resolved_baselines if regime == "dry"
-        else wet_baselines(model.car, regime)
+        else wet_baselines(model.car, regime, base=model.resolved_baselines)
     )
     if quali:
         # Quali wants outright pace regardless of conditions; the wet
@@ -656,7 +656,15 @@ def _score_breakdown(
         )
         state = model.predict(setup, env, cpkey)
         if not state.states:
-            out[cpkey] = 0.0
+            # Empty state means the fitter has no trained channels for
+            # this (corner, phase) -- model coverage gap, NOT a real
+            # "0 utilization" prediction. Previously we wrote 0.0 here,
+            # which the DE objective summed alongside real scores --
+            # making "no coverage" indistinguishable from "actively
+            # predicted disaster". Skip the entry instead so the
+            # comparison between candidate setups uses only the corners
+            # the model actually has signal at. (Set is static per
+            # model, so this preserves the inter-setup delta.)
             continue
         util, conf = aggregate_utilization(
             state, phase, env, aero, baselines, phase_weights=phase_weights,
@@ -707,7 +715,11 @@ def _score_breakdown_per_car(
             setup, env, cpkey, corner_archetype=entry.archetype,
         )
         if not state.states:
-            out[cpkey] = 0.0
+            # See `_score_breakdown` for the rationale: skip empty-state
+            # corner-phases instead of writing 0.0 (which is the same
+            # as a maximally-bad real prediction) so the DE objective
+            # cleanly distinguishes "no model coverage" from "predicted
+            # poorly". The set of empty entries is static per model.
             continue
         util, conf = aggregate_utilization(
             state, phase, env, aero, baselines, phase_weights=phase_weights,

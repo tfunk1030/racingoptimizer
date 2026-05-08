@@ -25,8 +25,8 @@ Closed by this session (for the record):
 |---|------|------|--------|
 | T1.1 | `fit(track_model=...)` parameter unused | `physics/fitter.py::fit` | RESOLVED -- documented as vestigial; mask reaches disk via `apply_quality_mask` in ingest, fitter reads from parquet. No code change needed (callers retained). |
 | T1.2 | `--json` stderr-mixing bug | `cli/recommend.py::recommend_cmd` JSON branch | RESOLVED -- when `as_json AND output_file is None`, default to `Path("-")` to skip the saver block (and its stderr banner). |
-| T1.3 | `wet_baselines` ignores per-car corpus baselines | `physics/wet_mode.py:74` | OPEN -- 2 hr; needs `wet_baselines(car, regime, baselines)` signature change + thread `model.resolved_baselines` through `_conditions_adjusted_baselines`. |
-| T1.4 | `_score_breakdown_per_car` returns 0.0 on empty `state.states` | `physics/score.py:709-711` | OPEN -- 1 day; needs design for the sentinel (NaN? confidence flag?) and a CR confirming optimizer doesn't break on the new value. |
+| T1.3 | `wet_baselines` ignores per-car corpus baselines | `physics/wet_mode.py:67`, `physics/score.py:502` | RESOLVED -- `wet_baselines(car, regime, *, base=None)` accepts a `CarBaselines`; `_conditions_adjusted_baselines` now passes `model.resolved_baselines` through. |
+| T1.4 | `_score_breakdown_per_car` returns 0.0 on empty `state.states` | `physics/score.py` (both `_score_breakdown` and `_score_breakdown_per_car`) | RESOLVED -- empty-state corner-phases now SKIPPED from the breakdown dict. The set is static per model so candidate-vs-candidate comparison is unaffected; absolute score magnitude reflects coverage. |
 | T1.5 | smoke asserts stale `[confidence:` tag | `tests/cli/test_per_car_smoke.py:60-63` | RESOLVED -- now asserts on `OVERALL DIRECTION` OR `CHANGES (` OR the legacy tag. |
 | CR.3 | `recommend_staged` polish silently overrides `--explore 0` | `physics/recommend.py::recommend_staged` polish step | RESOLVED -- polish now uses the user-supplied `explore_pct` directly; help text updated. |
 

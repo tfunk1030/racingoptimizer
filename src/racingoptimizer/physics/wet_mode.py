@@ -64,14 +64,26 @@ def classify_conditions(env: EnvironmentFrame) -> WetRegime:
     return "dry"
 
 
-def wet_baselines(car: str, regime: WetRegime) -> CarBaselines:
+def wet_baselines(
+    car: str,
+    regime: WetRegime,
+    *,
+    base: CarBaselines | None = None,
+) -> CarBaselines:
     """Adjust per-car baselines for wet regime.
 
     Wet → lower max lateral G, lower aero baseline (downforce less
     effective on wet tyres), higher tolerance for wheelspin (managed
     throttle is the norm in wet).
+
+    ``base`` lets the caller pass corpus-derived baselines (commonly
+    ``model.resolved_baselines``). Without it, the function falls back
+    to ``baselines_for(car)`` which returns the cold-start defaults --
+    fine for unit tests, wrong for production where the corpus has
+    already trained richer baselines.
     """
-    base = baselines_for(car)
+    if base is None:
+        base = baselines_for(car)
     if regime == "dry":
         return base
     scale = _REGIME_SCALE[regime]
