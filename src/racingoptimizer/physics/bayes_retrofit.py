@@ -55,13 +55,34 @@ class BayesPosterior:
     Bayesian uncertainty (wider std), and high-sample-count tracks
     that genuinely differ from the grand mean retain their track-
     specific mean (low shrinkage).
+
+    Two stds carried (Day 5 of physics-rebuild correctness fix):
+    - `mean_std`: uncertainty in WHERE the central tendency is. Use
+      this for the recommender's trust-radius anchor (we want to know
+      how confident we are in the track-mean estimate).
+    - `predictive_std`: uncertainty in WHAT THE NEXT OBSERVATION will
+      look like. Use this for held-out-coverage tests (we want to ask
+      "will this particular setup fall in our 95% bracket?"). Equals
+      sqrt(mean_std^2 + sigma_eps^2) -- adds back the within-track
+      noise the user sees session-to-session.
+
+    Day 3 / Day 4 only had `std`; Day 5's BMW@Spa held-out gate
+    revealed the omission (95% coverage was 8.5% because mean_std
+    -> 0 when shrinkage is low, even though next-observation
+    variance is non-trivial).
+
+    Compatibility: `std` is retained as an alias for `mean_std` so
+    existing callers (recommender's local-density check) keep their
+    intended semantic.
     """
     parameter: str
     track: str
-    mean: float       # posterior mean (replaces y_bar_t)
-    std: float        # posterior std (replaces sigma_observed)
-    n_samples: int    # # of observed values for this (parameter, track)
-    shrinkage: float  # 1 - lambda_t in [0, 1]; high = pulled toward grand mean
+    mean: float           # posterior mean (replaces y_bar_t)
+    std: float            # alias for mean_std; kept for existing callers
+    n_samples: int        # # of observed values for this (parameter, track)
+    shrinkage: float      # 1 - lambda_t in [0, 1]; high = pulled toward grand mean
+    mean_std: float = 0.0       # uncertainty in WHERE the track mean is
+    predictive_std: float = 0.0 # uncertainty in WHAT next observation looks like
 
 
 # Numerical floor for variance estimates. Below this, the posterior
@@ -164,14 +185,25 @@ def fit_per_parameter(
         else:
             lambda_t = sigma_beta_sq / denom
         post_mean = lambda_t * track_means[t] + (1 - lambda_t) * grand_mean
-        post_std = ((1.0 - lambda_t) * sigma_eps_sq / n_t) ** 0.5
+        # mean_std: uncertainty in where the central tendency is.
+        mean_var = (1.0 - lambda_t) * sigma_eps_sq / n_t
+        # predictive_std: uncertainty in next observation. Adds back
+        # within-track noise sigma_eps^2 (which the user's session-to-
+        # session variation contributes regardless of how confident we
+        # are in the central tendency). Closed-form for the
+        # one-way-random-effects predictive distribution.
+        pred_var = mean_var + sigma_eps_sq
+        mean_std = mean_var ** 0.5
+        predictive_std = pred_var ** 0.5
         posteriors[t] = BayesPosterior(
             parameter=parameter_name,
             track=t,
             mean=post_mean,
-            std=post_std,
+            std=mean_std,  # back-compat alias
             n_samples=n_t,
             shrinkage=1.0 - lambda_t,
+            mean_std=mean_std,
+            predictive_std=predictive_std,
         )
     return posteriors
 
@@ -232,6 +264,10 @@ def _degraded_posteriors(
             continue
         m = mean(values)
         s = pvariance(values) ** 0.5 if n_t >= 2 else 0.0
+        # In the degraded path, mean and predictive std are both the
+        # empirical std (we have no hierarchical info to distinguish
+        # mean uncertainty from observation noise -- both collapse to
+        # sample std).
         posteriors[t] = BayesPosterior(
             parameter=parameter_name,
             track=t,
@@ -239,5 +275,7 @@ def _degraded_posteriors(
             std=s,
             n_samples=n_t,
             shrinkage=0.0,
+            mean_std=s,
+            predictive_std=s,
         )
     return posteriors
