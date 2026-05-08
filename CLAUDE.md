@@ -29,6 +29,13 @@ uv run pytest -q -m "not slow"              # fast suite (~2 min)
 uv run ruff check src tests                 # lint (must stay clean)
 ```
 
+## Tooling quirks
+
+- Click 8.3+: `CliRunner(mix_stderr=False)` is gone — stderr always separated, access via `result.stderr`. Don't use `%%` in option help text either; Click no longer printf-formats it.
+- `from racingoptimizer.physics import recommend` returns the FUNCTION (re-exported via `physics/__init__.py`), not the module. For `inspect.getsource` / module attrs, use `import racingoptimizer.physics.recommend as rec_mod` or `importlib.import_module("racingoptimizer.physics.recommend")`.
+- Multi-line Python on Windows: use `uv run python << 'PY' ... PY` heredoc; `python -c "..."` truncates at first newline. `grep -P` (Perl regex) is also unavailable on the bundled grep — use the `Grep` tool's regex mode or a small Python snippet.
+- Background `optimize` runs buffer Python stdout until exit; the output file stays at 0 bytes the entire run. Don't poll for progress — wait for the completion notification.
+
 ## Active build
 
 VISION.md is decomposed into six slices plus three cross-cutting modules. Status reflects what is **merged** AND what has been **verified across all 5 GTP cars** (BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, Ferrari 499P) versus only single-car (BMW Sebring fixture) smoke. Per VISION.md "do not assume a unified setup schema across cars" — the five cars have different suspension architectures, IBT YAML setup-blob shapes, and aero-map step sizes. **A green BMW test is not a "works" claim.**
@@ -96,6 +103,16 @@ Cache files at `corpus/models/<car>__per-car__<digest>.pickle` (or `<car>__<trac
 4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`).
 5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4).
 
+Editing `constraints.md` invalidates EVERY per-car cache (constraint content hash is a cache-key ingredient). Next recommend per car triggers a ~15-min refit. Plan constraint edits in batches.
+
+## Confidence is track-wide, NOT parameter-specific
+
+The `dense` / `noisy` / `sparse` label in the briefing header reflects overall corpus density at the target track, not specific evidence at the recommended value. A polluted corpus (e.g. GT3 sessions misrouted to BMW pre-1a8c9a3) will report "dense" while recommending values that have zero physics anchor. When a recommendation feels off, cross-check `model.per_track_parameter_observed[track][param]` for actual driven values before trusting it.
+
+## Per-car v4 cross-track confounding
+
+The joint surrogate pools every track for the car. If a parameter was held CONSTANT within a high-sample-count track (e.g. wing=17 across 24 Hockenheim Ferrari sessions) and varied only at a low-sample-count track (wing=14-15 across 6 Spa sessions), the regressor is dragged by sample weight regardless of corner-archetype features. Recommendations at the under-sampled track silently inherit the over-sampled track's setup philosophy. Mitigation: check whether the parameter has WITHIN-TRACK variance at the target before trusting recommendations; if not, the surrogate has no signal to learn track-specific interactions.
+
 ## IBT picker fields (`ingest/parser.py::_filename_recorded_at`)
 
 `recorded_at` is parsed from the IBT filename (`<car>_<track> YYYY-MM-DD HH-MM-SS.ibt`), with the YAML's `WeekendInfo.WeekendOptions.Date` as fallback. The YAML field is iRacing's SCHEDULED race date for series events — identical across an entire weekend — so using it as a per-session timestamp made the most-recent-setup picker pick arbitrary winners. Filename-derived datetimes are unique per session.
@@ -111,6 +128,10 @@ Decides whether to pin a parameter to its observed median or let DE search a tru
 Defensive guard: `target_observed` is clipped to the constraint envelope BEFORE the empirical-window math runs, so a user constraint pin (e.g. `--fuel 8` collapses to `(8, 8)`) outside the in-corpus values (corpus only has 58 L) doesn't produce an inverted `(57, 8)` bound that crashes DE's seed_population.
 
 ## Setup-card renderer contract (`explain/full_setup_card.py`)
+
+Mirror precedence: `_MIRRORED_LEAVES` is checked BEFORE `opt_match` in `_render_panel` (commit 06f0c23). Adding a mirror entry overrides any per-corner DE recommendation for that path. Required so right-side dampers (which have their own per-corner ParameterSpec) can mirror from the left rather than render an independent DE result.
+
+Watch-most + Why-line corner picker filter impacts by `_FAMILY_PREFERRED_PHASES` before max-by-score-delta (commits 7be3017, 5f305b4). Without this, the corner-duration weighting from e90e8fd makes the longest corner dominate every parameter's "Watch most" line.
 
 Every garage line carries one tag. The set is closed:
 
@@ -234,3 +255,11 @@ Both forms route to the same `recommend_cmd`. The end-user-facing walkthrough li
 ## Cars covered
 
 BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, Ferrari 499P. Each has its own suspension architecture and garage parameter set — do not assume a unified setup schema across cars.
+
+## When to override the optimizer
+
+The score function is per-corner-phase utilization, NOT lap time (VISION §6). For most parameters this correlates well with stopwatch pace. Three known disconnects:
+
+- **Tyre pressure**: surrogate rewards platform-stability (cleaner ride-height telemetry) which higher cold P delivers, but doesn't see the peak-grip loss from smaller contact patch. Community wisdom (152 floor for GTP) wins on lap time.
+- **Stiff vs soft setup philosophy**: when a user's recent corpus drifts toward conservative setups (rear toe-in, soft ARB, tight diff), the surrogate inherits that bias even when the same user has a faster validated setup in their IBT history. Compare optimizer recommendation to the user's fastest IBT before applying.
+- **Pinned-outside-corpus parameters**: `--pin <param>=<value>` outside the global corpus envelope produces curve-fit extrapolation, not engineered compensation. Confidence still reads "dense" because density is track-wide. Verify on track.
