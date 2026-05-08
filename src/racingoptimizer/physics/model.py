@@ -27,6 +27,7 @@ from racingoptimizer.physics.baselines import (
     CarBaselines,
     default_baselines_for,
 )
+from racingoptimizer.physics.bayes_retrofit import BayesPosterior
 from racingoptimizer.physics.exceptions import UntrainedError
 from racingoptimizer.physics.fitters import FitterBase
 from racingoptimizer.physics.ontology import ParameterSpec
@@ -151,6 +152,17 @@ class PhysicsModel:
         default_factory=dict
     )
 
+    # Hierarchical-Bayesian per-(parameter, track) posteriors (PLAN.md
+    # Day 4, Mode 1). Populated by `fit_per_car` after the per-track-
+    # observed dict is built; consumed by the recommender as the
+    # track-aware replacement for `parameter_observed_std`. Keyed by
+    # (parameter, track) -> BayesPosterior. Empty on per-(car, track) v3
+    # pickles and on legacy pickles produced before this field existed
+    # (the recommender's existing fallbacks handle that case).
+    bayes_posteriors: dict[tuple[str, str], BayesPosterior] = field(
+        default_factory=dict
+    )
+
     @property
     def resolved_baselines(self) -> CarBaselines:
         """Return `car_baselines` if set, else the per-car cold-start default.
@@ -192,6 +204,7 @@ class PhysicsModel:
         # trust-radius behaviour (no pinning, no regression).
         slot_values.setdefault("parameter_observed_std", {})
         slot_values.setdefault("per_track_parameter_observed", {})
+        slot_values.setdefault("bayes_posteriors", {})
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 
