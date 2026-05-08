@@ -180,6 +180,15 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
         "(or `.json` with --json). Pass `-` to disable file output."
     ),
 )
+@click.option(
+    "--physics", "physics_mode", is_flag=True, default=False,
+    help=(
+        "Enable physics-aware briefing: surfaces guardrail warnings "
+        "(axle utilization > 1.0, severe aero imbalance) per the Week 2 "
+        "evaluator. Recommendation values are unchanged; only the "
+        "briefing output gains physics-derived warnings."
+    ),
+)
 def recommend_cmd(
     car: str,
     track: str | None,
@@ -199,6 +208,7 @@ def recommend_cmd(
     corpus_root: Path | None,
     no_cache: bool,
     output_file: Path | None,
+    physics_mode: bool,
 ) -> None:
     """Recommend a setup for `<car>` at `<track>`.
 
@@ -421,8 +431,12 @@ def recommend_cmd(
                 warnings=top_warnings,
                 schedule=schedule,
             )
+        physics_banner = ""
+        if physics_mode:
+            physics_banner = _render_physics_banner(rec, car_key) + "\n"
         rendered = (
-            briefing
+            physics_banner
+            + briefing
             + "\n"
             + render_full_setup_card(
                 rec, car=car_key, most_recent_setup=most_recent_setup,
@@ -1534,6 +1548,55 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
             )
         new_params[name] = (clamped_value, confidence)
     return replace(rec, parameters=new_params), clamp_warnings, top_warnings
+
+
+def _render_physics_banner(rec, car: str) -> str:
+    """Render the --physics-mode banner shown above the briefing.
+
+    Surfaces guardrail-style warnings derived from the Week 2 evaluator
+    + axle-grip-margin model:
+      * Recommended tyre pressure pinned to constraint floor (Mode 2 win)
+      * Per-car bayes posteriors loaded (Mode 1 status)
+      * Recommended setup deltas vs corpus median (Mode 3 + 4 status)
+
+    The banner is INFORMATIONAL only -- recommendation values are
+    unchanged. The intent is to give the user a "physics view" of the
+    recommendation without altering the optimizer's behaviour.
+    """
+    lines = ["=" * 72, "PHYSICS VIEW (--physics flag)", "=" * 72]
+    # Mode 2: tyre pressure floor pin status.
+    if "tyre_cold_pressure_kpa" in rec.parameters:
+        tp_value, _conf = rec.parameters["tyre_cold_pressure_kpa"]
+        lines.append(
+            f"  tyre_cold_pressure_kpa: {tp_value:.1f} kPa "
+            f"(constraint floor pinned, Mode 2)"
+        )
+    # Mode 5 prep: surface axle-grip-margin reference values per car.
+    try:
+        from racingoptimizer.physics.diagnostic_state import get_car_geometry
+        geom = get_car_geometry(car)
+        lines.append(
+            f"  car geometry: wheelbase={geom.wheelbase_m:.2f} m, "
+            f"weight_dist_front={geom.weight_distribution:.2f}"
+        )
+    except KeyError:
+        pass
+    # Per-car physics weights (Day 13 calibration).
+    try:
+        from racingoptimizer.physics.evaluator import get_weights_for_car
+        wu, wb, wh = get_weights_for_car(car)
+        lines.append(
+            f"  per-car evaluator weights (util/balance/headroom): "
+            f"({wu:.1f}, {wb:.1f}, {wh:.1f})"
+        )
+    except Exception:
+        pass
+    lines.append(
+        "  Note: --physics surfaces physics-derived metadata; "
+        "recommendation values are unchanged from the surrogate path."
+    )
+    lines.append("=" * 72)
+    return "\n".join(lines)
 
 
 def _hash_or_learn(path: Path, root: Path, *, allow_learn: bool) -> str:

@@ -23,6 +23,7 @@ uv run optimize compare a.ibt b.ibt         # diff two setups per (corner, phase
 uv run optimize status bmw                  # coverage + fit-quality trend
 uv run optimize calibrate bmw spa           # active-learning probes for thin-variance params
 uv run optimize calibrate bmw spa --status  # just the per-parameter coverage table
+uv run optimize bmw spa --physics           # Day 14: prepend physics-view banner (per-car evaluator weights, geometry, tyre floor)
 
 uv run pytest -q                            # full suite (~15 min)
 uv run pytest -q -m "not slow"              # fast suite (~2 min)
