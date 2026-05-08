@@ -55,10 +55,15 @@ def test_recommend_per_car_smoke(
     out = rec_result.output
     assert car in out.lower(), f"car {car} missing from briefing"
     assert "confidence" in out.lower(), "no confidence line in briefing"
-    # At least one parameter block (any human-formatted parameter line ending
-    # in a unit). Sebring/etc briefings always emit at least one.
-    has_param_block = any(
-        "[confidence:" in line for line in out.splitlines()
+    # The default narrative renderer (since 2026-05-06) emits an
+    # OVERALL DIRECTION block followed by a CHANGES (...) block per
+    # parameter. Older `[confidence:` per-parameter tag was render_text
+    # only and only fires under --detailed. Asserting on either lets
+    # the smoke survive a future renderer swap.
+    has_param_block = (
+        "OVERALL DIRECTION" in out
+        or "CHANGES (" in out
+        or any("[confidence:" in line for line in out.splitlines())
     )
     assert has_param_block, f"no parameter block in briefing for {car}:\n{out}"
 

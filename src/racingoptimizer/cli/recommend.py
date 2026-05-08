@@ -116,7 +116,8 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
         "ride heights + tyre P) -> mechanical (springs + ARBs + torsion) "
         "-> dampers -> detail (cambers + toes + brake bias + diff). Each "
         "stage holds previous stages' chosen values as pins. Final "
-        "polish re-opens the full vector with explore=5% widening "
+        "polish re-opens the full vector at the user-supplied --explore "
+        "level (0 by default) widening "
         "seeded from the accumulated stage results. Mirrors engineer "
         "setup workflow; total wall time roughly equivalent to single-"
         "pass DE."
@@ -421,6 +422,14 @@ def recommend_cmd(
     # without opening the file. Fuel suffix is rendered for quali stints
     # (the load is the user's choice and varies per track); race mode
     # auto-pins fuel and the suffix is omitted to keep names short.
+    if as_json and output_file is None:
+        # JSON output is intended for piping (jq, etc.). The auto-save
+        # banner ``\n[saved to ...]`` would land on stderr and (under
+        # Click 8 CliRunner default mix_stderr) bleed into stdout,
+        # corrupting downstream JSON parsing. Default to ``-`` (suppress
+        # file output) when the user picks JSON without overriding the
+        # output path.
+        output_file = Path("-")
     if output_file is None:
         from datetime import datetime
         ext = ".json" if as_json else ".txt"

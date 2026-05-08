@@ -21,13 +21,14 @@ Closed by this session (for the record):
 
 ## Tier 1 -- highest leverage (active production gaps)
 
-| # | Item | File:line | Why this matters | Effort |
-|---|------|-----------|------------------|--------|
-| T1.1 | `fit(track_model=...)` parameter still unused even after `apply_quality_mask` wiring | `physics/fitter.py:217-243` | `cli/recommend.py:1115` builds the TrackModel and threads it in; the fitter ignores it. Quality mask now reaches disk via ingest but the fitter doesn't read TrackModel directly. Decide: drop the param OR have it consume curb / off-track masks for the fit-time filter. | 1 day |
-| T1.2 | `--json` stderr-mixing bug latent in production | `cli/recommend.py:407-434` | Auto-save banner unconditionally written to stderr even under `--json`. Users piping JSON to `jq` see the banner appended to JSON. Fix: when `as_json AND output_file is None`, default `output_file = Path("-")`. | 30 min |
-| T1.3 | `wet_baselines` ignores per-car corpus baselines | `physics/wet_mode.py:74` | Wet-mode swaps to `baselines_for(car)` with no frame -> always cold-start defaults. The corpus-derived baselines never reach wet predictions. | 2 hr |
-| T1.4 | `_score_breakdown_per_car` returns 0.0 on empty `state.states` | `physics/score.py:709-711` | Same value as a maximally-bad real prediction. Optimizer can't distinguish "no model coverage at this corner-phase" from "actively predicted disaster" -> may pick setups whose only merit is that the model has no signal. | 1 day |
-| T1.5 | `tests/cli/test_per_car_smoke.py:61` asserts on stale `[confidence:` tag | `tests/cli/test_per_car_smoke.py:61` | The assertion only fires under `--detailed`. Default narrative emits `Confidence: <regime>` once at top with no per-parameter `[confidence:` tag. Either silent test gap (passing for the wrong reason) or about-to-fail. Fix: assert on `OVERALL DIRECTION` or `CHANGES (`. | 15 min |
+| # | Item | File | Status |
+|---|------|------|--------|
+| T1.1 | `fit(track_model=...)` parameter unused | `physics/fitter.py::fit` | RESOLVED -- documented as vestigial; mask reaches disk via `apply_quality_mask` in ingest, fitter reads from parquet. No code change needed (callers retained). |
+| T1.2 | `--json` stderr-mixing bug | `cli/recommend.py::recommend_cmd` JSON branch | RESOLVED -- when `as_json AND output_file is None`, default to `Path("-")` to skip the saver block (and its stderr banner). |
+| T1.3 | `wet_baselines` ignores per-car corpus baselines | `physics/wet_mode.py:74` | OPEN -- 2 hr; needs `wet_baselines(car, regime, baselines)` signature change + thread `model.resolved_baselines` through `_conditions_adjusted_baselines`. |
+| T1.4 | `_score_breakdown_per_car` returns 0.0 on empty `state.states` | `physics/score.py:709-711` | OPEN -- 1 day; needs design for the sentinel (NaN? confidence flag?) and a CR confirming optimizer doesn't break on the new value. |
+| T1.5 | smoke asserts stale `[confidence:` tag | `tests/cli/test_per_car_smoke.py:60-63` | RESOLVED -- now asserts on `OVERALL DIRECTION` OR `CHANGES (` OR the legacy tag. |
+| CR.3 | `recommend_staged` polish silently overrides `--explore 0` | `physics/recommend.py::recommend_staged` polish step | RESOLVED -- polish now uses the user-supplied `explore_pct` directly; help text updated. |
 
 ## Tier 2 -- coverage gaps for shipped features
 

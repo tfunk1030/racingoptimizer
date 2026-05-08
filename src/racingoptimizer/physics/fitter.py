@@ -220,6 +220,14 @@ def fit(
     k_folds: int = 5,
     corpus_root: Path | str | None = None,
 ) -> PhysicsModel:
+    # NOTE on `track_model`: the parameter is kept for caller compat but the
+    # fitter does not read any TrackModel attribute. Data-quality filtering
+    # happens via the `data_quality_mask` column on the parquet, which is
+    # populated by `racingoptimizer.track.rewrite.apply_quality_mask` --
+    # called by `optimize learn` per-session in `ingest.api._apply_masks_for_session_ids`.
+    # Pass any TrackModel here (commonly the per-(car, track) model the
+    # caller already built); fit() reads the mask off-disk regardless.
+    _ = track_model  # vestigial; explicitly retained for caller compat
     car_key = car.strip().lower()
     sorted_ids = sorted(session_ids)
     if not sorted_ids:

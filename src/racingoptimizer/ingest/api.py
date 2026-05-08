@@ -60,21 +60,9 @@ def learn(
     written_this_run: list[str] = []
     with cat.open_catalog(db) as conn:
         for ibt in targets:
-            existing = None
-            try:
-                # Pre-check: was this session already status=ok?
-                existing_sid = session_id_from_bytes(ibt.read_bytes())
-                existing = cat.get_session(conn, existing_sid)
-            except OSError:
-                existing = None
-            sid = _process_one(conn, root, ibt, reparse=reparse)
+            sid, was_written = _process_one(conn, root, ibt, reparse=reparse)
             out.append(sid)
-            short_circuited = (
-                existing is not None
-                and existing.status == "ok"
-                and not reparse
-            )
-            if not short_circuited:
+            if was_written:
                 written_this_run.append(sid)
     if apply_quality_masks and written_this_run:
         _apply_masks_for_session_ids(written_this_run, root=root)
@@ -113,11 +101,17 @@ def _apply_masks_for_session_ids(
         for sid in batch_ids:
             try:
                 apply_quality_mask(sid, track_model=tm, corpus_root=root)
-            except (FileNotFoundError, KeyError):
-                # Session row missing parquet path or session_id -- skip
-                # silently; the quality-mask pass is best-effort and
-                # never blocks ingest.
-                continue
+            except Exception as exc:  # noqa: BLE001 -- best-effort: never block ingest
+                # The mask pass is informational; ingest already wrote
+                # the parquet successfully. Surface failures via
+                # warnings so the user can see them, but do NOT abort
+                # the whole `learn` run for one bad session.
+                import warnings
+                warnings.warn(
+                    f"apply_quality_mask({sid!r}) failed: "
+                    f"{type(exc).__name__}: {exc}; ingest continues",
+                    stacklevel=2,
+                )
 
 
 def sessions(
@@ -255,8 +249,16 @@ def _process_one(
     ibt_path: Path,
     *,
     reparse: bool = False,
-) -> str:
+) -> tuple[str, bool]:
     """Ingest one IBT, recording an outcome row no matter what.
+
+    Returns ``(session_id, was_written)``. ``was_written`` is ``True``
+    when the catalog row / parquet were (re-)written this call --
+    either because the session was new, or it had `status != "ok"`,
+    or `reparse=True` forced re-processing. ``False`` means the call
+    short-circuited on a pre-existing `status="ok"` row. Used by
+    `learn` to skip the slice-D quality-mask pass on duplicates so
+    re-ingest stays idempotent.
 
     Status semantics (VISION §1 "use everything, lose nothing"):
 
@@ -284,12 +286,12 @@ def _process_one(
     except OSError as exc:
         sid = session_id_from_bytes(str(ibt_path).encode("utf-8"))
         _record_failure(conn, sid=sid, source_path=str(ibt_path), exc=exc)
-        return sid
+        return sid, True
 
     sid = session_id_from_bytes(raw)
     existing = cat.get_session(conn, sid)
     if existing is not None and existing.status == "ok" and not reparse:
-        return sid
+        return sid, False
 
     # Stage 1: parse YAML header + channels. If this raises we have no
     # channels to keep — record `failed` and return.
@@ -297,7 +299,7 @@ def _process_one(
         parse = parse_ibt(ibt_path)
     except Exception as exc:  # noqa: BLE001 — every parse failure must register
         _record_failure(conn, sid=sid, source_path=str(ibt_path), exc=exc)
-        return sid
+        return sid, True
 
     # Stage 2: detect car + track. Either failure is salvageable (we still
     # have channels), so accept "unknown" and downgrade status to "partial".
@@ -352,4 +354,4 @@ def _process_one(
         )
     except Exception as exc:  # noqa: BLE001 — every writer failure must register
         _record_failure(conn, sid=sid, source_path=str(ibt_path), exc=exc)
-    return sid
+    return sid, True

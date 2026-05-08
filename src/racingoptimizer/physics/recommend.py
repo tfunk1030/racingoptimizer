@@ -880,7 +880,13 @@ def recommend_staged(
             schedule=schedule, quali=quali, explore_pct=explore_pct,
             reset_mode=reset_mode,
         )
-    polish_explore = max(explore_pct, 5.0)
+    # Polish stage uses the user-supplied explore_pct directly.
+    # Previously this was forced to `max(explore_pct, 5.0)`, silently
+    # widening past the user's request -- a user passing
+    # ``--staged --explore 0`` (intending strict empirical) got 5%
+    # widening anyway. Honoring the user value lets strict-empirical
+    # stay strict; users who want a polish widening can pass
+    # ``--explore 5`` (or higher) explicitly.
     # Inject the accumulated values into model.baseline_setup so DE seeds
     # from there. PhysicsModel is frozen+slots; dataclasses.replace gives
     # a fresh model with overridden baseline_setup. (No __setstate__
@@ -890,7 +896,7 @@ def recommend_staged(
     polish_model = replace(model, baseline_setup=polish_baseline)
     polish_rec = recommend(
         polish_model, track, env, constraints,
-        schedule=schedule, quali=quali, explore_pct=polish_explore,
+        schedule=schedule, quali=quali, explore_pct=explore_pct,
         reset_mode=reset_mode,
     )
     return polish_rec
