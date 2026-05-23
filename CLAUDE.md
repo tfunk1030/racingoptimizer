@@ -97,8 +97,9 @@ module:
   `mean_std` (uncertainty in central tendency, used by recommender
   trust-radius) + `predictive_std` (uncertainty in next observation,
   used by held-out coverage tests). Wired into `fit_per_car` →
-  `PhysicsModel.bayes_posteriors`. **`FITTERS_LAYOUT_VERSION = 3`**
-  (was 2 pre-Day-4) so existing pickles invalidate.
+  `PhysicsModel.bayes_posteriors`. **`FITTERS_LAYOUT_VERSION = 4`**
+  (was 3 pre-guardrail-wire-in, was 2 pre-Day-4) so existing pickles
+  invalidate. v4 adds `PhysicsModel.axle_grip_ceilings`.
 - **`physics.evaluator`** — per-corner-phase composite physics score:
   `axle_utilization * w + aero_balance * w + grip_headroom * w`.
   **Per-car CALIBRATED weights** (Day 12b): BMW (0.2, 0.8, 0.0),
@@ -115,9 +116,22 @@ module:
   straight=0.05`. **Mid_corner has 3-30x stronger physics signal**
   (steady-state cornering vs driver-input-dominated phases).
   Guardrail penalty additive: `over_axle_ceiling = -0.15`,
-  `severely_off_balance = -0.075`; floors at 0. *Module ships as
-  scoring function; not yet wired into DE search* — see COMPLETE.md
-  "Recommended next steps."
+  `severely_off_balance = -0.075`; floors at 0.
+  **Guardrail penalty WIRED INTO DE** (post-rebuild, 2026-05-23) via
+  `physics/recommend.py::_axle_guardrail_penalty`: when
+  `PhysicsModel.axle_grip_ceilings is not None`, the DE objective
+  subtracts a corner-time-weighted penalty for every mid-corner
+  phase entry whose predicted axle utilization exceeds the empirical
+  ceiling. Long-G is approximated as 0 in mid-corner (steady-state)
+  since `accel_long_g_*` isn't in `TARGET_OUTPUT_CHANNELS`; the
+  approximation under-allocates rear Fz, so the rear margin is
+  slightly inflated (safe failure mode — more likely to flag than
+  miss a violation). `None` ceilings (legacy v3 pickles, or cars
+  with insufficient mid-corner samples) → no-op, surrogate-only
+  scoring preserved. The full phase-aware *blend* (mid_corner=0.40
+  etc.) is still scoring-function-only — wiring it into the DE
+  search is a separate follow-up because the blend math reorders
+  setups while the guardrail only penalises specific anomalies.
 - **`physics.damper_force.DamperCurve`** + `fit_damper_curve_from_corpus(car)`
   — per-car (k_low_speed, knee_mm_s) refit from corpus shock-velocity
   p30/p95 percentiles (`*shockVel` is in m/s; multiply by 1000).

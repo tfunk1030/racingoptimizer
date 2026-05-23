@@ -28,6 +28,11 @@ from scipy.optimize import differential_evolution
 from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import ConstraintsTable, clamp
 from racingoptimizer.context import EnvironmentFrame
+from racingoptimizer.corner import CornerPhaseKey, Phase
+from racingoptimizer.physics.axle_grip import (
+    AxleGripCeiling,
+    compute_axle_grip_ratios,
+)
 from racingoptimizer.physics.model import PhysicsModel
 from racingoptimizer.physics.ontology import fittable_parameters
 from racingoptimizer.physics.recommendation import SetupRecommendation
@@ -231,6 +236,16 @@ def recommend(
     else:
         keys = _corner_phase_keys(model)
 
+    # Guardrail-penalty wiring (post-physics-rebuild). When the model
+    # carries fitted per-axle grip ceilings, the DE objective adds an
+    # additive penalty for every (corner, phase) entry whose predicted
+    # axle utilization exceeds the empirical ceiling. The penalty is
+    # corner-time-weighted so longer corners (which dominate the
+    # surrogate sum) also dominate the guardrail. `None` ceilings ->
+    # no-op (legacy pickles and cars with insufficient mid-corner
+    # samples; ceilings field added in FITTERS_LAYOUT_VERSION=4).
+    axle_ceilings = getattr(model, "axle_grip_ceilings", None)
+
     def objective(x: np.ndarray) -> float:
         candidate = dict(full_baseline)
         for name, value in zip(param_names, x.tolist(), strict=True):
@@ -246,7 +261,15 @@ def recommend(
                 model, clamped, env, aero, keys, weights, baselines,
                 phase_weights=phase_weights_override,
             )
-        return -float(sum(breakdown_inner.values()))
+        score_sum = float(sum(breakdown_inner.values()))
+        if axle_ceilings is not None:
+            penalty = _axle_guardrail_penalty(
+                model, clamped, env, weights, axle_ceilings,
+                schedule if is_per_car else None,
+                keys if not is_per_car else None,
+            )
+            score_sum -= penalty
+        return -score_sum
 
     # DE budget: per-car v4 with 47 fittable parameters × 70+ schedule
     # entries × 30+ output channels per objective evaluation works out
@@ -800,6 +823,114 @@ def _baseline_recommendation(
         untrained_parameters=tuple(model.untrained_parameters),
         aero_correction_available=bool(model.aero_correction_available),
     )
+
+
+# --------------------------------------------------------------------------
+# Guardrail penalty (physics-rebuild Day-10 ceilings wired into DE).
+#
+# Additive penalty applied to the DE objective when a candidate setup's
+# predicted axle utilization exceeds the empirical per-(car, axle) grip
+# ceiling. The penalty is *additive in score units* (the DE objective
+# is the corner-time-weighted utilization sum) so a penalty of
+# `_GUARDRAIL_PENALTY_OVER_CEILING * corner_weight` subtracted from the
+# objective is equivalent in magnitude to a 15% utilization loss in
+# that corner -- enough to push DE away from physically-anomalous
+# setups without dominating the surrogate's relative ranking.
+#
+# Long-G approximation: the corner aggregator emits `accel_lat_g_max`
+# but not `accel_long_g_*` (TARGET_OUTPUT_CHANNELS in fitter.py). For
+# the guardrail check we approximate long_g = 0 in mid-corner (steady-
+# state cornering). The axle force decomposition under-allocates rear
+# Fz vs reality (no aft weight transfer in the approximation), so the
+# rear ratio is slightly INFLATED -- a SAFE failure mode (more likely
+# to flag than miss a violation).
+# --------------------------------------------------------------------------
+
+# Additive penalty subtracted per (corner, phase) entry that exceeds
+# the ceiling. Matches `hybrid_optimizer._GUARDRAIL_PENALTY_OVER_CEILING`.
+_GUARDRAIL_PENALTY_OVER_CEILING: float = 0.15
+
+
+def _axle_guardrail_penalty(
+    model: PhysicsModel,
+    setup: dict[str, float],
+    env: EnvironmentFrame,
+    weights: dict[int, float],
+    ceilings: dict[str, AxleGripCeiling],
+    schedule: list | None,
+    keys: list[tuple[int, str]] | None,
+) -> float:
+    """Total corner-time-weighted penalty for setups exceeding the axle ceiling.
+
+    Iterates the per-(corner, phase) schedule (per-car v4) or keys (v3)
+    -- restricted to mid-corner phases where the lat-G peak is most
+    interpretable as steady-state cornering. For each entry, queries
+    the surrogate for predicted lat-G max, decomposes onto axles via
+    the per-car geometry, and compares to the empirical ceiling.
+
+    Returns the sum over (corner, phase) of:
+        weights[corner_id] * _GUARDRAIL_PENALTY_OVER_CEILING
+    for every entry whose front OR rear utilization exceeds 1.0.
+    """
+    front_ceil = ceilings.get("front")
+    rear_ceil = ceilings.get("rear")
+    if front_ceil is None or rear_ceil is None:
+        return 0.0
+    car = model.car
+    total = 0.0
+    if schedule is not None:
+        iterator: list[tuple[int, str, object]] = [
+            (int(e.corner_id), str(e.phase), e.archetype) for e in schedule
+        ]
+    elif keys is not None:
+        iterator = [(int(c), str(p), None) for c, p in keys]
+    else:
+        return 0.0
+    for corner_id, phase_str, archetype in iterator:
+        # Restrict to mid-corner: that's where the long-G ~ 0
+        # approximation holds and where setup-driven peak lat-G is
+        # the operative quantity. Other phases (braking, throttle
+        # exit) are driver-dominated and the empirical ceiling is
+        # less directly comparable.
+        if phase_str.strip().lower() != "mid_corner":
+            continue
+        try:
+            phase = Phase(phase_str)
+        except ValueError:
+            continue
+        cpkey = CornerPhaseKey(
+            session_id="<recommend-virtual>",
+            lap_index=0,
+            corner_id=int(corner_id),
+            phase=phase,
+        )
+        if archetype is not None:
+            state = model.predict(setup, env, cpkey, corner_archetype=archetype)
+        else:
+            state = model.predict(setup, env, cpkey)
+        lat_conf = state.states.get("accel_lat_g_max")
+        if lat_conf is None:
+            continue
+        lat_g = float(lat_conf.value)
+        if not np.isfinite(lat_g) or abs(lat_g) < 0.5:
+            # Below mid-corner threshold from the ceiling fit; the
+            # ratio computation would extrapolate outside the fitted
+            # support.
+            continue
+        try:
+            ratios = compute_axle_grip_ratios(
+                np.array([lat_g]), np.array([0.0]), car,
+            )
+        except (KeyError, ValueError):
+            continue
+        front_ratio = float(ratios["front"][0])
+        rear_ratio = float(ratios["rear"][0])
+        front_margin = front_ratio / max(front_ceil.mu_peak, 1e-9)
+        rear_margin = rear_ratio / max(rear_ceil.mu_peak, 1e-9)
+        if front_margin > 1.0 or rear_margin > 1.0:
+            w = float(weights.get(int(corner_id), 0.0))
+            total += w * _GUARDRAIL_PENALTY_OVER_CEILING
+    return total
 
 
 # --------------------------------------------------------------------------

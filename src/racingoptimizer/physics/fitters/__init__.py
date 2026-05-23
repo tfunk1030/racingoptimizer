@@ -31,7 +31,12 @@ from racingoptimizer.physics.fitters.ridge import RidgeFitter
 #   1 -- pre-Stage-3 layout
 #   2 -- Stage-3 joint multi-input model
 #   3 -- physics-rebuild Day 4: PhysicsModel.bayes_posteriors field
-FITTERS_LAYOUT_VERSION: int = 3
+#   4 -- post-rebuild hybrid-DE wiring: PhysicsModel.axle_grip_ceilings
+#        field, consumed by physics/recommend.py guardrail penalty in
+#        the DE objective. Pickles from v3 will be revived with
+#        ceilings=None (no-op) but the cache key change forces a
+#        refit on next recommend so ceilings populate.
+FITTERS_LAYOUT_VERSION: int = 4
 
 __all__ = [
     "FITTERS_LAYOUT_VERSION",

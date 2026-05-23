@@ -35,6 +35,11 @@ from racingoptimizer.corner import corner_phase_states
 from racingoptimizer.ingest import api as ingest_api
 from racingoptimizer.ingest import catalog as cat
 from racingoptimizer.ingest.paths import catalog_path, resolve_corpus_root
+from racingoptimizer.physics.axle_grip import (
+    AxleGripCeiling,
+    compute_axle_grip_ratios,
+    fit_axle_grip_ceiling,
+)
 from racingoptimizer.physics.baselines import derive_baselines
 from racingoptimizer.physics.exceptions import InsufficientDataError
 from racingoptimizer.physics.fitters import (
@@ -395,6 +400,13 @@ def fit(
 
     car_baselines = derive_baselines(car_key, training)
 
+    # Per-(car, axle) grip ceilings from training corpus (see
+    # `_fit_axle_ceilings_for_car` docstring + `physics/recommend.py
+    # _axle_guardrail_penalty`). `None` -> guardrail inactive in DE.
+    axle_grip_ceilings = _fit_axle_ceilings_for_car(
+        car_key, sorted_ids, root,
+    )
+
     model = PhysicsModel(
         car=car_key,
         session_ids=tuple(sorted_ids),
@@ -409,6 +421,7 @@ def fit(
         seed=int(seed),
         car_baselines=car_baselines,
         feature_schema_version=ENV_FEATURE_SCHEMA_VERSION,
+        axle_grip_ceilings=axle_grip_ceilings,
     )
 
     # Persist a row per fitter to the corpus accuracy log so `optimize
@@ -638,6 +651,81 @@ def _attach_corner_archetypes(frame: pl.DataFrame) -> pl.DataFrame:
             .alias("corner_duration_s"),
         ]
     )
+
+
+def _fit_axle_ceilings_for_car(
+    car: str,
+    session_ids: list[str],
+    root: Path,
+    *,
+    max_laps_per_session: int = 3,
+    mid_corner_threshold_g: float = 0.5,
+) -> dict[str, AxleGripCeiling] | None:
+    """Fit per-(car, axle) grip ceilings from the training corpus.
+
+    Pulls up to `max_laps_per_session` valid laps per session, extracts
+    `LatAccel` and `LongAccel` (60Hz channels in the IBT), pools across
+    all sessions for the car, filters to mid-corner samples (|lat_g| >=
+    `mid_corner_threshold_g`), then fits per-(car, axle) `mu_peak`
+    via `physics.axle_grip.fit_axle_grip_ceiling`.
+
+    Returns `None` on any failure path -- no `LatAccel`/`LongAccel`
+    channels, insufficient mid-corner samples (< 100 after filter),
+    or `fit_axle_grip_ceiling` raises (mu outside physical range, etc.).
+    The recommender treats `None` as "guardrail inactive", so a
+    failed ceiling fit silently degrades to surrogate-only scoring
+    rather than crashing the fit.
+
+    Why a separate corpus scan vs reusing `_collect_training_frames`:
+    that helper aggregates 60Hz samples into per-(corner, phase) rows
+    (mean/max/p99) and drops the raw time series. The axle ceiling
+    needs raw samples to fit a percentile-anchored peak, so we scan
+    a few laps per session directly.
+    """
+    lat_samples: list[np.ndarray] = []
+    lon_samples: list[np.ndarray] = []
+    for sid in session_ids:
+        try:
+            laps_df = ingest_api.laps(
+                session_id=sid, valid_only=True, corpus_root=root,
+            )
+        except Exception:
+            continue
+        if laps_df.height == 0:
+            continue
+        for lap_pos in range(min(max_laps_per_session, laps_df.height)):
+            try:
+                df = ingest_api.lap_data(
+                    session_id=sid,
+                    lap_index=int(laps_df["lap_index"][lap_pos]),
+                    corpus_root=root,
+                )
+            except Exception:
+                continue
+            if "LatAccel" not in df.columns or "LongAccel" not in df.columns:
+                continue
+            lat_samples.append(
+                df["LatAccel"].to_numpy().astype(np.float64) / 9.81
+            )
+            lon_samples.append(
+                df["LongAccel"].to_numpy().astype(np.float64) / 9.81
+            )
+    if not lat_samples:
+        return None
+    lat_arr = np.concatenate(lat_samples)
+    lon_arr = np.concatenate(lon_samples)
+    mid_mask = np.abs(lat_arr) >= mid_corner_threshold_g
+    if int(np.sum(mid_mask)) < 100:
+        return None
+    try:
+        ratios = compute_axle_grip_ratios(
+            lat_arr[mid_mask], lon_arr[mid_mask], car,
+        )
+        front_ceiling = fit_axle_grip_ceiling(car, "front", ratios["front"])
+        rear_ceiling = fit_axle_grip_ceiling(car, "rear", ratios["rear"])
+    except (ValueError, KeyError):
+        return None
+    return {"front": front_ceiling, "rear": rear_ceiling}
 
 
 def fit_per_car(
@@ -872,6 +960,17 @@ def fit_per_car(
     from racingoptimizer.physics.bayes_retrofit import fit_all_parameters
     bayes_posteriors = fit_all_parameters(per_track_observed_frozen)
 
+    # Per-(car, axle) grip ceilings from training corpus
+    # (physics-rebuild Day-10 model, wired into DE in post-rebuild
+    # work). Returns `None` on any failure path -- the recommender
+    # treats `None` as "guardrail inactive" so a failed ceiling fit
+    # degrades to pure-surrogate scoring rather than crashing the
+    # fit. Acura/Porsche are likely to land here on this corpus
+    # until they accumulate more mid-corner samples.
+    axle_grip_ceilings = _fit_axle_ceilings_for_car(
+        car_key, sorted_ids, root,
+    )
+
     model = PhysicsModel(
         car=car_key,
         session_ids=tuple(sorted_ids),
@@ -888,6 +987,7 @@ def fit_per_car(
         feature_schema_version=ENV_FEATURE_SCHEMA_VERSION_PER_CAR,
         per_track_parameter_observed=per_track_observed_frozen,
         bayes_posteriors=bayes_posteriors,
+        axle_grip_ceilings=axle_grip_ceilings,
     )
 
     if fit_records_for_log:

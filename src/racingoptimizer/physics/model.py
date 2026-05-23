@@ -22,6 +22,7 @@ from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import ConstraintsTable
 from racingoptimizer.context import EnvironmentFrame
 from racingoptimizer.corner import CornerPhaseKey, Phase
+from racingoptimizer.physics.axle_grip import AxleGripCeiling
 from racingoptimizer.physics.baselines import (
     DEFAULT_BASELINES,
     CarBaselines,
@@ -163,6 +164,18 @@ class PhysicsModel:
         default_factory=dict
     )
 
+    # Per-(car, axle) grip ceilings fitted from the training corpus during
+    # `fit_per_car` (physics-rebuild Day-10 model, wired into DE in
+    # post-rebuild work). Used by `physics/recommend.py` to apply an
+    # additive guardrail penalty in the DE objective when a candidate
+    # setup's predicted axle utilization exceeds the empirical ceiling.
+    # `None` on legacy pickles (FITTERS_LAYOUT_VERSION < 4) and on cars
+    # whose corpus lacks enough mid-corner samples for a stable fit; the
+    # recommender treats `None` as "guardrail inactive" and falls back to
+    # pure-surrogate scoring without regression.
+    # Keyed by axle name: {"front": AxleGripCeiling, "rear": AxleGripCeiling}.
+    axle_grip_ceilings: dict[str, AxleGripCeiling] | None = None
+
     @property
     def resolved_baselines(self) -> CarBaselines:
         """Return `car_baselines` if set, else the per-car cold-start default.
@@ -205,6 +218,7 @@ class PhysicsModel:
         slot_values.setdefault("parameter_observed_std", {})
         slot_values.setdefault("per_track_parameter_observed", {})
         slot_values.setdefault("bayes_posteriors", {})
+        slot_values.setdefault("axle_grip_ceilings", None)
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 
