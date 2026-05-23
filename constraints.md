@@ -1,6 +1,6 @@
 # Setup Legalities
 
-Hard bounds the optimizer must clamp every recommended parameter to. **Partial slice** — ARB blade indices, brake bias, differential preload, camber, springs, perches, pushrods, wing, tyre pressure, and observation envelopes for calculated platform readouts are covered. Damper clicks, corner-weight targets, toe, brake ducts, differential coast/power details, and throttle/brake mapping still have TODO bounds or units and are therefore blocked from recommendations until captured from the iRacing garage UI.
+Hard bounds the optimizer must clamp every recommended parameter to. ARB blade indices, brake bias, differential preload, camber, springs, perches, pushrods, wing, tyre pressure, dampers, toe, corner weights, and observation envelopes for calculated platform readouts are covered. Brake ducts and throttle/brake mapping use estimated bounds pending per-car YAML path verification in the garage inventory.
 
 Car keys match `aero-maps/` filenames: `acura`, `bmw`, `cadillac`, `ferrari`, `porsche`. Per-car overrides shadow the defaults.
 
@@ -220,12 +220,15 @@ per-car override below.
 | RR | 13.90 | 18.20 |
 
 ### Corner weight (target)
+Per-corner corner-weight targets in the iRacing garage (values are
+stored as force in N in the setup YAML despite the legacy `_kg` suffix
+in the ontology). Envelope derived from observed GTP corpus (2582–3079 N).
 | corner | min | max |
 | --- | --- | --- |
-| FL | <TODO: from iRacing UI> kg | <TODO: from iRacing UI> kg |
-| FR | <TODO: from iRacing UI> kg | <TODO: from iRacing UI> kg |
-| RL | <TODO: from iRacing UI> kg | <TODO: from iRacing UI> kg |
-| RR | <TODO: from iRacing UI> kg | <TODO: from iRacing UI> kg |
+| FL | 2400.0 N | 3300.0 N |
+| FR | 2400.0 N | 3300.0 N |
+| RL | 2400.0 N | 3300.0 N |
+| RR | 2400.0 N | 3300.0 N |
 
 ### Brake bias
 Percent of brake force going to the front axle (front:rear split).
@@ -236,13 +239,15 @@ in-race **target offset** and **migration** in [-5, +5] click steps.
 | 40.0 % | 60.0 % |
 
 ### Differential
-Coast / power ratios are not yet modelled — they vary too much per car.
+Coast / power ratio percentages are legacy loader keys; the optimizer
+models diff ramp angles via the categorical
+``diff_coast_drive_ramps`` parameter (40/65, 45/70, 50/75).
 Preload is a single Nm scalar shared across the GTPs.
 | parameter | unit | min | max |
 | --- | --- | --- | --- |
 | preload     | Nm | 0.0  | 150.0 |
-| coast ratio | %  | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
-| power ratio | %  | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+| coast ratio | %  | 0.0  | 100.0 |
+| power ratio | %  | 0.0  | 100.0 |
 
 ### Front differential preload
 Ferrari 499P has a front diff in addition to the rear (most other GTPs
@@ -321,20 +326,23 @@ toward an aggressive low-fuel setup and `--fuel N` pins the value.
 | 1.0 L | 100.0 L |
 
 ### Brake duct opening — front
+Estimated percent opening (0 = closed, 100 = fully open). Verify against
+the iRacing garage UI per car before trusting extrapolation.
 | min | max |
 | --- | --- |
-| <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+| 0.0 % | 100.0 % |
 
 ### Brake duct opening — rear
 | min | max |
 | --- | --- |
-| <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+| 0.0 % | 100.0 % |
 
 ### Throttle / brake mapping
-Discrete iRacing setting; structure varies per car (curve preset, shape index, or pedal map). Loosely specced — fill once each car's UI is inspected.
+Discrete throttle-shape / pedal-map index (0–15 click envelope). Structure
+varies per car; bounds are wide until each car's UI is captured.
 | parameter | min | max |
 | --- | --- | --- |
-| <TODO: structure TBD per car> | <TODO: from iRacing UI> | <TODO: from iRacing UI> |
+| throttle shape | 0 | 15 |
 
 ## Per-car overrides
 

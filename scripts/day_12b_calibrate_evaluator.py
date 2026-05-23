@@ -58,12 +58,16 @@ HELD_OUT_BY_CAR: dict[str, str] = {
     "bmw": "3f0a05d3f44527bd",
     "cadillac": "d236a089300fc0ea",
     "ferrari": "fc96805e3b1a27cc",
+    "acura": "72f43fa4527c4260",
+    "porsche": "a3d43056a952ff99",
 }
 
 PRODUCTION_TRACK_BY_CAR: dict[str, str] = {
     "bmw": "sebring_international",
     "cadillac": "lagunaseca",
     "ferrari": "hockenheim_gp",
+    "acura": "daytona_2011_road",
+    "porsche": "algarve_gp",
 }
 
 
@@ -291,7 +295,7 @@ def main() -> int:
     root = resolve_corpus_root(None)
 
     results = []
-    for car in ("bmw", "cadillac", "ferrari"):
+    for car in ("bmw", "cadillac", "ferrari", "acura", "porsche"):
         try:
             r = _calibrate_for_car(car, root)
         except Exception as exc:

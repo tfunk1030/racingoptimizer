@@ -1,5 +1,10 @@
 # Held-out IBT manifest -- physics-rebuild plan, PLAN.md Section 7.
 #
+# Manifest version: 2 (2026-05-23). Replace held-out rows over time with
+# converged-fast setups the driver validates on track -- outlier setups
+# (current H1-H5) measure corpus properties, not algorithm quality.
+# Update this file + re-run `scripts/verify_holdout.sh` when rotating.
+#
 # Format: <sha256>  <path>  # <label> (<bytes>)
 #
 # These five IBTs are reserved for gate validation. They MUST NOT be loaded

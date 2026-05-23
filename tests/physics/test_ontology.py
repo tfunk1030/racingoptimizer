@@ -51,9 +51,9 @@ def test_ce_gated_families_present_but_unfittable(car: str) -> None:
     # bounds per (corner, mode).
     assert "damper_lsc_fl" in onto
     assert onto["damper_lsc_fl"].fittable is True
-    # Per-corner-weight targets — bounds still TODO in `constraints.md`.
+    # Per-corner-weight targets now have bounds in constraints.md.
     assert "corner_weight_fl_kg" in onto
-    assert onto["corner_weight_fl_kg"].fittable is False
+    assert onto["corner_weight_fl_kg"].fittable is True
 
 
 def test_unknown_car_raises() -> None:
@@ -176,9 +176,9 @@ def test_fittable_parameters_only_returns_bounded_user_settable() -> None:
     # them.
     assert "damper_lsc_fl" in result
     assert "damper_hsr_rr" in result
-    # Still-CE-gated must NOT show up (constraints are still <TODO>).
+    assert "corner_weight_fl_kg" in result
+    # Unbounded ratio placeholders stay out of the fittable set.
     assert "diff_coast_ratio_pct" not in result
-    assert "corner_weight_fl_kg" not in result
 
 
 @pytest.mark.parametrize(

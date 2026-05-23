@@ -36,7 +36,9 @@ from racingoptimizer.physics.fitters.ridge import RidgeFitter
 #        the DE objective. Pickles from v3 will be revived with
 #        ceilings=None (no-op) but the cache key change forces a
 #        refit on next recommend so ceilings populate.
-FITTERS_LAYOUT_VERSION: int = 4
+#   5 -- FitRecord.bootstrap_std for forest bootstrap-CI brackets;
+#        corner_compression_demand_mms archetype (schema v5).
+FITTERS_LAYOUT_VERSION: int = 5
 
 __all__ = [
     "FITTERS_LAYOUT_VERSION",

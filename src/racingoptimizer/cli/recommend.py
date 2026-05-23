@@ -59,7 +59,9 @@ CANONICAL_CARS = ("acura", "bmw", "cadillac", "ferrari", "porsche")
 # constraints.md mirrors BMWBounds.md and a fresh BMW@Spa session has been
 # captured. Other cars stay on the per-(car, track) v3 path until each is
 # validated.
-PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
+PER_CAR_MODEL_CARS: frozenset[str] = frozenset(
+    {"cadillac", "bmw", "ferrari", "acura", "porsche"},
+)
 
 
 # --------------------------------------------------------------------------
@@ -181,6 +183,13 @@ PER_CAR_MODEL_CARS: frozenset[str] = frozenset({"cadillac", "bmw", "ferrari"})
     ),
 )
 @click.option(
+    "--surrogate-only", "surrogate_only", is_flag=True, default=False,
+    help=(
+        "Use surrogate-only DE objective (pre-rebuild behavior). "
+        "Default uses hybrid physics+surrogate scoring."
+    ),
+)
+@click.option(
     "--physics", "physics_mode", is_flag=True, default=False,
     help=(
         "Enable physics-aware briefing: surfaces guardrail warnings "
@@ -209,6 +218,7 @@ def recommend_cmd(
     no_cache: bool,
     output_file: Path | None,
     physics_mode: bool,
+    surrogate_only: bool,
 ) -> None:
     """Recommend a setup for `<car>` at `<track>`.
 
@@ -303,14 +313,15 @@ def recommend_cmd(
         # start ok with as few as 1 session) and extract a per-corner
         # archetype schedule. The same per-car PhysicsModel scores every
         # corner via its archetype features.
-        track_slug, sessions_for_target, schedule, model = _build_per_car_pipeline(
-            car_key=car_key,
-            track=track,
-            catalog_sessions=catalog_sessions,
-            root=root,
-            no_cache=no_cache,
+        track_slug, donor_track, sessions_for_target, schedule, model = (
+            _build_per_car_pipeline(
+                car_key=car_key,
+                track=track,
+                catalog_sessions=catalog_sessions,
+                root=root,
+                no_cache=no_cache,
+            )
         )
-        donor_track: str | None = None
         sessions_for_fit = catalog_sessions  # env medians come from full corpus
         session_ids = sorted(catalog_sessions["session_id"].to_list())
         env = _env_from_overrides(
@@ -323,6 +334,7 @@ def recommend_cmd(
             track_slug, env, pinned_constraints,
             schedule=schedule, quali=quali, explore_pct=explore_pct,
             reset_mode=reset_mode, staged=staged,
+            surrogate_only=surrogate_only,
         )
     else:
         track_slug, donor_track = _resolve_track_or_extrapolate(
@@ -344,10 +356,25 @@ def recommend_cmd(
             fit_track, env, pinned_constraints,
             quali=quali, explore_pct=explore_pct,
             reset_mode=reset_mode, staged=staged,
+            surrogate_only=surrogate_only,
         )
         schedule = None  # v3 path: per-(car, track) keying owns the corners
 
     rec, clamp_warnings, top_warnings = _post_clamp(rec, model, constraints_table)
+
+    recommended_setup = {name: float(val[0]) for name, val in rec.parameters.items()}
+    top_warnings.extend(
+        _heave_slider_tech_warnings(model, recommended_setup, env, schedule),
+    )
+    from racingoptimizer.physics.score import guardrail_warnings_for_setup
+    top_warnings.extend(
+        guardrail_warnings_for_setup(
+            model, recommended_setup, env, schedule or [],
+        ),
+    )
+    top_warnings.extend(
+        _within_track_variance_warnings(model, track_slug, rec.parameters),
+    )
 
     if donor_track is not None:
         rec = _force_sparse_regime(rec, track_slug)
@@ -485,7 +512,8 @@ def recommend_cmd(
         try:
             output_file.parent.mkdir(parents=True, exist_ok=True)
             output_file.write_text(rendered, encoding="utf-8")
-            click.echo(f"\n[saved to {output_file}]", err=True)
+            if not as_json:
+                click.echo(f"\n[saved to {output_file}]", err=True)
         except OSError as exc:
             click.echo(
                 f"\n[warning: could not write {output_file}: {exc}]",
@@ -1015,10 +1043,16 @@ def _build_per_car_pipeline(
     catalog_sessions: pl.DataFrame,
     root: Path,
     no_cache: bool = False,
-):
-    """Build the four artefacts a per-car (v4) recommend run needs.
+) -> tuple[str, str | None, pl.DataFrame, list, object]:
+    """Build the five artefacts a per-car (v4) recommend run needs.
 
-    Returns ``(track_slug, sessions_for_target, schedule, model)``.
+    Returns ``(target_track_slug, donor_track_slug, sessions_for_target,
+    schedule, model)``.
+
+    ``donor_track_slug`` is set when the requested track has no sessions
+    for this car (and no cross-car geometry exists) but the car has been
+    driven elsewhere — the corner schedule is borrowed from the donor
+    track while the per-car model still pools all sessions.
 
     * ``track_slug``: normalised target track slug (matches catalog naming).
     * ``sessions_for_target``: subset of ``catalog_sessions`` filtered to the
@@ -1039,6 +1073,8 @@ def _build_per_car_pipeline(
     lap on the target to know its corner geometry.)
     """
     from racingoptimizer.physics.corner_schedule import build_corner_schedule
+
+    donor_track: str | None = None
 
     # Track slug normalisation: same rules as the per-(car, track) path.
     available = sorted(set(catalog_sessions["track"].to_list()))
@@ -1062,18 +1098,30 @@ def _build_per_car_pipeline(
             track, car_key, root,
         )
         if track_slug is None:
-            click.echo(
-                f"per-car {car_key} has no sessions on track {track!r}, "
-                f"and no other car has either; "
-                f"available for {car_key}: {', '.join(available) or '(none)'}. "
-                f"Run `optimize learn <ibt>` to ingest a session on this "
-                f"track first.",
-                err=True,
+            if not available:
+                click.echo(
+                    f"per-car {car_key} has no sessions on track {track!r}, "
+                    f"and no other car has either; "
+                    f"available for {car_key}: (none). "
+                    f"Run `optimize learn <ibt>` to ingest a session on this "
+                    f"track first.",
+                    err=True,
+                )
+                sys.exit(2)
+            needle = slugify_track(track.strip().lower()) or track.strip().lower()
+            counts = (
+                catalog_sessions.group_by("track")
+                .agg(pl.len().alias("n"))
+                .sort(["n", "track"], descending=[True, False])
             )
-            sys.exit(2)
+            donor_track = str(counts["track"][0])
+            track_slug = needle
+            sessions_for_target = catalog_sessions.filter(
+                pl.col("track") == donor_track,
+            )
     else:
         sessions_for_target = catalog_sessions.filter(
-            pl.col("track") == track_slug
+            pl.col("track") == track_slug,
         )
     target_sids = sorted(sessions_for_target["session_id"].to_list())
     schedule = build_corner_schedule(target_sids, corpus_root=root)
@@ -1089,7 +1137,7 @@ def _build_per_car_pipeline(
     model = _build_or_load_per_car_model(
         car_key, pooled_sids, root, no_cache=no_cache,
     )
-    return track_slug, sessions_for_target, schedule, model
+    return track_slug, donor_track, sessions_for_target, schedule, model
 
 
 def _maybe_borrow_cross_car_track(
@@ -1550,6 +1598,84 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
     return replace(rec, parameters=new_params), clamp_warnings, top_warnings
 
 
+def _within_track_variance_warnings(
+    model,
+    track: str,
+    parameters: dict,
+) -> list[str]:
+    """Warn when a recommendation extrapolates with zero within-track variance."""
+    per_track = getattr(model, "per_track_parameter_observed", {}) or {}
+    track_obs = per_track.get(track, {})
+    warnings: list[str] = []
+    for name, (value, _conf) in parameters.items():
+        observed = track_obs.get(name)
+        if not observed:
+            continue
+        unique = {float(v) for v in observed}
+        if len(unique) > 1:
+            continue
+        only = next(iter(unique))
+        rec_val = float(value)
+        spec_step = 1.0
+        try:
+            from racingoptimizer.physics.ontology import ontology_for
+            spec = ontology_for(model.car).get(name)
+            if spec is not None and spec.step:
+                spec_step = float(spec.step)
+        except KeyError:
+            pass
+        if abs(rec_val - only) <= spec_step * 0.5:
+            continue
+        warnings.append(
+            f"{name}: recommended {rec_val:.4g} but only {only:.4g} observed "
+            f"at {track} (zero within-track variance) -- cross-track surrogate "
+            "may be extrapolating; verify on track."
+        )
+    return warnings
+
+
+def _heave_slider_tech_warnings(
+    model,
+    setup: dict[str, float],
+    env,
+    schedule: list | None,
+) -> list[str]:
+    """Warn when predicted front heave slider deflection exceeds 45 mm (iRacing tech)."""
+    if schedule is None or int(getattr(model, "feature_schema_version", 0)) < 4:
+        return []
+    from racingoptimizer.corner import CornerPhaseKey, Phase
+
+    _TECH_LIMIT_MM = 45.0
+    for entry in schedule:
+        if str(entry.phase).strip().lower() != "mid_corner":
+            continue
+        cpkey = CornerPhaseKey(
+            session_id="<tech-check>",
+            lap_index=0,
+            corner_id=int(entry.corner_id),
+            phase=Phase.MID_CORNER,
+        )
+        try:
+            state = model.predict(
+                setup, env, cpkey, corner_archetype=entry.archetype,
+            )
+        except (ValueError, KeyError):
+            continue
+        for channel in ("heave_slider_mm", "front_heave_slider_mm"):
+            conf = state.states.get(channel)
+            if conf is None:
+                continue
+            value = float(conf.value)
+            if value > _TECH_LIMIT_MM:
+                return [
+                    "Predicted front heave slider deflection "
+                    f"{value:.1f} mm exceeds 45 mm tech limit "
+                    f"(corner T{entry.corner_id} mid-corner) -- "
+                    "soften front platform or raise perch before running."
+                ]
+    return []
+
+
 def _render_physics_banner(rec, car: str) -> str:
     """Render the --physics-mode banner shown above the briefing.
 
@@ -1592,8 +1718,11 @@ def _render_physics_banner(rec, car: str) -> str:
     except Exception:
         pass
     lines.append(
-        "  Note: --physics surfaces physics-derived metadata; "
-        "recommendation values are unchanged from the surrogate path."
+        "  Note: default DE uses hybrid physics+surrogate scoring "
+        "(Day 13). Pass --surrogate-only to revert to surrogate-only."
+    )
+    lines.append(
+        "  recommendation values are unchanged; this banner is informational."
     )
     lines.append("=" * 72)
     return "\n".join(lines)

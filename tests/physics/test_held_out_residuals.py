@@ -47,13 +47,40 @@ import pytest
 from racingoptimizer.confidence import Confidence
 from racingoptimizer.corner import Phase, corner_phase_states
 from racingoptimizer.ingest.api import laps as laps_api
-from racingoptimizer.ingest.api import learn, sessions
-from racingoptimizer.physics import fit
-from racingoptimizer.physics.fitter import _ENV_COLUMNS
-from racingoptimizer.track import build_track_model
+from racingoptimizer.ingest.api import learn
+from racingoptimizer.physics.fitter import _ENV_COLUMNS, fit_per_car
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _IBT_DIR = REPO_ROOT / "ibtfiles"
+
+# Gate manifest H1–H5 (docs/physics-rebuild/holdout.sha256).
+HELD_OUT_GATE_CASES: list[tuple[str, str, Path]] = [
+    (
+        "H1",
+        "bmw",
+        REPO_ROOT / "ibtfiles" / "bmwlmdh_spa 2024 up 2026-05-07 11-59-06.ibt",
+    ),
+    (
+        "H2",
+        "cadillac",
+        REPO_ROOT / "ibtfiles" / "cadillacvseriesrgtp_lagunaseca 2026-04-29 23-48-56.ibt",
+    ),
+    (
+        "H3",
+        "ferrari",
+        REPO_ROOT / "ibtfiles" / "ferrari499p_hockenheim gp 2026-03-31 12-32-40.ibt",
+    ),
+    (
+        "H4",
+        "acura",
+        REPO_ROOT / "ibtfiles" / "acuraarx06gtp_daytona 2011 road 2026-04-03 20-39-40.ibt",
+    ),
+    (
+        "H5",
+        "porsche",
+        REPO_ROOT / "ibtfiles" / "porsche963gtp_algarve gp 2026-04-04 12-30-44.ibt",
+    ),
+]
 
 # Cap the train corpus so the test stays in the 1-3 minute envelope.
 _MAX_TRAIN_SESSIONS = 3
@@ -98,28 +125,44 @@ def _env_vector_from_row(row: dict) -> np.ndarray:
     )
 
 
-@pytest.mark.slow
-def test_held_out_lap_residuals(tmp_path: Path) -> None:
-    fixtures = _bmw_sebring_fixtures()
-    if len(fixtures) < 2:
-        pytest.skip(
-            "need at least two BMW Sebring IBT fixtures for held-out residuals"
-        )
+def _car_fixtures(car: str, exclude: Path | None = None) -> list[Path]:
+    from tests._lfs_util import is_unmaterialised_lfs_pointer
 
-    corpus = tmp_path / "corpus"
-    corpus.mkdir()
+    if not _IBT_DIR.is_dir():
+        return []
+    prefix = {
+        "bmw": "bmwlmdh_",
+        "cadillac": "cadillacvseriesrgtp_",
+        "ferrari": "ferrari499p_",
+        "acura": "acuraarx06gtp_",
+        "porsche": "porsche963gtp_",
+    }.get(car)
+    if prefix is None:
+        return []
+    out: list[Path] = []
+    for p in sorted(_IBT_DIR.rglob("*.ibt")):
+        if not p.name.lower().startswith(prefix):
+            continue
+        if exclude is not None and p.resolve() == exclude.resolve():
+            continue
+        if is_unmaterialised_lfs_pointer(p):
+            continue
+        out.append(p)
+    return out
 
-    train_fixtures = fixtures[:_MAX_TRAIN_SESSIONS]
-    holdout_fixture = (
-        fixtures[_MAX_TRAIN_SESSIONS]
-        if len(fixtures) > _MAX_TRAIN_SESSIONS
-        else fixtures[-1]
-    )
-    if holdout_fixture in train_fixtures:
-        train_fixtures = train_fixtures[:-1]
-    if not train_fixtures:
-        pytest.skip("no train fixtures left after carving holdout")
 
+def _run_held_out_calibration(
+    *,
+    car: str,
+    train_fixtures: list[Path],
+    holdout_fixture: Path,
+    corpus: Path,
+) -> tuple[float, float, int, int, int, int]:
+    """Fit on train_fixtures, evaluate fitters against one held-out lap.
+
+    Returns (residual_pass_rate, bracket_pass_rate, residual_hits, residual_total,
+    bracket_hits, bracket_total).
+    """
     train_sids: list[str] = []
     for ibt in train_fixtures:
         train_sids.extend(learn(ibt, corpus_root=corpus))
@@ -130,10 +173,6 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
     train_sids = [sid for sid in train_sids if sid not in holdout_sids]
     if not train_sids:
         pytest.skip("train corpus collapsed to zero sessions after dedupe")
-
-    sess_df = sessions(car="bmw", track="sebring_international", corpus_root=corpus)
-    if sess_df.height == 0:
-        pytest.skip("no successfully ingested BMW Sebring sessions")
 
     holdout_sid = holdout_sids[0]
     holdout_laps = laps_api(
@@ -153,11 +192,10 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
             f"need >= {_MIN_VALID_LAPS_TOTAL} for the held-out test"
         )
 
-    track = "sebring_international"
-    tm = build_track_model(track, train_sids, corpus_root=corpus)
-    model = fit("bmw", train_sids, tm, corpus_root=corpus, k_folds=2, seed=0xC0FFEE)
+    model = fit_per_car(
+        car, sorted(train_sids), corpus_root=corpus, k_folds=2, seed=0xC0FFEE,
+    )
 
-    # Strip NaN baselines (un-set garage parameters from older corpora).
     setup = {
         name: float(value)
         for name, value in model.baseline_setup.items()
@@ -169,7 +207,6 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
     if observed.height == 0:
         pytest.skip("holdout lap produced no corner-phase rows")
 
-    # Index observed rows by (corner_id, phase) for O(1) lookup.
     observed_by_cp: dict[tuple[int, str], dict] = {}
     for row in observed.iter_rows(named=True):
         try:
@@ -183,11 +220,6 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
     residual_hits = 0
     residual_total = 0
 
-    # Iterate every trained fitter and check (a) the per-fitter prediction
-    # falls within signal_std × 0.3 of the observed channel value, and (b)
-    # the Confidence.derive(...) bracket from this fitter contains the
-    # observation. Stage-3 fitters consume the joint setup vector + 12 env
-    # channels; rebuild the row in the trained order via `feature_names`.
     for key, record in model.fitters.items():
         if not record.fitter.is_trained:
             continue
@@ -213,8 +245,6 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
             continue
 
         env_features = _env_vector_from_row(obs_row)
-        # Stage-3: assemble the full feature row in the fitter's trained
-        # order. Legacy v2: just `[param, env...]`.
         if record.feature_names:
             from racingoptimizer.physics.model import _assemble_feature_row
             x = _assemble_feature_row(
@@ -234,8 +264,6 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
         try:
             mu, _sigma = record.fitter.predict(x)
         except (ValueError, np.linalg.LinAlgError):
-            # NaN in input or fitter degenerate: skip this fitter rather
-            # than fail the whole calibration sweep.
             continue
         predicted = float(mu[0])
 
@@ -250,6 +278,7 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
             n_samples=int(record.n_samples),
             cv_residual_std=float(record.cv_residual_std),
             signal_std=float(max(record.signal_std, 1e-12)),
+            bootstrap_std=float(getattr(record, "bootstrap_std", 0.0) or 0.0),
         )
         bracket_total += 1
         if conf.lo <= obs_f <= conf.hi:
@@ -261,25 +290,111 @@ def test_held_out_lap_residuals(tmp_path: Path) -> None:
             "the trained fitters and the observed corner-phase frame"
         )
 
-    residual_pass_rate = residual_hits / residual_total
-    bracket_pass_rate = bracket_hits / bracket_total
+    return (
+        residual_hits / residual_total,
+        bracket_hits / bracket_total,
+        residual_hits,
+        residual_total,
+        bracket_hits,
+        bracket_total,
+    )
 
-    # Spec §13 calibration target is 90%; v1 Confidence brackets paired with
-    # cold-start (one-value-per-parameter) training under-cover at the per-
-    # fitter grain. 40% is the early-warning floor that surfaces regressions
-    # without blocking on the bracket-derivation rework. See module docstring.
-    assert bracket_pass_rate >= 0.40, (
-        f"bracket coverage {bracket_pass_rate:.2%} below the 40% calibration "
+
+@pytest.mark.slow
+def test_held_out_lap_residuals(tmp_path: Path) -> None:
+    fixtures = _bmw_sebring_fixtures()
+    if len(fixtures) < 2:
+        pytest.skip(
+            "need at least two BMW Sebring IBT fixtures for held-out residuals"
+        )
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+
+    train_fixtures = fixtures[:_MAX_TRAIN_SESSIONS]
+    holdout_fixture = (
+        fixtures[_MAX_TRAIN_SESSIONS]
+        if len(fixtures) > _MAX_TRAIN_SESSIONS
+        else fixtures[-1]
+    )
+    if holdout_fixture in train_fixtures:
+        train_fixtures = train_fixtures[:-1]
+    if not train_fixtures:
+        pytest.skip("no train fixtures left after carving holdout")
+
+    cal = _run_held_out_calibration(
+        car="bmw",
+        train_fixtures=train_fixtures,
+        holdout_fixture=holdout_fixture,
+        corpus=corpus,
+    )
+    (
+        residual_pass_rate,
+        bracket_pass_rate,
+        residual_hits,
+        residual_total,
+        bracket_hits,
+        bracket_total,
+    ) = cal
+
+    assert bracket_pass_rate >= 0.55, (
+        f"bracket coverage {bracket_pass_rate:.2%} below the 55% calibration "
         f"floor ({bracket_hits}/{bracket_total} predictions inside [lo, hi]) "
         "— per-fitter brackets have widened beyond the early-warning gate; "
         "investigate Confidence.derive or the training pipeline"
     )
-    # Residual floor 5% — the early-warning gate. See module docstring for
-    # why this is well below the spec's 30%: the cold-start smoke corpus
-    # cannot ground a tighter claim today.
     assert residual_pass_rate >= 0.05, (
         f"residual pass rate {residual_pass_rate:.2%} below 5% floor "
         f"({residual_hits}/{residual_total} fitters inside signal_std*0.3) — "
         f"the held-out lap diverges from training data wholesale; the fit "
         f"pipeline likely regressed"
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    ("label", "car", "holdout_path"),
+    HELD_OUT_GATE_CASES,
+    ids=[c[0] for c in HELD_OUT_GATE_CASES],
+)
+def test_held_out_gate_residuals(
+    tmp_path: Path,
+    label: str,
+    car: str,
+    holdout_path: Path,
+) -> None:
+    """H1–H5 manifest IBTs: same calibration floors as the BMW smoke test."""
+    if not holdout_path.is_file():
+        pytest.skip(f"{label} fixture missing at {holdout_path}")
+
+    train_pool = _car_fixtures(car, exclude=holdout_path)
+    if len(train_pool) < 1:
+        pytest.skip(f"{label}: no train fixtures for car={car}")
+
+    train_fixtures = train_pool[:_MAX_TRAIN_SESSIONS]
+    corpus = tmp_path / f"gate_{label}"
+    corpus.mkdir()
+
+    cal = _run_held_out_calibration(
+        car=car,
+        train_fixtures=train_fixtures,
+        holdout_fixture=holdout_path,
+        corpus=corpus,
+    )
+    (
+        residual_pass_rate,
+        bracket_pass_rate,
+        residual_hits,
+        residual_total,
+        bracket_hits,
+        bracket_total,
+    ) = cal
+
+    assert bracket_pass_rate >= 0.55, (
+        f"{label} bracket coverage {bracket_pass_rate:.2%} below 55% floor "
+        f"({bracket_hits}/{bracket_total})"
+    )
+    assert residual_pass_rate >= 0.05, (
+        f"{label} residual pass rate {residual_pass_rate:.2%} below 5% floor "
+        f"({residual_hits}/{residual_total})"
     )

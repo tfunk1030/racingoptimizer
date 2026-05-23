@@ -178,7 +178,8 @@ def test_per_car_calibrated_weights_documented() -> None:
     assert get_weights_for_car("bmw") == (0.2, 0.8, 0.0)
     assert get_weights_for_car("cadillac") == (0.2, 0.3, 0.5)
     assert get_weights_for_car("ferrari") == (0.0, 0.0, 1.0)
-    # Acura/Porsche fall back to default (0.5, 0.3, 0.2).
+    assert get_weights_for_car("porsche") == (0.0, 0.5, 0.5)
+    # Acura falls back to default (0.5, 0.3, 0.2).
     assert get_weights_for_car("acura") == (
         _WEIGHT_AXLE_UTIL, _WEIGHT_AERO_BALANCE, _WEIGHT_GRIP_HEADROOM,
     )

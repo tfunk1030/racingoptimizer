@@ -86,11 +86,14 @@ class Confidence:
         n_samples: int,
         cv_residual_std: float,
         signal_std: float,
+        bootstrap_std: float = 0.0,
     ) -> Confidence:
         if cv_residual_std < 0:
             raise ValueError(f"cv_residual_std must be >= 0, got {cv_residual_std!r}")
         if signal_std < 0:
             raise ValueError(f"signal_std must be >= 0, got {signal_std!r}")
+        if bootstrap_std < 0:
+            raise ValueError(f"bootstrap_std must be >= 0, got {bootstrap_std!r}")
 
         if n_samples < _SPARSE_MIN_SAMPLES:
             regime: Regime = "sparse"
@@ -103,7 +106,8 @@ class Confidence:
             else:
                 regime = "dense"
 
-        half_width = _GAUSSIAN_95_MULTIPLIER * cv_residual_std
+        effective_std = max(float(cv_residual_std), float(bootstrap_std))
+        half_width = _GAUSSIAN_95_MULTIPLIER * effective_std
         return cls(
             value=value,
             lo=value - half_width,

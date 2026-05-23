@@ -756,6 +756,9 @@ def render_narrative(
     # cpkey) tuple. Computed lazily inside _render_change.
     rec_setup = {name: float(v) for name, (v, _c) in rec.parameters.items()}
 
+    moved = [j for j in justifications if _moved(j, past_value, onto)]
+    moved_names = {j.parameter for j in moved}
+
     lines: list[str] = []
     lines.append("=" * 72)
     track_label = track_display or rec.track
@@ -765,16 +768,25 @@ def render_narrative(
     lines.append(f" {model.car} @ {track_label} -- {mode}{fuel_str}")
     rolled = _rollup_regime(justifications)
     n_med = _median_n_samples(justifications)
+    sparse_moved = sum(
+        1 for name, (_v, conf) in rec.parameters.items()
+        if conf.regime == "sparse" and name in moved_names
+    )
+    noisy_moved = sum(
+        1 for name, (_v, conf) in rec.parameters.items()
+        if conf.regime == "noisy" and name in moved_names
+    )
     lines.append(
         f" Conditions: {rec.env.air_temp_c:.0f} C ambient / "
         f"{rec.env.track_temp_c:.0f} C track  |  "
-        f"Confidence: {rolled} (median n={n_med})"
+        f"Confidence: {rolled} (median n={n_med})  |  "
+        f"Moved params: {sparse_moved} sparse / {noisy_moved} noisy "
+        f"of {len(moved)} changes"
     )
     lines.append("=" * 72)
     lines.append("")
 
     # ---- OVERALL DIRECTION ----
-    moved = [j for j in justifications if _moved(j, past_value, onto)]
     lines.extend(_overall_direction(moved, past_value, onto))
     lines.append("")
 

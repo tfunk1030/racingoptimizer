@@ -41,6 +41,8 @@ ARCHETYPE_KEYS: tuple[str, ...] = (
     "corner_max_speed_ms",
     "corner_min_speed_ms",
     "corner_duration_s",
+    "corner_compression_demand_mms",
+    "phase_duration_s",
 )
 
 
@@ -113,9 +115,6 @@ def build_corner_schedule(
                 pl.col("accel_lat_g_max").max().alias("corner_peak_lat_g"),
                 pl.col("speed_max_ms").max().alias("corner_max_speed_ms"),
                 pl.col("speed_min_ms").min().alias("corner_min_speed_ms"),
-                # Sum durations across phases AND laps, then divide by
-                # number of distinct (session, lap) pairs to get the
-                # per-lap corner duration.
                 duration_per_phase.sum().alias("_total_duration_s"),
                 pl.struct(["session_id", "lap_index"]).n_unique().alias("_n_laps"),
             ]
@@ -127,6 +126,37 @@ def build_corner_schedule(
         )
     )
 
+    compression_phases = {"braking", "trail_brake", "mid_corner"}
+    if "damper_velocity_p99_mms" in pooled.columns:
+        compression = (
+            pooled.filter(pl.col("phase").is_in(list(compression_phases)))
+            .group_by("corner_id")
+            .agg(
+                pl.col("damper_velocity_p99_mms")
+                .max()
+                .alias("corner_compression_demand_mms"),
+            )
+        )
+    else:
+        compression = pl.DataFrame(
+            {"corner_id": [], "corner_compression_demand_mms": []},
+        )
+
+    per_phase = (
+        pooled.with_columns(duration_per_phase.alias("_phase_dur"))
+        .group_by(["corner_id", "phase"])
+        .agg(
+            pl.col("_phase_dur").sum().alias("_total_dur"),
+            pl.struct(["session_id", "lap_index"]).n_unique().alias("_n_laps"),
+        )
+        .with_columns(
+            (
+                pl.col("_total_dur")
+                / pl.max_horizontal(pl.col("_n_laps"), pl.lit(1))
+            ).alias("phase_duration_s"),
+        )
+    )
+
     # Distinct phases observed for each corner.
     phases_per_corner = (
         pooled.select(["corner_id", "phase"])
@@ -135,6 +165,11 @@ def build_corner_schedule(
     )
 
     archetype_by_corner: dict[int, dict[str, float]] = {}
+    compression_by_corner: dict[int, float] = {}
+    for row in compression.iter_rows(named=True):
+        compression_by_corner[int(row["corner_id"])] = float(
+            row.get("corner_compression_demand_mms") or 0.0,
+        )
     for row in per_corner.iter_rows(named=True):
         cid = int(row["corner_id"])
         archetype_by_corner[cid] = {
@@ -143,15 +178,27 @@ def build_corner_schedule(
             "corner_max_speed_ms": float(row["corner_max_speed_ms"] or 0.0),
             "corner_min_speed_ms": float(row["corner_min_speed_ms"] or 0.0),
             "corner_duration_s": float(row["corner_duration_s"] or 0.0),
+            "corner_compression_demand_mms": float(
+                compression_by_corner.get(cid, 0.0),
+            ),
         }
+
+    phase_duration_by_cp: dict[tuple[int, str], float] = {}
+    for row in per_phase.iter_rows(named=True):
+        phase_duration_by_cp[(int(row["corner_id"]), str(row["phase"]))] = float(
+            row.get("phase_duration_s") or 0.0,
+        )
 
     schedule: list[CornerScheduleEntry] = []
     for row in phases_per_corner.iter_rows(named=True):
         cid = int(row["corner_id"])
         phase_str = str(row["phase"])
-        archetype = archetype_by_corner.get(cid)
-        if archetype is None:
+        if cid not in archetype_by_corner:
             continue
+        archetype = dict(archetype_by_corner[cid])
+        pdur = phase_duration_by_cp.get((cid, phase_str), 0.0)
+        if pdur > 0.0:
+            archetype["phase_duration_s"] = pdur
         schedule.append(
             CornerScheduleEntry(
                 corner_id=cid,

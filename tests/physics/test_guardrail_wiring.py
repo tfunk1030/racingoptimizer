@@ -29,9 +29,11 @@ from racingoptimizer.physics.recommend import (
 )
 
 
-def test_fitters_layout_version_bumped_to_four() -> None:
-    """post-rebuild wiring requires v4 to force refit of legacy pickles."""
-    assert FITTERS_LAYOUT_VERSION == 4
+def test_fitters_layout_version_at_or_above_four() -> None:
+    """Post-rebuild wiring requires >= v4 to force refit of legacy pickles
+    so that PhysicsModel.axle_grip_ceilings populates. v5+ adds further
+    parallel-work changes (hybrid score path, etc.)."""
+    assert FITTERS_LAYOUT_VERSION >= 4
 
 
 def test_physics_model_axle_ceilings_field_defaults_to_none() -> None:
@@ -277,9 +279,10 @@ def test_penalty_no_ceilings_no_op_in_recommend(bmw_model_session) -> None:
     with ceilings=None, and the DE objective must skip the penalty branch
     entirely. This test uses the session-scoped BMW Sebring fit.
     """
-    model, track, _root = bmw_model_session
+    model, track, root = bmw_model_session
     from racingoptimizer.constraints import load_constraints
     from racingoptimizer.context import EnvironmentFrame
+    from racingoptimizer.physics.corner_schedule import build_corner_schedule
     from racingoptimizer.physics.recommend import recommend
 
     constraints = load_constraints()
@@ -288,9 +291,14 @@ def test_penalty_no_ceilings_no_op_in_recommend(bmw_model_session) -> None:
         wind_dir_deg=120.0, track_wetness=0.0,
     )
 
-    # Force ceilings = None to simulate a legacy pickle revived on v4.
+    # Per-car v4 models require a target-track corner schedule.
+    schedule = build_corner_schedule(
+        list(model.session_ids), corpus_root=root,
+    )
+
+    # Force ceilings = None to simulate a legacy pickle revived on v5.
     legacy_model = replace(model, axle_grip_ceilings=None)
-    rec = recommend(legacy_model, track, env, constraints)
+    rec = recommend(legacy_model, track, env, constraints, schedule=schedule)
     assert rec.parameters, "recommend should still produce parameters"
     # Score breakdown is positive (no penalty applied).
     assert sum(rec.score_breakdown.values()) > 0.0

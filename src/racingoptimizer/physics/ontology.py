@@ -335,19 +335,23 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         ),
         "corner_weight_fl_kg": ParameterSpec(
             json_path=("Chassis", "LeftFront", "CornerWeight"), dtype=float,
-            units="N", family="corner_weight", fittable=False,
+            units="N", family="corner_weight", fittable=True,
+            user_settable=True, step=10.0,
         ),
         "corner_weight_fr_kg": ParameterSpec(
             json_path=("Chassis", "RightFront", "CornerWeight"), dtype=float,
-            units="N", family="corner_weight", fittable=False,
+            units="N", family="corner_weight", fittable=True,
+            user_settable=True, step=10.0,
         ),
         "corner_weight_rl_kg": ParameterSpec(
             json_path=("Chassis", "LeftRear", "CornerWeight"), dtype=float,
-            units="N", family="corner_weight", fittable=False,
+            units="N", family="corner_weight", fittable=True,
+            user_settable=True, step=10.0,
         ),
         "corner_weight_rr_kg": ParameterSpec(
             json_path=("Chassis", "RightRear", "CornerWeight"), dtype=float,
-            units="N", family="corner_weight", fittable=False,
+            units="N", family="corner_weight", fittable=True,
+            user_settable=True, step=10.0,
         ),
         # Race fuel load. iRacing exposes this as a typed value the user
         # picks pre-session (race default: ~58 L on the BMW M Hybrid V8;
@@ -391,6 +395,16 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
             json_path=("Chassis", "LeftRear", "ToeIn"), dtype=float,
             units="mm", family="camber",
             fittable=True, user_settable=True, step=0.1,
+        ),
+        # Throttle/brake mapping path not yet verified against the iRacing
+        # garage YAML — `BrakesDriveUnit.TcAndThrottle.ThrottleShape` does
+        # not resolve on any of the 5 GTP fixtures. Held as user_settable
+        # but `fittable=False` until the real path lands (see
+        # `tests/physics/test_ontology_per_car.py`).
+        "throttle_brake_mapping": ParameterSpec(
+            json_path=("BrakesDriveUnit", "TcAndThrottle", "ThrottleShape"),
+            dtype=float, units="click", family="throttle_map",
+            fittable=False, user_settable=True, step=1.0,
         ),
     }
 
@@ -476,6 +490,24 @@ _FERRARI_DAMPERS = _damper_paths(
         ("rr", ("Dampers", "RightRearDamper")),
     )
 )
+# Porsche 963 has per-corner rear dampers (`LeftRear`, `RightRear`) plus
+# a shared `FrontHeave` for the front axle. The front heave block has
+# NO `HsCompDampSlope` field, so the two front-slope entries are dropped
+# from the Porsche damper set (vs. Acura which does carry it on both
+# front and rear). Verified against an ingested Porsche Algarve setup
+# blob (FrontHeave + LeftRear + RightRear + FrontRoll + Rear3Rd).
+_PORSCHE_DAMPERS_RAW = _damper_paths(
+    (
+        ("fl", ("Dampers", "FrontHeave")),
+        ("fr", ("Dampers", "FrontHeave")),
+        ("rl", ("Dampers", "LeftRear")),
+        ("rr", ("Dampers", "RightRear")),
+    )
+)
+_PORSCHE_DAMPERS = {
+    k: v for k, v in _PORSCHE_DAMPERS_RAW.items()
+    if k not in ("damper_hsc_slope_fl", "damper_hsc_slope_fr")
+}
 
 
 def _build(
@@ -525,6 +557,17 @@ _ACURA_OVERRIDES: dict[str, ParameterSpec] = {
         _common_bounded()["rear_coil_spring_rate_n_per_mm"],
     ),
     "third_perch_offset_rear_mm": _blocked_like(_common_bounded()["third_perch_offset_rear_mm"]),
+    # Acura fuel is under Systems.Fuel (vs BrakesDriveUnit.Fuel for BMW etc.).
+    "fuel_level_l": ParameterSpec(
+        json_path=("Systems", "Fuel", "FuelLevel"),
+        dtype=float, units="L", family="fuel",
+        fittable=True, user_settable=True, step=0.1,
+    ),
+    # Acura tracks toe at the axle level (`Chassis.Rear.ToeIn`), not
+    # per-corner. The per-corner rear toe parameter does not resolve
+    # on Acura YAMLs; block it here until per-axle rear toe is added
+    # as a first-class ontology parameter.
+    "toe_rl_mm": _blocked_like(_common_ce_gated()["toe_rl_mm"]),
 }
 
 # iRacing GTP front torsion-bar diameters — 14 discrete values across the
@@ -775,7 +818,7 @@ ACURA: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_ACURA_OVERRIDES)
 BMW: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_BMW_OVERRIDES)
 CADILLAC: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_CADILLAC_OVERRIDES)
 FERRARI: dict[str, ParameterSpec] = _build(_FERRARI_DAMPERS, **_FERRARI_OVERRIDES)
-PORSCHE: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_PORSCHE_OVERRIDES)
+PORSCHE: dict[str, ParameterSpec] = _build(_PORSCHE_DAMPERS, **_PORSCHE_OVERRIDES)
 
 _BY_CAR: dict[str, dict[str, ParameterSpec]] = {
     "acura": ACURA,

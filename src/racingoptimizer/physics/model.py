@@ -66,6 +66,7 @@ class FitRecord:
     n_samples: int
     cv_residual_std: float
     signal_std: float
+    bootstrap_std: float = 0.0
     # Stage 3: ordered names of every input feature the fitter consumes.
     # The first ``len(feature_names) - len(env_columns)`` entries are the
     # bounded setup parameters; the trailing entries are env channels in
@@ -94,6 +95,7 @@ class FitRecord:
         elif isinstance(state, dict):
             slot_values.update(state)
         slot_values.setdefault("feature_names", ())
+        slot_values.setdefault("bootstrap_std", 0.0)
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 
@@ -246,19 +248,20 @@ class PhysicsModel:
         explore_pct: float = 0.0,
         reset_mode: bool = False,
         staged: bool = False,
+        surrogate_only: bool = False,
     ):
         if staged:
             from racingoptimizer.physics.recommend import recommend_staged
             return recommend_staged(
                 self, track, env, constraints,
                 schedule=schedule, quali=quali, explore_pct=explore_pct,
-                reset_mode=reset_mode,
+                reset_mode=reset_mode, surrogate_only=surrogate_only,
             )
         from racingoptimizer.physics.recommend import recommend as _recommend
         return _recommend(
             self, track, env, constraints,
             schedule=schedule, quali=quali, explore_pct=explore_pct,
-            reset_mode=reset_mode,
+            reset_mode=reset_mode, surrogate_only=surrogate_only,
         )
 
     def predict_setup_readouts(
@@ -282,7 +285,7 @@ class PhysicsModel:
         do). Channels missing from the fitter dict are omitted, and an
         unsupported feature schema (legacy v1/v2) returns an empty dict.
         """
-        readout_prefixes = ("setup_static_",)
+        readout_prefixes = ("setup_static_", "setup_heave_slider_")
 
         by_channel: dict[str, FitRecord] = {}
         for key, record in self.fitters.items():
