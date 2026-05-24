@@ -115,7 +115,7 @@ user’s garage readout check.
 | ID | Finding | Evidence |
 |----|---------|----------|
 | P1-1 | Default briefing omits VISION §7 ±1-click sensitivity | **Resolved 2026-05-23** — compact sensitivity in `narrative.py` |
-| P1-2 | Hybrid DE live without held-out A/B validation | No test: `recommend(hybrid=True)` vs `--surrogate-only` on H1–H5 |
+| P1-2 | Hybrid DE live without held-out A/B validation | **Resolved 2026-05-24** — `tests/physics/test_hybrid_heldout_ab.py` scores observed setup at H1-H5 under both modes |
 | P1-3 | Mode 1 cross-track confounding structurally open | v4 pools all tracks; Bayes trust anchor only; BMW Spa held-out MAE -7.3% |
 | P1-4 | Acura/Porsche lack Day-12b-calibrated evaluator weights | `evaluator.py::_CALIBRATED_WEIGHTS`; Acura uses defaults |
 | P1-5 | Per-car recommend excluded from fast CI | **Partially resolved** — `test_per_car_recommend_fast.py`; full DE still `@pytest.mark.slow` |
@@ -322,6 +322,6 @@ Ongoing: Phase 4 as garage UI data arrives
 | 3.1 Calibration gate hardening | **Done** — fails when corpus present |
 | 3.5 grip_inconsistency DE penalty | **Done** — quarter penalty in `hybrid_score` |
 | 3.6 Fast per-car recommend smoke | **Done** — `test_per_car_recommend_fast.py` |
-| 3.3 Held-out hybrid A/B | **Deferred** |
+| 3.3 Held-out hybrid A/B | **Done** — `tests/physics/test_hybrid_heldout_ab.py` (2026-05-24); scores observed setup at H1-H5 under hybrid vs surrogate-only, asserts identical key sets + bounded |Δtotal|/total |
 | Phase 4 garage completeness | **Deferred** (UI verification) |
 | 2.2 JSON pin warnings regression test | **Deferred** (JSON warnings path already in `recommend.py`) |
