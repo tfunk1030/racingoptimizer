@@ -882,6 +882,7 @@ def _corner_phase_objective_value(
     )
     from racingoptimizer.physics.hybrid_optimizer import hybrid_score
 
+    aero_correction = getattr(model, "aero_residual_correction", None)
     cps = evaluate_corner_phase(
         model.car,
         corner_id,
@@ -894,6 +895,7 @@ def _corner_phase_objective_value(
         front_ceiling=front_ceil,
         rear_ceiling=rear_ceil,
         surrogate_lat_g_ceiling=headroom_ref,
+        aero_correction=aero_correction,
     )
     try:
         ratios = compute_axle_grip_ratios(
@@ -946,6 +948,7 @@ def guardrail_warnings_for_setup(
     )
 
     aero = _aero_surface_or_none(model)
+    aero_correction = getattr(model, "aero_residual_correction", None)
     warnings: list[str] = []
     seen: set[str] = set()
     for entry in schedule:
@@ -989,6 +992,7 @@ def guardrail_warnings_for_setup(
             front_ceiling=ceilings["front"],
             rear_ceiling=ceilings["rear"],
             surrogate_lat_g_ceiling=headroom_ref,
+            aero_correction=aero_correction,
         )
         try:
             ratios = compute_axle_grip_ratios(

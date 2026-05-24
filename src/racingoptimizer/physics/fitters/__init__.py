@@ -38,7 +38,9 @@ from racingoptimizer.physics.fitters.ridge import RidgeFitter
 #        refit on next recommend so ceilings populate.
 #   5 -- FitRecord.bootstrap_std for forest bootstrap-CI brackets;
 #        corner_compression_demand_mms archetype (schema v5).
-FITTERS_LAYOUT_VERSION: int = 5
+#   6 -- PhysicsModel.aero_residual_correction field, consumed by
+#        physics/score.py evaluator path in DE and guardrail warnings.
+FITTERS_LAYOUT_VERSION: int = 6
 
 __all__ = [
     "FITTERS_LAYOUT_VERSION",

@@ -115,6 +115,15 @@ def test_setup_value_handles_negative_signed_string() -> None:
     assert setup_value("bmw", "heave_spring_mm", setup) == pytest.approx(-1.5)
 
 
+def test_setup_value_throttle_brake_mapping_path_resolves() -> None:
+    setup = {
+        "BrakesDriveUnit": {
+            "TcAndThrottle": {"ThrottleShape": 12}
+        }
+    }
+    assert setup_value("cadillac", "throttle_brake_mapping", setup) == pytest.approx(12.0)
+
+
 def test_parameters_helper_sorted_and_complete() -> None:
     names = parameters("bmw")
     assert names == sorted(names)

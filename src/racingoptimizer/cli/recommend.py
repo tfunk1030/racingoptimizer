@@ -1937,8 +1937,8 @@ def _overall_regime(coverage: list[TrackCoverage]) -> str:
 
 def _status_notes() -> list[str]:
     return [
-        "constraints.md is missing bounds for: brake_ducts, "
-        "throttle/brake mapping, and some per-car blocked garage leaves.",
+        "constraints.md is missing verified ontology paths for: brake_ducts "
+        "and some per-car blocked garage leaves.",
     ]
 
 

@@ -396,15 +396,15 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
             units="mm", family="camber",
             fittable=True, user_settable=True, step=0.1,
         ),
-        # Throttle/brake mapping path not yet verified against the iRacing
-        # garage YAML — `BrakesDriveUnit.TcAndThrottle.ThrottleShape` does
-        # not resolve on any of the 5 GTP fixtures. Held as user_settable
-        # but `fittable=False` until the real path lands (see
-        # `tests/physics/test_ontology_per_car.py`).
+        # Throttle/brake mapping. Canonical CAD fixture exposes
+        # `BrakesDriveUnit.TcAndThrottle.ThrottleShape`; keep this as the
+        # default path and allow fitting where corpus variance exists.
+        # Cars whose setup blob omits the path naturally degrade to
+        # untrained/pinned behavior via the existing fit-parameter gates.
         "throttle_brake_mapping": ParameterSpec(
             json_path=("BrakesDriveUnit", "TcAndThrottle", "ThrottleShape"),
             dtype=float, units="click", family="throttle_map",
-            fittable=False, user_settable=True, step=1.0,
+            fittable=True, user_settable=True, step=1.0,
         ),
     }
 

@@ -37,17 +37,17 @@ from pathlib import Path
 
 import numpy as np
 
-from racingoptimizer.constraints import load_constraints
-from racingoptimizer.corner.states import corner_phase_states
-from racingoptimizer.corner.phase import CornerPhaseKey, Phase
 from racingoptimizer.context import EnvironmentFrame
+from racingoptimizer.corner.phase import CornerPhaseKey, Phase
+from racingoptimizer.corner.states import corner_phase_states
 from racingoptimizer.ingest import catalog as cat
-from racingoptimizer.ingest.api import catalog_path, laps as ingest_laps, resolve_corpus_root
+from racingoptimizer.ingest.api import catalog_path, resolve_corpus_root
+from racingoptimizer.ingest.api import laps as ingest_laps
 from racingoptimizer.physics.fitter import (
-    TARGET_OUTPUT_CHANNELS, fit_per_car,
+    TARGET_OUTPUT_CHANNELS,
+    fit_per_car,
 )
 from racingoptimizer.physics.ontology import setup_value
-
 
 HELDOUT: dict[str, tuple[str, str]] = {
     # car -> (session_id, expected_track)
@@ -171,9 +171,50 @@ def _channel_signal_std(rows: list[dict], channel: str) -> float:
     return float(np.std(vals, ddof=1))
 
 
+def _corner_phase_key_from_row(row: dict, fallback_session_id: str) -> CornerPhaseKey | None:
+    """Build a CornerPhaseKey from a corner-phase row.
+
+    The held-out gate reads persisted corner-phase rows that have evolved over
+    time; older artifacts may carry different lap/session column names. Keep
+    this parser tolerant so the gate can still score historical corpora.
+    """
+    cid = row.get("corner_id")
+    phase_raw = row.get("phase")
+    if cid is None or phase_raw is None:
+        return None
+    try:
+        phase = Phase(str(phase_raw))
+    except ValueError:
+        return None
+
+    sid = str(
+        row.get("session_id")
+        or row.get("source_session_id")
+        or fallback_session_id
+    )
+    lap_raw = (
+        row.get("lap_index")
+        if row.get("lap_index") is not None
+        else row.get("lap")
+    )
+    if lap_raw is None:
+        lap_raw = row.get("source_lap_index")
+    try:
+        lap_index = int(lap_raw if lap_raw is not None else 0)
+        corner_id = int(cid)
+    except (TypeError, ValueError):
+        return None
+
+    return CornerPhaseKey(
+        session_id=sid,
+        lap_index=lap_index,
+        corner_id=corner_id,
+        phase=phase,
+    )
+
+
 def _gate_one_car(car: str, session_id: str, track: str, root: Path) -> dict:
     print(f"\n[{car}] held-out session={session_id} track={track}")
-    constraints = load_constraints()
 
     with cat.open_catalog(catalog_path(root)) as conn:
         held = cat.get_session(conn, session_id)
@@ -181,7 +222,7 @@ def _gate_one_car(car: str, session_id: str, track: str, root: Path) -> dict:
             print(f"  SKIP: session {session_id} not in catalog")
             return {"car": car, "skipped": "not_in_catalog"}
         if held.held_out != 1:
-            print(f"  SKIP: session not flagged held_out=1")
+            print("  SKIP: session not flagged held_out=1")
             return {"car": car, "skipped": "not_held_out"}
         prod_sessions = cat.query_sessions(
             conn, car=car, valid_only=True, include_held_out=False,
@@ -215,7 +256,7 @@ def _gate_one_car(car: str, session_id: str, track: str, root: Path) -> dict:
         print(f"  FAIL: cannot load laps for held-out: {exc}")
         return {"car": car, "skipped": "laps_failed", "error": str(exc)}
     if laps_df.height == 0:
-        print(f"  FAIL: no valid laps in held-out IBT")
+        print("  FAIL: no valid laps in held-out IBT")
         return {"car": car, "skipped": "no_laps"}
 
     all_rows: list[dict] = []
@@ -231,7 +272,7 @@ def _gate_one_car(car: str, session_id: str, track: str, root: Path) -> dict:
         all_rows.extend(cps.to_dicts())
 
     if not all_rows:
-        print(f"  FAIL: no corner-phase rows in held-out laps")
+        print("  FAIL: no corner-phase rows in held-out laps")
         return {"car": car, "skipped": "no_rows"}
     print(f"  held-out corner-phase rows: {len(all_rows)}")
 
@@ -255,23 +296,9 @@ def _gate_one_car(car: str, session_id: str, track: str, root: Path) -> dict:
     }
 
     for row in all_rows:
-        cid = row.get("corner_id")
-        phase_str = row.get("phase")
-        if cid is None or phase_str is None:
+        key = _corner_phase_key_from_row(row, session_id)
+        if key is None:
             continue
-        try:
-            phase = Phase(str(phase_str))
-        except ValueError:
-            continue
-        # session_id/lap_index are stamped onto the held-out's CPS rows
-        # by corner_phase_states; fall back gracefully if missing so the
-        # gate degrades to channel-only comparison.
-        key = CornerPhaseKey(
-            session_id=str(row.get("session_id", session_id)),
-            lap_index=int(row.get("lap_index", 0) or 0),
-            corner_id=int(cid),
-            phase=phase,
-        )
         env = _env_from_row(row)
         archetype = _archetype_from_row(row)
         try:
