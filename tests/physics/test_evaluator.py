@@ -145,6 +145,38 @@ def test_evaluate_corner_phase_returns_score() -> None:
     assert 0.0 <= score.grip_headroom_score <= 1.0
 
 
+def test_headroom_varies_with_aero_when_ceiling_is_corpus_reference() -> None:
+    """Headroom compares aero peak to an independent reference, not lat_g."""
+    ref = 2.0
+    low_ld = evaluate_corner_phase(
+        car="ferrari",
+        corner_id=1,
+        phase="mid_corner",
+        lat_g=1.8,
+        long_g=0.0,
+        speed_ms=55.0,
+        aero_balance_pct=54.0,
+        aero_ld_ratio=3.0,
+        front_ceiling=_ceiling("ferrari", "front"),
+        rear_ceiling=_ceiling("ferrari", "rear"),
+        surrogate_lat_g_ceiling=ref,
+    )
+    high_ld = evaluate_corner_phase(
+        car="ferrari",
+        corner_id=1,
+        phase="mid_corner",
+        lat_g=1.8,
+        long_g=0.0,
+        speed_ms=55.0,
+        aero_balance_pct=54.0,
+        aero_ld_ratio=5.0,
+        front_ceiling=_ceiling("ferrari", "front"),
+        rear_ceiling=_ceiling("ferrari", "rear"),
+        surrogate_lat_g_ceiling=ref,
+    )
+    assert low_ld.grip_headroom_score != high_ld.grip_headroom_score
+
+
 def test_evaluate_corner_phase_composite_weighted_sum() -> None:
     """Composite uses per-car calibrated weights (Day 12 follow-up).
 
@@ -178,7 +210,8 @@ def test_per_car_calibrated_weights_documented() -> None:
     assert get_weights_for_car("bmw") == (0.2, 0.8, 0.0)
     assert get_weights_for_car("cadillac") == (0.2, 0.3, 0.5)
     assert get_weights_for_car("ferrari") == (0.0, 0.0, 1.0)
-    # Acura/Porsche fall back to default (0.5, 0.3, 0.2).
+    assert get_weights_for_car("porsche") == (0.0, 0.5, 0.5)
+    # Acura falls back to default (0.5, 0.3, 0.2).
     assert get_weights_for_car("acura") == (
         _WEIGHT_AXLE_UTIL, _WEIGHT_AERO_BALANCE, _WEIGHT_GRIP_HEADROOM,
     )

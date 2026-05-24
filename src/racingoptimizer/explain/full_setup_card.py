@@ -115,6 +115,10 @@ _MIRRORED_LEAVES: dict[tuple[str, ...], tuple[tuple[str, ...], str]] = {
         ("Chassis", "LeftRear", "SpringRate"),
         "rear_coil_spring_rate_n_per_mm",
     ),
+    ("Chassis", "RightRear", "SpringPerchOffset"): (
+        ("Chassis", "LeftRear", "SpringPerchOffset"),
+        "spring_perch_offset_rear_mm",
+    ),
     ("Chassis", "RightFront", "TorsionBarTurns"): (
         ("Chassis", "LeftFront", "TorsionBarTurns"),
         "torsion_bar_turns_fl",

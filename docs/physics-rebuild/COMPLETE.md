@@ -116,11 +116,14 @@ is the genuine value.
    lap-time prediction with per-corner duration weights. Day 13's
    investigation showed this is the right granularity.
 
-2. **Wire hybrid optimizer into recommend.py**: Day 14 ships the
-   `--physics` flag as informational. A future iteration could
-   actually use the hybrid score in DE search, with the per-phase
-   weights as the integration. The infrastructure is in place; the
-   wiring is ~200 LoC of `physics/recommend.py` modifications.
+2. **Wire hybrid optimizer into recommend.py**: **DONE 2026-05-23**.
+   Production DE uses `score.py::_corner_phase_objective_value` →
+   `hybrid_score()` by default (`hybrid=True`). `--surrogate-only` keeps
+   surrogate + `_axle_guardrail_penalty`. Guardrail penalties include
+   axle ceiling, balance, and `grip_inconsistency` (quarter strength).
+   Headroom uses corpus `max_lateral_g`, not surrogate self-reference.
+   **Still deferred**: held-out A/B validation that hybrid default does not
+   regress vs `--surrogate-only` on H1–H5.
 
 3. **Refine damper curve fit**: Day 9 shipped a 2-parameter
    percentile-anchored fit. A 3-parameter fit (separate low-speed,

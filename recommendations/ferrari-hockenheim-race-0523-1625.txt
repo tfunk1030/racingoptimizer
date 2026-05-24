@@ -1,0 +1,232 @@
+========================================================================
+ ferrari @ hockenheim_gp -- race (9.0 L fuel)
+ Conditions: 19 C ambient / 21 C track  |  Confidence: sparse (median n=19)  |  Moved params: 2 sparse / 0 noisy of 2 changes
+========================================================================
+
+OVERALL DIRECTION
+  Higher corner weight.
+
+CHANGES (2 of 51 parameters moved)
+
+-- OTHER --
+Corner Weight Rl Kg: 2840 -> 2850 N  (higher)
+  Effect: More weight on the rear axle: more rear traction static; smoother power-down out of slow corners.
+  Trade:  Mid-corner understeer; lazier transient response.
+  Watch most: T0 on straights
+
+Corner Weight Rr Kg: 2840 -> 2850 N  (higher)
+  Effect: More weight on the rear axle: more rear traction static; smoother power-down out of slow corners.
+  Trade:  Mid-corner understeer; lazier transient response.
+  Watch most: T0 on straights
+
+NOTES
+  Fuel level: pinned by user at 9 L
+  Tyre cold pressure: pinned by user at 152.0 kPa
+  Front ARB blade: corpus has only one value -- vary it next session for a recommendation
+  Rear ARB blade: corpus has only one value -- vary it next session for a recommendation
+  Front ARB size: corpus has only one value -- vary it next session for a recommendation
+  Rear ARB size: corpus has only one value -- vary it next session for a recommendation
+  Brake bias: corpus has only one value -- vary it next session for a recommendation
+  FL camber: corpus has only one value -- vary it next session for a recommendation
+  FR camber: corpus has only one value -- vary it next session for a recommendation
+  RL camber: corpus has only one value -- vary it next session for a recommendation
+  RR camber: corpus has only one value -- vary it next session for a recommendation
+  Corner Weight Fl Kg: corpus has only one value -- vary it next session for a recommendation
+  Corner Weight Fr Kg: corpus has only one value -- vary it next session for a recommendation
+  Corner Weight Rl Kg: corpus has only one value -- vary it next session for a recommendation
+  Corner Weight Rr Kg: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsc Fl: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsc Fr: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsc Rl: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsc Rr: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsc Slope Fl: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsc Slope Fr: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsc Slope Rl: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsc Slope Rr: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsr Fl: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsr Fr: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsr Rl: corpus has only one value -- vary it next session for a recommendation
+  Damper Hsr Rr: corpus has only one value -- vary it next session for a recommendation
+  Damper Lsc Fl: corpus has only one value -- vary it next session for a recommendation
+  Damper Lsc Fr: corpus has only one value -- vary it next session for a recommendation
+  Damper Lsc Rl: corpus has only one value -- vary it next session for a recommendation
+  Damper Lsc Rr: corpus has only one value -- vary it next session for a recommendation
+  Damper Lsr Fl: corpus has only one value -- vary it next session for a recommendation
+  Damper Lsr Fr: corpus has only one value -- vary it next session for a recommendation
+  Damper Lsr Rl: corpus has only one value -- vary it next session for a recommendation
+  Damper Lsr Rr: corpus has only one value -- vary it next session for a recommendation
+  Rear diff preload: corpus has only one value -- vary it next session for a recommendation
+  Front diff preload: corpus has only one value -- vary it next session for a recommendation
+  Front heave perch: corpus has only one value -- vary it next session for a recommendation
+  Front heave spring: corpus has only one value -- vary it next session for a recommendation
+  Front pushrod offset: corpus has only one value -- vary it next session for a recommendation
+  Rear pushrod offset: corpus has only one value -- vary it next session for a recommendation
+  Rear wing: corpus has only one value -- vary it next session for a recommendation
+  Rear third perch: corpus has only one value -- vary it next session for a recommendation
+  Rear third spring: corpus has only one value -- vary it next session for a recommendation
+  Throttle Brake Mapping: corpus has only one value -- vary it next session for a recommendation
+  Front toe: corpus has only one value -- vary it next session for a recommendation
+  Rear toe: corpus has only one value -- vary it next session for a recommendation
+  Front torsion bar OD: corpus has only one value -- vary it next session for a recommendation
+  Rear torsion bar OD: corpus has only one value -- vary it next session for a recommendation
+  Front torsion bar turns: corpus has only one value -- vary it next session for a recommendation
+  Rear torsion bar turns: corpus has only one value -- vary it next session for a recommendation
+  Untrained (constraints.md TODO): rear_coil_spring_rate_n_per_mm, spring_perch_offset_rear_mm, throttle_brake_mapping
+  ! pinned to observed median (no per-session variation in training corpus, no learnable response surface): anti_roll_bar_front, anti_roll_bar_rear, arb_size_front, arb_size_rear, brake_bias_pct, camber_fl_deg, camber_fr_deg, camber_rl_deg, camber_rr_deg, corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg, damper_hsc_fl, damper_hsc_fr, damper_hsc_rl, damper_hsc_rr, damper_hsc_slope_fl, damper_hsc_slope_fr, damper_hsc_slope_rl, damper_hsc_slope_rr, damper_hsr_fl, damper_hsr_fr, damper_hsr_rl, damper_hsr_rr, damper_lsc_fl, damper_lsc_fr, damper_lsc_rl, damper_lsc_rr, damper_lsr_fl, damper_lsr_fr, damper_lsr_rl, damper_lsr_rr, diff_preload_nm, front_diff_preload_nm, heave_perch_offset_front_mm, heave_spring_rate_n_per_mm, pushrod_length_offset_front_mm, pushrod_length_offset_rear_mm, rear_wing_angle_deg, third_perch_offset_rear_mm, third_spring_rate_n_per_mm, throttle_brake_mapping, toe_front_mm, toe_rl_mm, torsion_bar_od_fl_mm, torsion_bar_od_rl_mm, torsion_bar_turns_fl, torsion_bar_turns_rl
+  ! T0 exit: axle utilization > 1.0 (exceeds empirical grip ceiling); physics-vs-surrogate divergence (headroom score 0.00) (front margin 1.30, rear 1.15)
+  ! T0 mid_corner: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.95, rear 0.94)
+  ! T0 straight: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.24, rear 0.24)
+  ! T0 trail_brake: physics-vs-surrogate divergence (headroom score 0.23) (front margin 0.72, rear 0.87)
+  ! T1 straight: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.26, rear 0.26)
+
+================================================================
+FULL SETUP CARD -- ferrari @ hockenheim_gp
+================================================================
+Legend: [OPT] optimizer recommendation | [OPT pin] pinned to observed median | [OPT mirror] mirrored from per-axle parameter | [past] from your most recent session (no bounds yet) | [readout] calculated by iRacing -- verify, don't enter | [predicted] readout the optimizer projects under the new inputs.
+
+-- TIRES & AERO ------------------------------------------------
+  [TireType]
+    Tire Type                                   Dry                [past]
+  [LeftFront]
+    Starting Pressure                     152.0 kPa                [OPT]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [LeftRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightFront]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [AeroSettings]
+    Rear Wing Angle                          17 deg                [OPT pin]
+  [AeroCalculator]
+    Front Rh At Speed                       15.0 mm                [readout]
+    Rear Rh At Speed                        40.0 mm                [readout]
+    Downforce Balance                        48.98%                [readout]
+    LD                                        3.855                [readout]
+
+-- CHASSIS -----------------------------------------------------
+  [Front]
+    Heave Spring                            3 index                [OPT pin]
+    Heave Perch Offset                     -16.5 mm                [OPT pin]
+    Heave Spring Defl               10.3 mm 80.3 mm                [readout]
+    Heave Slider Defl              41.4 mm 200.0 mm                [readout]
+    Arb Size                                      A                [OPT pin]
+    Arb Blades                              1 click                [OPT pin]
+    Pushrod Length Delta                     0.0 mm                [OPT pin]
+    Toe In                                  -0.7 mm                [OPT pin]
+  [LeftFront]
+    Corner Weight                            2582 N                [readout]
+    Ride Height                             30.1 mm                [predicted]
+    Shock Defl                     15.9 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        11.8 mm                [readout]
+    Torsion Bar Turns                     0.1 turns                [OPT pin]
+    Torsion Bar OD                          2 index                [OPT pin]
+    Camber                                 -2.8 deg                [OPT pin]
+  [LeftRear]
+    Corner Weight                            2845 N                [readout]
+    Ride Height                             44.2 mm                [predicted]
+    Shock Defl                     17.1 mm 150.0 mm                [readout]
+    Torsion Bar Defl                         8.5 mm                [readout]
+    Torsion Bar Turns                     0.0 turns                [OPT pin]
+    Torsion Bar OD                          2 index                [OPT pin]
+    Camber                                 -1.9 deg                [OPT pin]
+    Toe In                                   0.3 mm                [OPT pin]
+  [Rear]
+    Heave Spring                            5 index                [OPT pin]
+    Heave Perch Offset                    -112.5 mm                [OPT pin]
+    Heave Spring Defl               12.9 mm 67.0 mm                [readout]
+    Heave Slider Defl              22.6 mm 300.0 mm                [readout]
+    Arb Size                                      C                [OPT pin]
+    Arb Blades                              3 click                [OPT pin]
+    Pushrod Length Delta                     4.0 mm                [OPT pin]
+    Fuel Level                                9.0 L                [past]
+  [RightFront]
+    Corner Weight                            2582 N                [readout]
+    Ride Height                             30.1 mm                [predicted]
+    Shock Defl                     15.9 mm 100.0 mm                [readout]
+    Torsion Bar Defl                        11.8 mm                [readout]
+    Torsion Bar Turns                     0.1 turns                [OPT mirror]
+    Torsion Bar OD                          2 index                [OPT mirror]
+    Camber                                 -2.8 deg                [OPT pin]
+  [RightRear]
+    Corner Weight                            2845 N                [readout]
+    Ride Height                             44.2 mm                [predicted]
+    Shock Defl                     17.1 mm 150.0 mm                [readout]
+    Torsion Bar Defl                         8.5 mm                [readout]
+    Torsion Bar Turns                     0.0 turns                [OPT mirror]
+    Torsion Bar OD                          2 index                [OPT mirror]
+    Camber                                 -1.9 deg                [OPT pin]
+    Toe In                                   0.3 mm                [OPT mirror]
+
+-- DAMPERS -----------------------------------------------------
+  [LeftFrontDamper]
+    Ls Comp Damping                        20 click                [OPT pin]
+    Hs Comp Damping                        20 click                [OPT pin]
+    Hs Comp Damp Slope                     11 click                [OPT pin]
+    Ls Rbd Damping                         24 click                [OPT pin]
+    Hs Rbd Damping                         28 click                [OPT pin]
+  [LeftRearDamper]
+    Ls Comp Damping                        16 click                [OPT pin]
+    Hs Comp Damping                        32 click                [OPT pin]
+    Hs Comp Damp Slope                     11 click                [OPT pin]
+    Ls Rbd Damping                         34 click                [OPT pin]
+    Hs Rbd Damping                         35 click                [OPT pin]
+  [RightFrontDamper]
+    Ls Comp Damping                        20 click                [OPT pin]
+    Hs Comp Damping                        20 click                [OPT pin]
+    Hs Comp Damp Slope                     11 click                [OPT pin]
+    Ls Rbd Damping                         24 click                [OPT pin]
+    Hs Rbd Damping                         28 click                [OPT pin]
+  [RightRearDamper]
+    Ls Comp Damping                        16 click                [OPT pin]
+    Hs Comp Damping                        32 click                [OPT pin]
+    Hs Comp Damp Slope                     11 click                [OPT pin]
+    Ls Rbd Damping                         34 click                [OPT pin]
+    Hs Rbd Damping                         35 click                [OPT pin]
+
+-- SYSTEMS -----------------------------------------------------
+  [Lighting]
+    Roof Id Light Color                        Blue                [past]
+  [HybridConfig]
+    Hybrid Rear Drive Enabled                   yes                [past]
+    Hybrid Rear Drive Corner Pct                90%                [past]
+  [BrakeSpec]
+    Pad Compound                             Medium                [past]
+    Front Master Cyl                        19.1 mm                [past]
+    Rear Master Cyl                         19.1 mm                [past]
+    Brake Pressure Bias                    53.0 pct                [OPT pin]
+    Bias Migration                                6                [past]
+    Bias Migration Gain                          -1                [past]
+  [TractionControl]
+    Traction Control Gain                   3 (TC2)                [past]
+    Traction Control Slip                   4 (TC1)                [past]
+  [Fuel]
+    Fuel Level                                  9 L                [OPT]
+    Fuel Target                              2.80 L                [past]
+    Fuel Low Warning                         10.0 L                [past]
+  [GearRatios]
+    Gear Stack                                Short                [past]
+    Speed In First                       121.7 Km/h                [readout]
+    Speed In Second                      157.5 Km/h                [readout]
+    Speed In Third                       190.0 Km/h                [readout]
+    Speed In Fourth                      222.7 Km/h                [readout]
+    Speed In Fifth                       256.6 Km/h                [readout]
+    Speed In Sixth                       291.0 Km/h                [readout]
+    Speed In Seventh                     329.2 Km/h                [readout]
+  [FrontDiffSpec]
+    Preload                                  -50 Nm                [OPT pin]
+  [RearDiffSpec]
+    Coast Drive Ramp Options           Less Locking                [past]
+    Clutch Friction Plates                        4                [past]
+    Preload                                   25 Nm                [OPT pin]

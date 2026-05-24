@@ -1,5 +1,6 @@
 bmw @ Sebring International - recommended setup
-Conditions: AirTemp 32.5 C  AirDensity 1.184 kg/m^3  Wind 2.4 m/s  Wetness 0.00
+Stint: race (? fuel)
+Conditions: AirTemp nan C  TrackTemp 32.5 C  AirDensity 1.184 kg/m^3  Wind 2.4 m/s  Wetness 0.00
 Confidence: noisy (n=90 backing samples for the dominant noisy parameter, 4 parameters reported)
 
 Rear Wing Angle: 12.50 deg   [confidence: confident]

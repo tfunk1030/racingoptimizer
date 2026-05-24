@@ -1,5 +1,10 @@
 # Codebase audit summary -- 2026-05-06
 
+> **Historical snapshot.** Many findings below were closed in May 2026
+> follow-ups (see `docs/VISION_COMPLIANCE.md` 2026-05-07 section) and the
+> 2026-05-23 audit (`docs/audit_2026-05-23/`). Do not treat v4 car lists or
+> corner-weight status here as current.
+
 12 parallel audit units across slices A through F + cross-cutting + tests +
 docs/automations. All workers ran in worktree-isolated sandboxes that
 denied Bash/PowerShell/Write, so the per-unit reports were captured inline

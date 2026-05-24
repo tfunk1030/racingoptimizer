@@ -95,7 +95,9 @@ _CALIBRATED_WEIGHTS: dict[str, tuple[float, float, float]] = {
     "bmw": (0.2, 0.8, 0.0),
     "cadillac": (0.2, 0.3, 0.5),
     "ferrari": (0.0, 0.0, 1.0),
-    # Acura + Porsche: no v4 calibration; default weights apply.
+    "porsche": (0.0, 0.5, 0.5),
+    # Acura: insufficient mid-corner samples for ceiling fit on this
+    # corpus; default Day-12 weights apply until more data lands.
 }
 
 

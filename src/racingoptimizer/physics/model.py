@@ -22,6 +22,7 @@ from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import ConstraintsTable
 from racingoptimizer.context import EnvironmentFrame
 from racingoptimizer.corner import CornerPhaseKey, Phase
+from racingoptimizer.physics.axle_grip import AxleGripCeiling
 from racingoptimizer.physics.baselines import (
     DEFAULT_BASELINES,
     CarBaselines,
@@ -65,6 +66,7 @@ class FitRecord:
     n_samples: int
     cv_residual_std: float
     signal_std: float
+    bootstrap_std: float = 0.0
     # Stage 3: ordered names of every input feature the fitter consumes.
     # The first ``len(feature_names) - len(env_columns)`` entries are the
     # bounded setup parameters; the trailing entries are env channels in
@@ -93,6 +95,7 @@ class FitRecord:
         elif isinstance(state, dict):
             slot_values.update(state)
         slot_values.setdefault("feature_names", ())
+        slot_values.setdefault("bootstrap_std", 0.0)
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 
@@ -163,6 +166,18 @@ class PhysicsModel:
         default_factory=dict
     )
 
+    # Per-(car, axle) grip ceilings fitted from the training corpus during
+    # `fit_per_car` (physics-rebuild Day-10 model, wired into DE in
+    # post-rebuild work). Used by `physics/recommend.py` to apply an
+    # additive guardrail penalty in the DE objective when a candidate
+    # setup's predicted axle utilization exceeds the empirical ceiling.
+    # `None` on legacy pickles (FITTERS_LAYOUT_VERSION < 4) and on cars
+    # whose corpus lacks enough mid-corner samples for a stable fit; the
+    # recommender treats `None` as "guardrail inactive" and falls back to
+    # pure-surrogate scoring without regression.
+    # Keyed by axle name: {"front": AxleGripCeiling, "rear": AxleGripCeiling}.
+    axle_grip_ceilings: dict[str, AxleGripCeiling] | None = None
+
     @property
     def resolved_baselines(self) -> CarBaselines:
         """Return `car_baselines` if set, else the per-car cold-start default.
@@ -205,6 +220,7 @@ class PhysicsModel:
         slot_values.setdefault("parameter_observed_std", {})
         slot_values.setdefault("per_track_parameter_observed", {})
         slot_values.setdefault("bayes_posteriors", {})
+        slot_values.setdefault("axle_grip_ceilings", None)
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 
@@ -232,19 +248,20 @@ class PhysicsModel:
         explore_pct: float = 0.0,
         reset_mode: bool = False,
         staged: bool = False,
+        surrogate_only: bool = False,
     ):
         if staged:
             from racingoptimizer.physics.recommend import recommend_staged
             return recommend_staged(
                 self, track, env, constraints,
                 schedule=schedule, quali=quali, explore_pct=explore_pct,
-                reset_mode=reset_mode,
+                reset_mode=reset_mode, surrogate_only=surrogate_only,
             )
         from racingoptimizer.physics.recommend import recommend as _recommend
         return _recommend(
             self, track, env, constraints,
             schedule=schedule, quali=quali, explore_pct=explore_pct,
-            reset_mode=reset_mode,
+            reset_mode=reset_mode, surrogate_only=surrogate_only,
         )
 
     def predict_setup_readouts(
@@ -268,7 +285,7 @@ class PhysicsModel:
         do). Channels missing from the fitter dict are omitted, and an
         unsupported feature schema (legacy v1/v2) returns an empty dict.
         """
-        readout_prefixes = ("setup_static_",)
+        readout_prefixes = ("setup_static_", "setup_heave_slider_")
 
         by_channel: dict[str, FitRecord] = {}
         for key, record in self.fitters.items():

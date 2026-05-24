@@ -2,6 +2,11 @@
 
 Date: 2026-05-01
 
+> **Superseded in part (2026-05-23):** see `docs/VISION_COMPLIANCE.md`
+> (2026-05-23 section) and `docs/audit_2026-05-23/00_findings_and_fix_plan.md`
+> for hybrid DE default, corner-weight readout policy, static RH warnings,
+> and remaining calibration gaps.
+
 This report supersedes the older green-only compliance claims in
 `docs/VISION_COMPLIANCE.md`. It records what is implemented, what was rebuilt,
 and which remaining gaps are blocked by missing external setup data rather than

@@ -18,9 +18,9 @@ All six VISION slices and three cross-cutting modules are merged. Each
 slice has per-car test coverage (BMW M Hybrid V8, Porsche 963, Cadillac
 V-Series.R, Acura ARX-06, Ferrari 499P).
 
-**Per-car v4 path** (track-agnostic model + cross-car schedule fallback):
-BMW, Cadillac, Ferrari. Acura + Porsche stay on the per-(car, track) v3
-path until each is validated.
+**Per-car v4 path** (track-agnostic pooled model + cross-car schedule fallback):
+all five GTP cars — BMW, Cadillac, Ferrari, Acura, Porsche. The legacy
+v3 per-(car, track) branch remains in code for rollback only.
 
 | Slice | Module | Per-car verification |
 |---|---|---|
@@ -37,14 +37,24 @@ weather snapshot), `racingoptimizer.confidence.Confidence` (frozen
 `racingoptimizer.constraints.{ConstraintsTable, load_constraints, clamp}`
 (per-car-shadowing parameter bounds parser).
 
+Default DE uses hybrid physics+surrogate scoring; validate static ride heights
+in the iRacing garage after applying `[OPT]` values (see `GETTING_STARTED.md`).
+
 ## Documentation
 
 * **`GETTING_STARTED.md`** — install, the four commands, troubleshooting.
 * **`VISION.md`** — design goals and the four "What This Is NOT" rules.
 * **`docs/VISION_COMPLIANCE.md`** — per-clause file:line audit.
+* **`docs/audit_2026-05-23/00_findings_and_fix_plan.md`** — latest full audit + fix status (2026-05-23).
 * **`CLAUDE.md`** — engineering conventions and per-car verification scope.
 * **`docs/superpowers/specs/`** — per-slice design specs.
 * **`docs/physics-rebuild/`** — 14-day physics-rebuild plan, daily snapshots, completion summary (2026-05-08).
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`): ruff + fast pytest + held-out
+integrity check on push/PR; weekly Day 12b calibration gate when a corpus
+is present locally.
 
 ## Tests
 

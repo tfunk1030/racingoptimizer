@@ -42,18 +42,19 @@ def test_ce_gated_families_present_but_unfittable(car: str) -> None:
     ARBs / brake bias / differential preload were CE-gated in the original
     landing of the ontology but flipped to fittable=True when bounds landed
     in `bf2e48b`. Dampers (16 click params per car) flipped to
-    fittable=True with estimated 1..15 click bounds. The CE-gated entries
-    that remain are the ones whose bounds are still `<TODO: from iRacing
-    UI>` placeholders — currently per-corner-weight targets.
+    fittable=True with estimated 1..15 click bounds. Corner weights are
+    calculated readouts (`user_settable=False`) even though observation
+    envelopes live in `constraints.md`.
     """
     onto = ontology_for(car)
     # Dampers are now fittable since `constraints.md` carries 1..15 click
     # bounds per (corner, mode).
     assert "damper_lsc_fl" in onto
     assert onto["damper_lsc_fl"].fittable is True
-    # Per-corner-weight targets — bounds still TODO in `constraints.md`.
+    # Corner weights: calculated readout, not DE-searchable.
     assert "corner_weight_fl_kg" in onto
     assert onto["corner_weight_fl_kg"].fittable is False
+    assert onto["corner_weight_fl_kg"].user_settable is False
 
 
 def test_unknown_car_raises() -> None:
@@ -176,9 +177,9 @@ def test_fittable_parameters_only_returns_bounded_user_settable() -> None:
     # them.
     assert "damper_lsc_fl" in result
     assert "damper_hsr_rr" in result
-    # Still-CE-gated must NOT show up (constraints are still <TODO>).
-    assert "diff_coast_ratio_pct" not in result
     assert "corner_weight_fl_kg" not in result
+    # Unbounded ratio placeholders stay out of the fittable set.
+    assert "diff_coast_ratio_pct" not in result
 
 
 @pytest.mark.parametrize(

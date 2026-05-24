@@ -3,11 +3,18 @@
   "track": "sebring_international",
   "track_display": "sebring_international",
   "environment": {
+    "air_temp_c": NaN,
     "air_density_kg_m3": 1.184,
-    "track_temp_c": 32.5,
+    "air_pressure_mbar": NaN,
+    "relative_humidity": NaN,
     "wind_vel_ms": 2.4,
     "wind_dir_deg": 215.0,
-    "wetness": 0.0
+    "fog_level": NaN,
+    "track_temp_c": 32.5,
+    "wetness": 0.0,
+    "weather_declared_wet": false,
+    "precip_type": -1,
+    "skies": -1
   },
   "confidence": {
     "regime": "noisy",

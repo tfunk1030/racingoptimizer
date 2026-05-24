@@ -43,8 +43,8 @@ VISION.md is decomposed into six slices plus three cross-cutting modules. Status
 
 **Two recommend code paths.** `optimize <car> <track>` routes by `PER_CAR_MODEL_CARS` (top of `src/racingoptimizer/cli/recommend.py`):
 
-- **v4 (per-car, track-agnostic)** — currently `{"cadillac", "bmw", "ferrari"}`. `fit_per_car()` pools every session for the car across every track into one fitter; cache file `corpus/models/<car>__per-car__<digest>.pickle`. Adding a car requires (a) per-car constraint overrides in `constraints.md` (BMWBounds.md / Cadillacbounds.md / Ferraribounds.md as the source of truth), (b) car key added to `PER_CAR_MODEL_CARS`, (c) for tracks the car has never been driven on, the CLI's cross-car schedule fallback (`_maybe_borrow_cross_car_track`) borrows corner geometry from any other car's sessions on that track — so Ferrari@Spa works even though Ferrari has no Spa IBTs.
-- **v3 (per-(car, track))** — Acura + Porsche. Trains per pair, uses donor-track extrapolation when target is unseen.
+- **v4 (per-car, track-agnostic)** — all five GTP cars (`PER_CAR_MODEL_CARS` in `cli/recommend.py`). `fit_per_car()` pools every session for the car across every track into one fitter; cache file `corpus/models/<car>__per-car__<digest>.pickle`. For tracks the car has never been driven on, the CLI's cross-car schedule fallback (`_maybe_borrow_cross_car_track`) borrows corner geometry from any other car's sessions on that track — so Ferrari@Spa works even though Ferrari has no Spa IBTs.
+- **v3 (per-(car, track))** — legacy branch retained for rollback; not the default production path since 2026-05-23.
 
 | Slice | Module | Code merged | Per-car verification scope |
 |---|---|---|---|
@@ -97,13 +97,19 @@ module:
   `mean_std` (uncertainty in central tendency, used by recommender
   trust-radius) + `predictive_std` (uncertainty in next observation,
   used by held-out coverage tests). Wired into `fit_per_car` →
-  `PhysicsModel.bayes_posteriors`. **`FITTERS_LAYOUT_VERSION = 3`**
-  (was 2 pre-Day-4) so existing pickles invalidate.
+  `PhysicsModel.bayes_posteriors`. **`FITTERS_LAYOUT_VERSION = 5`**
+  (was 4 pre-hybrid-wire-in, was 3 pre-guardrail-wire-in, was 2
+  pre-Day-4) so existing pickles invalidate. v4 added
+  `PhysicsModel.axle_grip_ceilings`; v5 corresponds to the
+  hybrid-blend + guardrail wiring landed on 2026-05-23.
 - **`physics.evaluator`** — per-corner-phase composite physics score:
   `axle_utilization * w + aero_balance * w + grip_headroom * w`.
   **Per-car CALIBRATED weights** (Day 12b): BMW (0.2, 0.8, 0.0),
-  Cadillac (0.2, 0.3, 0.5), Ferrari (0.0, 0.0, 1.0). Acura/Porsche
-  fall back to default (0.5, 0.3, 0.2). `get_weights_for_car(car)`.
+  Cadillac (0.2, 0.3, 0.5), Ferrari (0.0, 0.0, 1.0), Porsche
+  (0.0, 0.5, 0.5). Acura falls back to default (0.5, 0.3, 0.2)
+  because the corpus only has ~36 corner-phase rows (axle-ceiling
+  fit needs >=100); refresh once more sessions land.
+  `get_weights_for_car(car)`.
   **PRIMARY VALUE IS GUARDRAILS**, not lap-time prediction
   (Spearman within-group only 0.12-0.25 on this corpus).
   `guardrail_check(score, front_margin, rear_margin) → GuardrailReport`
@@ -114,10 +120,18 @@ module:
   `mid_corner=0.40, braking=0.10, exit=0.10, trail_brake=0.05,
   straight=0.05`. **Mid_corner has 3-30x stronger physics signal**
   (steady-state cornering vs driver-input-dominated phases).
-  Guardrail penalty additive: `over_axle_ceiling = -0.15`,
-  `severely_off_balance = -0.075`; floors at 0. *Module ships as
-  scoring function; not yet wired into DE search* — see COMPLETE.md
-  "Recommended next steps."
+  **Hybrid scoring WIRED INTO DE** (2026-05-23): default recommend path uses
+  `physics/score.py::_corner_phase_objective_value` → `hybrid_score()` —
+  phase-aware blend of physics evaluator + surrogate, plus additive guardrail
+  penalties (`over_axle_ceiling = -0.15`, `severely_off_balance = -0.075`,
+  `grip_inconsistency = -0.25` quarter penalty). Pass `--surrogate-only` to
+  revert to surrogate + `_axle_guardrail_penalty` only (legacy mid-corner
+  axle-ceiling check in `physics/recommend.py`). Long-G is approximated as 0
+  in mid-corner (steady-state) since `accel_long_g_*` isn't in
+  `TARGET_OUTPUT_CHANNELS`; the approximation under-allocates rear Fz, so the
+  rear margin is slightly inflated (safe failure mode). `None` axle ceilings
+  (legacy pickles, or cars with insufficient mid-corner samples) → hybrid falls
+  back to surrogate-only scoring for guardrail terms.
 - **`physics.damper_force.DamperCurve`** + `fit_damper_curve_from_corpus(car)`
   — per-car (k_low_speed, knee_mm_s) refit from corpus shock-velocity
   p30/p95 percentiles (`*shockVel` is in m/s; multiply by 1000).
@@ -148,6 +162,15 @@ queries by default. Used by gate scripts (which opt in via
 flag, no pickle leak. Run before any work that depends on held-out
 isolation.
 
+`scripts/holdout_accuracy_gate.py` is the per-car generalisation gate:
+refits each car from production-only sessions, predicts every
+corner-phase channel of the held-out IBT at the OBSERVED setup, and
+reports per-channel `mean_abs`, `normed_residual` (residual / channel
+signal std), and `coverage` (fraction of actuals inside the predicted
+CI). Per-car pass criteria: median coverage >= 0.50, dense-regime
+mean coverage >= 0.85, median normed residual <= 2.0. Output JSON at
+`docs/physics-rebuild/holdout_accuracy_latest.json`.
+
 `cat.set_held_out_sessions(conn, ids, held_out=True)` is the
 helper to mark sessions gate-only; `upsert_session`'s ON CONFLICT
 clause omits `held_out` so re-ingesting an IBT cannot silently
@@ -166,6 +189,12 @@ peak-grip-vs-Fz curvature, drifts to 154-163 kPa otherwise).
 Info message printed on stderr when the auto-pin fires:
 `Tyre cold pressure auto-pinned to constraint floor: 152.0 kPa
 (override with --pin tyre_cold_pressure_kpa=N).`
+
+**Static ride height envelope warnings** (`cli/recommend.py::
+_static_ride_height_envelope_warnings`): after recommend, compares
+`predict_setup_readouts()` static RH against the observation envelopes
+in `constraints.md` (30–80 mm). Warn-only — user validates in iRacing
+garage; does not clamp perch/pushrod/spring inputs.
 
 ## Stint mode + conditions branching (`physics/wet_mode.py`, `physics/quali_mode.py`)
 
@@ -236,14 +265,14 @@ Every garage line carries one tag. The set is closed:
 |---|---|
 | `[OPT]` | Optimizer recommendation, post-clamp, rounded to iRacing UI step. |
 | `[OPT pin]` | Optimizer pinned to observed median (no per-session variance to learn from). |
-| `[OPT mirror]` | Per-axle parameter mirrored onto the symmetric corner. iRacing UI requires LR=RR for: rear coil spring rate, front + rear torsion bar turns, front + rear torsion bar OD, rear toe-in. |
+| `[OPT mirror]` | Per-axle parameter mirrored onto the symmetric corner. iRacing UI requires LR=RR for: rear coil spring rate, rear spring perch offset, front + rear torsion bar turns/OD, rear toe-in, and all right-side damper clicks (5 modes × 2 axles). |
 | `[past]` | Most-recent session value; no constraint bounds yet to optimize against. |
 | `[readout]` | iRacing-calculated, past-session value. Driver cannot type these. |
 | `[predicted]` | Same readout but evaluated by `PhysicsModel.predict_setup_readouts()` at the new setup vector — what iRacing will display after the user enters the `[OPT]` values. |
 
 Static ride heights, corner weights, deflections, and the `AeroCalculator` block are all readouts; the `[predicted]` path covers `setup_static_*_ride_height_mm` and falls back to `[readout]` for the rest.
 
-Per-axle mirroring lives in `_MIRRORED_LEAVES` (5 entries today); predicted-readout path mapping in `_PREDICTED_READOUT_PATHS`. Add to either dict to extend coverage. The renderer also snaps `[OPT]` numeric values to either the parameter's uniform `step` OR the non-uniform `discrete_values` list (torsion bar OD's 14 diameters; clutch plates {2, 4, 6}).
+Per-axle mirroring lives in `_MIRRORED_LEAVES` (6 entries today: rear coil rate, rear spring perch offset, front + rear torsion bar turns/OD, rear toe-in); predicted-readout path mapping in `_PREDICTED_READOUT_PATHS`. Add to either dict to extend coverage. The renderer also snaps `[OPT]` numeric values to either the parameter's uniform `step` OR the non-uniform `discrete_values` list (torsion bar OD's 14 diameters; clutch plates {2, 4, 6}).
 
 ## Plain-English narrative (`explain/narrative.py`)
 
@@ -256,9 +285,10 @@ Front heave spring: 60 -> 50 N/mm  (softens)
   Trade:  More pitch dive under heavy braking; slower turn-in;
     aero platform less stable on Kemmel compression.
   Watch most: T9 mid-corner
+  Sensitivity: +1 click -0.012 score; -1 click +0.008 score
 ```
 
-OVERALL DIRECTION at the top aggregates moves by THEME (perches + pushrods both → "ride height"; spring_rate + heave_spring → "platform stiffness"), with `(mixed direction)` annotation when a theme has both up and down moves.
+OVERALL DIRECTION at the top aggregates moves by THEME (perches + pushrods both → "ride height"; spring_rate + heave_spring → "platform stiffness"), with `(mixed direction)` annotation when a theme has both up and down moves. A **NOTES** block at the end separates pinned parameters, untrained (no bounds), and blocked readouts.
 
 `--detailed` reverts to the legacy block format for engineering drill-down + the `setup-justifier` validator agent. Translation tables: `_DIRECTION_VERB` (per-row terse verb), `_OVERALL_FRAGMENT` (fluent OVERALL phrase per theme), `_CAR_FEEL` (Effect + Trade per `(family, mode, axis, direction)`). New parameter families need entries in all three (and a label in `_PARAM_LABEL`) to render the full vocabulary; missing families fall through to a phase-themed `Helps:`/`Watch:` corner-list line.
 
@@ -278,7 +308,11 @@ Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/
 - Per-corner damper bounds with per-car-override fan-out (Ferrari overrides global 0–11 to 0–40)
 - Per-corner torsion bar turns + OD (BMW/Cadillac front; Ferrari all 4)
 
-Still `<TODO: from iRacing UI>`: corner weights (4 of them) and brake duct openings. Slice E's `fit` gracefully degrades — lists CE-gated unbounded parameters in `untrained_parameters` and does not refuse to run.
+Still `<TODO: from iRacing UI>`: brake duct openings only. Corner weights are
+**calculated readouts** (`fittable=False`, `user_settable=False` in ontology;
+`constraints.md` carries observation envelopes for validation only). Slice E's
+`fit` gracefully degrades — lists CE-gated unbounded parameters in
+`untrained_parameters` and does not refuse to run.
 
 Categorical params (ARB size, diff coast/drive ramps) are encoded as ordinal indices via `ParameterSpec.choices`; the renderer maps the rounded index back to the label. Non-uniform numeric discrete sets (torsion bar OD's 14 diameters on BMW/Cadillac; clutch's `{2, 4, 6}`) use `ParameterSpec.discrete_values` and snap to the nearest legal value at render time.
 
@@ -298,12 +332,14 @@ Default output path: `recommendations/<car>-<short-track>-<mode>[-<fuel>L]-<MMDD
 
 **Known regressions / gaps:**
 
-- `optimize <car> <track> --json` emits valid JSON to stdout, then a trailing `\n[saved to recommendations\<...>.txt]` to stderr. Click's `CliRunner` mixes stderr into `result.output` by default, so `tests/cli/test_per_car_smoke.py::test_recommend_per_car_json` fails JSON-decoding the combined stream. The text smoke test (the merge gate) passes. Fix: either suppress the auto-save stderr line under `--json`, or set `mix_stderr=False` in the test.
-- Corner weights still `<TODO>` in `constraints.md`; render as `[past]` and appear in `untrained_parameters`.
+- `optimize <car> <track> --json` emits valid JSON to stdout; pin/fuel/reset/static-RH warnings populate the `warnings` array (stderr save line still present unless `--output-file -`).
+- Brake duct openings still `<TODO>` in `constraints.md`.
 - Wind decomposition uses tailwind-worst-case magnitude only; per-corner directional headwind/crosswind correction needs heading data the corner schedule doesn't carry yet (deferred per `physics/wind.py` docstring).
 - `fuel_level_l` is fittable but most cars' corpora have thin fuel variance — `predict_setup_readouts` learns whatever pattern exists, which may not be physically pure fuel→RH.
 - Driver-input output channels (throttle, brake, damper velocity) plateau at fit_quality ~0.50 (signal == noise). Structural ceiling — the model can't fully resolve channels that depend more on driver input than setup.
 - BMW corpus is Sebring-dominated (37/53 sessions). Spa-specific predictions (11 sessions) are weaker than Sebring's by design.
+- Evaluator Spearman gate (~0.19 mean on corpus) below PLAN target 0.35 — product posture is guardrailed surrogate, not lap-time physics predictor.
+- Held-out hybrid vs `--surrogate-only` A/B (H1–H5) not yet in CI.
 
 ## Project automations (`.claude/`)
 

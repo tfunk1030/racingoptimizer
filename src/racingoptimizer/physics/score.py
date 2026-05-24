@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+import numpy as np
+
 from racingoptimizer.aero import BASELINE_AIR_DENSITY, AeroSurface
 from racingoptimizer.confidence import Confidence
 from racingoptimizer.confidence.confidence import Regime
@@ -54,6 +56,12 @@ _OBJECTIVE_CONFIDENCE_MULTIPLIER: dict[str, float] = {
 # rather than a discontinuous cliff.
 _RIDE_HEIGHT_SAFETY_FLOOR_MM: float = 5.0
 _BOTTOMING_PENALTY_DEPTH_MM: float = 10.0
+
+# Neutral fallbacks when aero maps or archetype speed are unavailable
+# during hybrid scoring inside the DE hot loop.
+_DEFAULT_AERO_BALANCE_PCT: float = 50.0
+_DEFAULT_AERO_LD: float = 3.5
+_DEFAULT_SPEED_MS: float = 50.0
 
 
 def _clip01(x: float) -> float:
@@ -358,10 +366,16 @@ def aggregate_utilization(
     n_samples = min((c.n_samples for _, c in contribs), default=0)
     spread = sum(w * (c.hi - c.lo) for w, c in contribs)
     half_spread = spread / 2.0
+    # Hybrid sub-utilizations can momentarily exceed 1.0 when physics +
+    # surrogate align strongly; clamp into [0, 1] so the Confidence
+    # bracket invariant `lo <= value <= hi` holds. The downstream
+    # objective uses `total` (the raw weighted sum) for ranking,
+    # while the Confidence bracket reports the clamped value.
+    clamped = _clip01(total)
     return total, Confidence(
-        value=total,
-        lo=max(0.0, total - half_spread),
-        hi=min(1.0, total + half_spread),
+        value=clamped,
+        lo=max(0.0, clamped - half_spread),
+        hi=min(1.0, clamped + half_spread),
         n_samples=int(n_samples),
         regime=regime,
     )
@@ -377,6 +391,7 @@ def score_setup(
     strict: bool = False,
     schedule: list | None = None,
     quali: bool = False,
+    hybrid: bool = True,
 ) -> float:
     """Sum of per-(corner, phase) utilization * per-corner weight.
 
@@ -416,13 +431,13 @@ def score_setup(
             )
         breakdown = _score_breakdown_per_car(
             model, setup, env, aero, schedule, weights, baselines,
-            phase_weights=phase_weights,
+            phase_weights=phase_weights, hybrid=hybrid,
         )
     else:
         keys = _corner_phase_keys(model)
         breakdown = _score_breakdown(
             model, setup, env, aero, keys, weights, baselines,
-            phase_weights=phase_weights,
+            phase_weights=phase_weights, hybrid=hybrid,
         )
     return float(sum(breakdown.values()))
 
@@ -437,6 +452,7 @@ def score_breakdown(
     strict: bool = False,
     schedule: list | None = None,
     quali: bool = False,
+    hybrid: bool = True,
 ) -> dict[CornerPhaseKey, float]:
     setup = _clamped_or_raise(model, setup, strict=strict)
     if weights is None:
@@ -452,12 +468,12 @@ def score_breakdown(
             )
         return _score_breakdown_per_car(
             model, setup, env, aero, schedule, weights, baselines,
-            phase_weights=phase_weights,
+            phase_weights=phase_weights, hybrid=hybrid,
         )
     keys = _corner_phase_keys(model)
     return _score_breakdown(
         model, setup, env, aero, keys, weights, baselines,
-        phase_weights=phase_weights,
+        phase_weights=phase_weights, hybrid=hybrid,
     )
 
 
@@ -644,6 +660,7 @@ def _score_breakdown(
     baselines: CarBaselines,
     *,
     phase_weights: dict[Phase, dict[str, float]] | None = None,
+    hybrid: bool = True,
 ) -> dict[CornerPhaseKey, float]:
     out: dict[CornerPhaseKey, float] = {}
     for corner_id, phase_str in keys:
@@ -656,21 +673,14 @@ def _score_breakdown(
         )
         state = model.predict(setup, env, cpkey)
         if not state.states:
-            # Empty state means the fitter has no trained channels for
-            # this (corner, phase) -- model coverage gap, NOT a real
-            # "0 utilization" prediction. Previously we wrote 0.0 here,
-            # which the DE objective summed alongside real scores --
-            # making "no coverage" indistinguishable from "actively
-            # predicted disaster". Skip the entry instead so the
-            # comparison between candidate setups uses only the corners
-            # the model actually has signal at. (Set is static per
-            # model, so this preserves the inter-setup delta.)
             continue
-        util, conf = aggregate_utilization(
-            state, phase, env, aero, baselines, phase_weights=phase_weights,
+        value = _corner_phase_objective_value(
+            model, setup, env, aero, state, int(corner_id), phase_str,
+            weights, baselines, phase_weights=phase_weights, hybrid=hybrid,
         )
-        w = weights.get(int(corner_id), 0.0)
-        out[cpkey] = float(_confidence_adjusted_utilization(util, conf) * w)
+        if value is None:
+            continue
+        out[cpkey] = value
     return out
 
 
@@ -690,14 +700,23 @@ def _score_breakdown_per_car(
     baselines: CarBaselines,
     *,
     phase_weights: dict[Phase, dict[str, float]] | None = None,
+    hybrid: bool = True,
 ) -> dict[CornerPhaseKey, float]:
     """Per-car (v4) score path: iterate the TARGET track's corners.
 
     ``schedule`` is a list of ``CornerScheduleEntry`` (corner_id, phase,
     archetype dict). For each entry, the per-car model is queried with the
     archetype features so the same fitter scores any corner on any track.
+
+    When ``hybrid`` is True (default), combines the surrogate utilization
+    score with the physics evaluator via ``hybrid_optimizer.hybrid_score``.
     """
     out: dict[CornerPhaseKey, float] = {}
+    phase_durations: list[float] = []
+    for entry in schedule:
+        pdur = float(entry.archetype.get("phase_duration_s", 0.0) or 0.0)
+        phase_durations.append(pdur)
+    total_phase_dur = sum(d for d in phase_durations if d > 0.0)
     for entry in schedule:
         corner_id = int(entry.corner_id)
         phase_str = str(entry.phase)
@@ -715,24 +734,293 @@ def _score_breakdown_per_car(
             setup, env, cpkey, corner_archetype=entry.archetype,
         )
         if not state.states:
-            # See `_score_breakdown` for the rationale: skip empty-state
-            # corner-phases instead of writing 0.0 (which is the same
-            # as a maximally-bad real prediction) so the DE objective
-            # cleanly distinguishes "no model coverage" from "predicted
-            # poorly". The set of empty entries is static per model.
             continue
-        util, conf = aggregate_utilization(
-            state, phase, env, aero, baselines, phase_weights=phase_weights,
+        pdur = float(entry.archetype.get("phase_duration_s", 0.0) or 0.0)
+        phase_weight = (
+            (pdur / total_phase_dur) if total_phase_dur > 0.0 and pdur > 0.0
+            else None
         )
-        w = weights.get(corner_id, 0.0)
-        out[cpkey] = float(_confidence_adjusted_utilization(util, conf) * w)
+        value = _corner_phase_objective_value(
+            model, setup, env, aero, state, corner_id, phase_str,
+            weights, baselines, phase_weights=phase_weights, hybrid=hybrid,
+            archetype=entry.archetype,
+            phase_duration_weight=phase_weight,
+        )
+        if value is None:
+            continue
+        out[cpkey] = value
     return out
+
+
+def _aero_balance_ld_from_state(
+    setup: dict[str, float],
+    state: CornerPhaseStateWithConfidence,
+    env: EnvironmentFrame,
+    aero: AeroSurface | None,
+) -> tuple[float, float]:
+    """Query aero map balance + L/D at predicted ride heights and setup wing."""
+    if aero is None:
+        return _DEFAULT_AERO_BALANCE_PCT, _DEFAULT_AERO_LD
+    front = state.states.get("lf_ride_height_mean_mm")
+    rear = state.states.get("lr_ride_height_mean_mm")
+    if front is None or rear is None:
+        bounds = aero.bounds
+        front_v = float(bounds.front_rh_mm[0] + bounds.front_rh_mm[1]) / 2.0
+        rear_v = float(bounds.rear_rh_mm[0] + bounds.rear_rh_mm[1]) / 2.0
+    else:
+        front_v = float(front.value)
+        rear_v = float(rear.value)
+    wing = setup.get("rear_wing_angle_deg")
+    if wing is None:
+        wing = float(aero.bounds.wing_angles[len(aero.bounds.wing_angles) // 2])
+    balance, ld = aero.interpolate(
+        front_v, rear_v, float(wing), float(env.air_density),
+    )
+    return float(balance), float(ld)
+
+
+def _speed_ms_from_archetype(
+    archetype: dict | None,
+    state: CornerPhaseStateWithConfidence,
+) -> float:
+    if archetype:
+        for key in (
+            "corner_apex_speed_ms",
+            "apex_speed_ms",
+            "corner_max_speed_ms",
+        ):
+            raw = archetype.get(key)
+            if raw is not None:
+                speed = float(raw)
+                if speed > 0.0:
+                    return speed
+    for key in ("corner_apex_speed_ms", "speed_ms"):
+        conf = state.states.get(key)
+        if conf is not None:
+            speed = float(conf.value)
+            if speed > 0.0:
+                return speed
+    return _DEFAULT_SPEED_MS
+
+
+def _long_g_for_phase(phase_str: str) -> float:
+    phase = phase_str.strip().lower()
+    if phase == "mid_corner":
+        return 0.0
+    if phase in ("braking", "trail_brake"):
+        return -0.5
+    if phase == "exit":
+        return 0.3
+    return 0.0
+
+
+def _headroom_reference_g(baselines: CarBaselines) -> float | None:
+    """Corpus-derived lateral-G reference for headroom scoring (not surrogate self-ref)."""
+    ref = float(baselines.max_lateral_g)
+    if not np.isfinite(ref) or ref <= 0.5:
+        return None
+    return ref
+
+
+def _corner_phase_objective_value(
+    model: PhysicsModel,
+    setup: dict[str, float],
+    env: EnvironmentFrame,
+    aero: AeroSurface | None,
+    state: CornerPhaseStateWithConfidence,
+    corner_id: int,
+    phase_str: str,
+    weights: dict[int, float],
+    baselines: CarBaselines,
+    *,
+    phase_weights: dict[Phase, dict[str, float]] | None = None,
+    hybrid: bool = True,
+    phase_duration_weight: float | None = None,
+    archetype: dict | None = None,
+) -> float | None:
+    """Weighted per-(corner, phase) objective for DE and score_breakdown."""
+    try:
+        phase = Phase(phase_str)
+    except ValueError:
+        return None
+    util, conf = aggregate_utilization(
+        state, phase, env, aero, baselines, phase_weights=phase_weights,
+    )
+    corner_weight = float(weights.get(int(corner_id), 0.0))
+    if phase_duration_weight is not None and phase_duration_weight > 0.0:
+        corner_weight = float(phase_duration_weight)
+    surrogate_score = float(_confidence_adjusted_utilization(util, conf))
+    if not hybrid:
+        return surrogate_score * corner_weight
+
+    ceilings = getattr(model, "axle_grip_ceilings", None) or {}
+    front_ceil = ceilings.get("front")
+    rear_ceil = ceilings.get("rear")
+    if front_ceil is None or rear_ceil is None:
+        return surrogate_score * corner_weight
+
+    lat_conf = state.states.get("accel_lat_g_max")
+    if lat_conf is None:
+        return surrogate_score * corner_weight
+    lat_g = float(lat_conf.value)
+    if not np.isfinite(lat_g):
+        return surrogate_score * corner_weight
+
+    long_g = _long_g_for_phase(phase_str)
+    speed_ms = _speed_ms_from_archetype(archetype, state)
+    balance_pct, ld_ratio = _aero_balance_ld_from_state(setup, state, env, aero)
+
+    headroom_ref = _headroom_reference_g(baselines)
+
+    from racingoptimizer.physics.axle_grip import (
+        axle_grip_margin,
+        compute_axle_grip_ratios,
+    )
+    from racingoptimizer.physics.evaluator import (
+        evaluate_corner_phase,
+        guardrail_check,
+    )
+    from racingoptimizer.physics.hybrid_optimizer import hybrid_score
+
+    cps = evaluate_corner_phase(
+        model.car,
+        corner_id,
+        phase_str,
+        lat_g=lat_g,
+        long_g=long_g,
+        speed_ms=speed_ms,
+        aero_balance_pct=balance_pct,
+        aero_ld_ratio=ld_ratio,
+        front_ceiling=front_ceil,
+        rear_ceiling=rear_ceil,
+        surrogate_lat_g_ceiling=headroom_ref,
+    )
+    try:
+        ratios = compute_axle_grip_ratios(
+            np.array([lat_g]), np.array([long_g]), model.car,
+        )
+    except (KeyError, ValueError):
+        return surrogate_score * corner_weight
+    front_margin = float(axle_grip_margin(ratios["front"][0], front_ceil))
+    rear_margin = float(axle_grip_margin(ratios["rear"][0], rear_ceil))
+    guard = guardrail_check(
+        cps, front_margin=front_margin, rear_margin=rear_margin,
+    )
+    hs = hybrid_score(
+        car=model.car,
+        corner_id=corner_id,
+        phase=phase_str,
+        physics_score=cps.composite_score,
+        surrogate_score=surrogate_score,
+        over_axle_ceiling=guard.over_axle_ceiling,
+        severely_off_balance=guard.severely_off_balance,
+        grip_inconsistency=guard.grip_inconsistency,
+    )
+    return float(hs.hybrid_score * corner_weight)
+
+
+def guardrail_warnings_for_setup(
+    model: PhysicsModel,
+    setup: dict[str, float],
+    env: EnvironmentFrame,
+    schedule: list,
+    *,
+    quali: bool = False,
+    max_warnings: int = 5,
+) -> list[str]:
+    """Collect physics guardrail violations for the recommended setup."""
+    if not schedule:
+        return []
+    ceilings = getattr(model, "axle_grip_ceilings", None) or {}
+    if not ceilings.get("front") or not ceilings.get("rear"):
+        return []
+
+    from racingoptimizer.corner import CornerPhaseKey, Phase
+    from racingoptimizer.physics.axle_grip import (
+        axle_grip_margin,
+        compute_axle_grip_ratios,
+    )
+    from racingoptimizer.physics.evaluator import (
+        evaluate_corner_phase,
+        guardrail_check,
+    )
+
+    aero = _aero_surface_or_none(model)
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for entry in schedule:
+        corner_id = int(entry.corner_id)
+        phase_str = str(entry.phase)
+        try:
+            phase = Phase(phase_str)
+        except ValueError:
+            continue
+        cpkey = CornerPhaseKey(
+            session_id="<guardrail-check>",
+            lap_index=0,
+            corner_id=corner_id,
+            phase=phase,
+        )
+        try:
+            state = model.predict(
+                setup, env, cpkey, corner_archetype=entry.archetype,
+            )
+        except (ValueError, KeyError):
+            continue
+        lat_conf = state.states.get("accel_lat_g_max")
+        if lat_conf is None:
+            continue
+        lat_g = float(lat_conf.value)
+        if not np.isfinite(lat_g) or lat_g <= 0.5:
+            continue
+        long_g = _long_g_for_phase(phase_str)
+        speed_ms = _speed_ms_from_archetype(entry.archetype, state)
+        balance_pct, ld_ratio = _aero_balance_ld_from_state(setup, state, env, aero)
+        headroom_ref = _headroom_reference_g(model.resolved_baselines)
+        cps = evaluate_corner_phase(
+            model.car,
+            corner_id,
+            phase_str,
+            lat_g=lat_g,
+            long_g=long_g,
+            speed_ms=speed_ms,
+            aero_balance_pct=balance_pct,
+            aero_ld_ratio=ld_ratio,
+            front_ceiling=ceilings["front"],
+            rear_ceiling=ceilings["rear"],
+            surrogate_lat_g_ceiling=headroom_ref,
+        )
+        try:
+            ratios = compute_axle_grip_ratios(
+                np.array([lat_g]), np.array([long_g]), model.car,
+            )
+        except (KeyError, ValueError):
+            continue
+        front_margin = float(axle_grip_margin(ratios["front"][0], ceilings["front"]))
+        rear_margin = float(axle_grip_margin(ratios["rear"][0], ceilings["rear"]))
+        guard = guardrail_check(
+            cps, front_margin=front_margin, rear_margin=rear_margin,
+        )
+        if not guard.flagged or not guard.reason:
+            continue
+        msg = (
+            f"T{corner_id} {phase_str}: {guard.reason} "
+            f"(front margin {front_margin:.2f}, rear {rear_margin:.2f})"
+        )
+        if msg in seen:
+            continue
+        seen.add(msg)
+        warnings.append(msg)
+        if len(warnings) >= max_warnings:
+            break
+    return warnings
 
 
 __all__ = [
     "aero_eff",
     "aggregate_utilization",
     "balance",
+    "guardrail_warnings_for_setup",
     "grip",
     "platform",
     "score_breakdown",

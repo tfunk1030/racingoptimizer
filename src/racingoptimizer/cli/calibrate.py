@@ -213,12 +213,14 @@ def calibrate_cmd(
         raise SystemExit(2)
 
     if car_key in PER_CAR_MODEL_CARS:
-        track_slug, sessions_for_target, _schedule, model = _build_per_car_pipeline(
-            car_key=car_key,
-            track=track_input,
-            catalog_sessions=catalog_sessions,
-            root=root,
-            no_cache=False,
+        track_slug, _donor, sessions_for_target, _schedule, model = (
+            _build_per_car_pipeline(
+                car_key=car_key,
+                track=track_input,
+                catalog_sessions=catalog_sessions,
+                root=root,
+                no_cache=False,
+            )
         )
     else:
         track_slug, donor_track = _resolve_track_or_extrapolate(

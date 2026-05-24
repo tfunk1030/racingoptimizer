@@ -52,24 +52,14 @@ def test_tyre_cold_pressure(table: ConstraintsTable) -> None:
 
 
 def test_todo_placeholders_return_none(table: ConstraintsTable) -> None:
-    """Parameters whose `constraints.md` row is still ``<TODO: from iRacing UI>``.
-
-    Note: ARB blades, brake bias, diff preload, and the camber rows now have
-    estimated bounds (annotated as such in `constraints.md`). When iRacing-
-    UI capture invalidates an estimate, edit `constraints.md` accordingly —
-    do NOT add the row back to this test list.
-    """
-    # Damper LSC was previously TODO; estimated 0..11 click bounds
-    # landed alongside the per-corner damper tables, so this row now
-    # has real bounds and must NOT be in the TODO list.
-    assert table.bounds("default", "diff_coast_ratio_pct") is None
-    assert table.bounds("default", "diff_power_ratio_pct") is None
-    # Toe is in mm but the loader's "Toe" section is degree-based — kept TODO
-    # until the units mismatch is resolved.
+    """Parameters whose bounds are still unverified in the garage UI."""
     assert table.bounds("default", "toe_rr_deg") is None
-    assert table.bounds("default", "brake_duct_front") is None
-    assert table.bounds("default", "corner_weight_fl_kg") is None
-    assert table.bounds("default", "throttle_brake_mapping") is None
+    # Brake ducts have estimated bounds but no verified ontology path yet.
+    assert table.bounds("default", "brake_duct_front") == (0.0, 100.0)
+    assert table.bounds("default", "corner_weight_fl_kg") == (2400.0, 3300.0)
+    assert table.bounds("default", "throttle_brake_mapping") == (0.0, 15.0)
+    assert table.bounds("default", "diff_coast_ratio_pct") == (0.0, 100.0)
+    assert table.bounds("default", "diff_power_ratio_pct") == (0.0, 100.0)
 
 
 def test_unknown_parameter_returns_none(table: ConstraintsTable) -> None:

@@ -65,7 +65,7 @@ def test_pin_propagates(multi_lap_ibt: Path, tmp_corpus: Path) -> None:
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
-    assert "Pinned by user" in result.output
+    assert "pinned by user" in result.output.lower()
 
 
 def test_invalid_pin_exits_2(multi_lap_ibt: Path, tmp_corpus: Path) -> None:

@@ -1,0 +1,12 @@
+========================================================================
+Held-out per-car accuracy gate (H1-H5)
+========================================================================
+
+[bmw] held-out session=3f0a05d3f44527bd track=spa_2024_up
+  production corpus: 58 sessions
+  fit complete: schema=v5, baseline_setup keys=47
+  held-out corner-phase rows: 144
+  scored 2880 (channel, sample) pairs across 20 channels
+
+[cadillac] held-out session=d236a089300fc0ea track=lagunaseca
+  production corpus: 17 sessions

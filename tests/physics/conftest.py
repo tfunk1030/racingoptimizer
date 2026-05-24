@@ -20,8 +20,8 @@ from racingoptimizer.ingest.detect import (
     detect_track_from_filename,
     normalize_car_key,
 )
-from racingoptimizer.physics import PhysicsModel, fit
-from racingoptimizer.track import build_track_model
+from racingoptimizer.physics import PhysicsModel
+from racingoptimizer.physics.fitter import fit_per_car
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BMW_SEBRING_IBT = REPO_ROOT / "ibtfiles" / "bmwlmdh_sebring international 2026-03-22 14-52-24.ibt"
@@ -66,8 +66,9 @@ def bmw_model_session(tmp_path_factory):
     sess_df = sessions(corpus_root=root)
     car = sess_df.row(0, named=True)["car"]
     track = sess_df.row(0, named=True)["track"]
-    tm = build_track_model(track, sids, corpus_root=root)
-    model = fit(car, sids, tm, corpus_root=root, k_folds=2, seed=0xC0FFEE)
+    model = fit_per_car(
+        car, sorted(sids), corpus_root=root, k_folds=2, seed=0xC0FFEE,
+    )
     return model, track, root
 
 
@@ -155,9 +156,13 @@ def per_car_model_factory(tmp_path_factory):
         sess_df = sessions(car=car, track=track, corpus_root=root)
         sids = sorted(sess_df["session_id"].to_list())
         assert sids, f"no successfully ingested sessions for car={car} track={track}"
-        tm = build_track_model(track, sids, corpus_root=root)
         k_folds = max(2, min(3, len(sids)))
-        model = fit(car, sids, tm, corpus_root=root, k_folds=k_folds, seed=0xC0FFEE)
+        all_car_sids = sorted(
+            sessions(car=car, corpus_root=root)["session_id"].to_list(),
+        )
+        model = fit_per_car(
+            car, all_car_sids, corpus_root=root, k_folds=k_folds, seed=0xC0FFEE,
+        )
         _MODEL_CACHE[key] = (model, root)
         return model, root
 

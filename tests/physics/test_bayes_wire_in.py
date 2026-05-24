@@ -135,3 +135,40 @@ def test_bayes_posteriors_empty_dict_is_valid_state() -> None:
     # Should not raise; should be retrievable.
     _ = m.bayes_posteriors
     assert m.bayes_posteriors == {}
+
+
+def test_bayes_trust_anchor_shifts_baseline_to_posterior_mean() -> None:
+    from racingoptimizer.physics.recommend import _bayes_trust_anchor
+
+    posteriors = {
+        ("rear_wing_angle_deg", "spa_2024_up"): BayesPosterior(
+            parameter="rear_wing_angle_deg",
+            track="spa_2024_up",
+            mean=14.5,
+            std=0.3,
+            n_samples=6,
+            shrinkage=0.2,
+            mean_std=0.25,
+            predictive_std=0.5,
+        ),
+    }
+    model = PhysicsModel(
+        car="ferrari", session_ids=(), bayes_posteriors=posteriors,
+    )
+    anchor, std = _bayes_trust_anchor(
+        model, "spa_2024_up", "rear_wing_angle_deg", baseline=17.0, observed_std=0.1,
+    )
+    assert anchor == pytest.approx(14.5)
+    assert std == pytest.approx(0.25)
+
+
+def test_bayes_trust_anchor_falls_back_without_posterior() -> None:
+    from racingoptimizer.physics.recommend import _bayes_trust_anchor
+
+    model = PhysicsModel(car="bmw", session_ids=())
+    anchor, std = _bayes_trust_anchor(
+        model, "sebring_international", "rear_wing_angle_deg",
+        baseline=16.0, observed_std=0.4,
+    )
+    assert anchor == pytest.approx(16.0)
+    assert std == pytest.approx(0.4)

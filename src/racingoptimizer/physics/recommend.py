@@ -28,6 +28,11 @@ from scipy.optimize import differential_evolution
 from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import ConstraintsTable, clamp
 from racingoptimizer.context import EnvironmentFrame
+from racingoptimizer.corner import CornerPhaseKey, Phase
+from racingoptimizer.physics.axle_grip import (
+    AxleGripCeiling,
+    compute_axle_grip_ratios,
+)
 from racingoptimizer.physics.model import PhysicsModel
 from racingoptimizer.physics.ontology import fittable_parameters
 from racingoptimizer.physics.recommendation import SetupRecommendation
@@ -52,6 +57,7 @@ def recommend(
     quali: bool = False,
     explore_pct: float = 0.0,
     reset_mode: bool = False,
+    surrogate_only: bool = False,
 ) -> SetupRecommendation:
     """Constraint-clamped DE search for the optimal setup.
 
@@ -76,7 +82,14 @@ def recommend(
     flagged as ``sparse`` confidence so the user knows the prediction
     is extrapolating beyond corpus density. Default 0.0 = strict
     empirical envelope (current behavior).
+
+    ``surrogate_only=True`` disables the hybrid physics+surrogate
+    objective and reverts to the pre-rebuild surrogate utilization
+    score (plus the legacy additive axle guardrail penalty when
+    ceilings are available). Default False uses the Day-13 hybrid
+    score (physics evaluator + surrogate, phase-aware weighting).
     """
+    use_hybrid = not surrogate_only
     is_per_car = int(model.feature_schema_version) >= 4
     if is_per_car and schedule is None:
         raise ValueError(
@@ -152,6 +165,9 @@ def recommend(
             )
         regime = _median_regime(model, name)
         observed_std = float(observed_std_table.get(name, 0.0))
+        trust_baseline, trust_observed_std = _bayes_trust_anchor(
+            model, track, name, baseline, observed_std,
+        )
         # Trust envelope = global corpus envelope (every value the user has
         # ever run this car at, on any track). Per-track strictness was the
         # previous rule but left good setups off the table at every track
@@ -169,9 +185,9 @@ def recommend(
         )
         sub_bounds, was_pinned = _pin_or_trust_bounds(
             bound=bound,
-            baseline=baseline,
+            baseline=trust_baseline,
             regime=regime,
-            observed_std=observed_std,
+            observed_std=trust_observed_std,
             target_observed=target_observed_values,
             click_step=target_step,
             empirical_range=empirical_range,
@@ -182,7 +198,7 @@ def recommend(
             pinned_constant.add(name)
         param_names.append(name)
         bounds.append(sub_bounds)
-        init_values.append(baseline)
+        init_values.append(trust_baseline)
 
     full_baseline = dict(model.baseline_setup)
     if not param_names:
@@ -231,6 +247,12 @@ def recommend(
     else:
         keys = _corner_phase_keys(model)
 
+    # Guardrail-penalty wiring (post-physics-rebuild). When hybrid
+    # scoring is active, guardrail penalties are applied inside
+    # hybrid_score(); the additive penalty below is surrogate-only
+    # legacy path.
+    axle_ceilings = getattr(model, "axle_grip_ceilings", None)
+
     def objective(x: np.ndarray) -> float:
         candidate = dict(full_baseline)
         for name, value in zip(param_names, x.tolist(), strict=True):
@@ -240,13 +262,23 @@ def recommend(
             breakdown_inner = _score_breakdown_per_car(
                 model, clamped, env, aero, schedule, weights, baselines,
                 phase_weights=phase_weights_override,
+                hybrid=use_hybrid,
             )
         else:
             breakdown_inner = _score_breakdown(
                 model, clamped, env, aero, keys, weights, baselines,
                 phase_weights=phase_weights_override,
+                hybrid=use_hybrid,
             )
-        return -float(sum(breakdown_inner.values()))
+        score_sum = float(sum(breakdown_inner.values()))
+        if surrogate_only and axle_ceilings is not None:
+            penalty = _axle_guardrail_penalty(
+                model, clamped, env, weights, axle_ceilings,
+                schedule if is_per_car else None,
+                keys if not is_per_car else None,
+            )
+            score_sum -= penalty
+        return -score_sum
 
     # DE budget: per-car v4 with 47 fittable parameters × 70+ schedule
     # entries × 30+ output channels per objective evaluation works out
@@ -333,6 +365,7 @@ def recommend(
     _fill_untrained_baselines(parameters, model, full_baseline)
     breakdown = score_breakdown(
         model, recommended, track, env, weights=weights, schedule=schedule,
+        quali=quali, hybrid=use_hybrid,
     )
     return SetupRecommendation(
         car=model.car,
@@ -545,6 +578,18 @@ def _pin_or_trust_bounds(
     """
     lo, hi = bound
     span = hi - lo
+    # Defensive: the caller passes ``baseline`` as ``trust_baseline`` from
+    # ``_bayes_trust_anchor``, which returns the empirical Bayes posterior
+    # mean unclamped. When constraints.md is wrong (or the driver's setup
+    # has drifted outside our coded legal envelope), the anchor can sit
+    # well outside ``[lo, hi]`` — and the PIN branch below would then
+    # collapse to an inverted window (e.g. baseline=10.0 against bound
+    # (1.0, 5.0) → pinned_lo=9.999996, pinned_hi=5.0). Clamping here
+    # guarantees every downstream branch sees a baseline inside the
+    # constraint envelope; the bound-mismatch is reported as a clamp
+    # warning at the call site.
+    if span > 0.0:
+        baseline = min(max(baseline, lo), hi)
     # `--reset` short-circuits: skip the corpus-density pin check (so
     # parameters the driver held constant can still move) and skip the
     # regime-driven trust-radius narrowing. The user has signalled the
@@ -646,6 +691,32 @@ def _pin_or_trust_bounds(
     return ((trust_lo, trust_hi), False)
 
 
+def _bayes_trust_anchor(
+    model: PhysicsModel,
+    track: str,
+    parameter: str,
+    baseline: float,
+    observed_std: float,
+) -> tuple[float, float]:
+    """Track-aware trust anchor from empirical-Bayes posteriors when available.
+
+    ``bayes_posteriors`` stores per-(parameter, track) shrinkage estimates
+    from ``physics.bayes_retrofit``. When present, the posterior mean
+    replaces the global corpus median as the trust-radius center and
+    ``mean_std`` replaces the global observed std for near-constant pin
+    detection.
+    """
+    posteriors = getattr(model, "bayes_posteriors", None) or {}
+    posterior = posteriors.get((parameter, track))
+    if posterior is None or posterior.n_samples <= 0:
+        return baseline, observed_std
+    anchor = float(posterior.mean)
+    mean_std = float(posterior.mean_std or posterior.std or 0.0)
+    if mean_std <= 0.0:
+        mean_std = observed_std
+    return anchor, mean_std
+
+
 def _click_step_for(
     model: PhysicsModel,
     parameter: str,
@@ -739,12 +810,14 @@ def _parameter_confidence(model: PhysicsModel, parameter: str) -> Confidence:
     n_samples_vals: list[int] = []
     cv_vals: list[float] = []
     signal_vals: list[float] = []
+    bootstrap_vals: list[float] = []
     for key, record in model.fitters.items():
         if not _record_depends_on(key, record, parameter):
             continue
         n_samples_vals.append(int(record.n_samples))
         cv_vals.append(float(record.cv_residual_std))
         signal_vals.append(float(record.signal_std))
+        bootstrap_vals.append(float(getattr(record, "bootstrap_std", 0.0) or 0.0))
     if not n_samples_vals:
         baseline = float(model.baseline_setup.get(parameter, 0.0))
         return Confidence(
@@ -757,6 +830,7 @@ def _parameter_confidence(model: PhysicsModel, parameter: str) -> Confidence:
         n_samples=int(median(n_samples_vals)),
         cv_residual_std=float(median(cv_vals)),
         signal_std=float(median(signal_vals)),
+        bootstrap_std=float(max(bootstrap_vals)) if bootstrap_vals else 0.0,
     )
 
 
@@ -800,6 +874,114 @@ def _baseline_recommendation(
         untrained_parameters=tuple(model.untrained_parameters),
         aero_correction_available=bool(model.aero_correction_available),
     )
+
+
+# --------------------------------------------------------------------------
+# Guardrail penalty (physics-rebuild Day-10 ceilings wired into DE).
+#
+# Additive penalty applied to the DE objective when a candidate setup's
+# predicted axle utilization exceeds the empirical per-(car, axle) grip
+# ceiling. The penalty is *additive in score units* (the DE objective
+# is the corner-time-weighted utilization sum) so a penalty of
+# `_GUARDRAIL_PENALTY_OVER_CEILING * corner_weight` subtracted from the
+# objective is equivalent in magnitude to a 15% utilization loss in
+# that corner -- enough to push DE away from physically-anomalous
+# setups without dominating the surrogate's relative ranking.
+#
+# Long-G approximation: the corner aggregator emits `accel_lat_g_max`
+# but not `accel_long_g_*` (TARGET_OUTPUT_CHANNELS in fitter.py). For
+# the guardrail check we approximate long_g = 0 in mid-corner (steady-
+# state cornering). The axle force decomposition under-allocates rear
+# Fz vs reality (no aft weight transfer in the approximation), so the
+# rear ratio is slightly INFLATED -- a SAFE failure mode (more likely
+# to flag than miss a violation).
+# --------------------------------------------------------------------------
+
+# Additive penalty subtracted per (corner, phase) entry that exceeds
+# the ceiling. Matches `hybrid_optimizer._GUARDRAIL_PENALTY_OVER_CEILING`.
+_GUARDRAIL_PENALTY_OVER_CEILING: float = 0.15
+
+
+def _axle_guardrail_penalty(
+    model: PhysicsModel,
+    setup: dict[str, float],
+    env: EnvironmentFrame,
+    weights: dict[int, float],
+    ceilings: dict[str, AxleGripCeiling],
+    schedule: list | None,
+    keys: list[tuple[int, str]] | None,
+) -> float:
+    """Total corner-time-weighted penalty for setups exceeding the axle ceiling.
+
+    Iterates the per-(corner, phase) schedule (per-car v4) or keys (v3)
+    -- restricted to mid-corner phases where the lat-G peak is most
+    interpretable as steady-state cornering. For each entry, queries
+    the surrogate for predicted lat-G max, decomposes onto axles via
+    the per-car geometry, and compares to the empirical ceiling.
+
+    Returns the sum over (corner, phase) of:
+        weights[corner_id] * _GUARDRAIL_PENALTY_OVER_CEILING
+    for every entry whose front OR rear utilization exceeds 1.0.
+    """
+    front_ceil = ceilings.get("front")
+    rear_ceil = ceilings.get("rear")
+    if front_ceil is None or rear_ceil is None:
+        return 0.0
+    car = model.car
+    total = 0.0
+    if schedule is not None:
+        iterator: list[tuple[int, str, object]] = [
+            (int(e.corner_id), str(e.phase), e.archetype) for e in schedule
+        ]
+    elif keys is not None:
+        iterator = [(int(c), str(p), None) for c, p in keys]
+    else:
+        return 0.0
+    for corner_id, phase_str, archetype in iterator:
+        # Restrict to mid-corner: that's where the long-G ~ 0
+        # approximation holds and where setup-driven peak lat-G is
+        # the operative quantity. Other phases (braking, throttle
+        # exit) are driver-dominated and the empirical ceiling is
+        # less directly comparable.
+        if phase_str.strip().lower() != "mid_corner":
+            continue
+        try:
+            phase = Phase(phase_str)
+        except ValueError:
+            continue
+        cpkey = CornerPhaseKey(
+            session_id="<recommend-virtual>",
+            lap_index=0,
+            corner_id=int(corner_id),
+            phase=phase,
+        )
+        if archetype is not None:
+            state = model.predict(setup, env, cpkey, corner_archetype=archetype)
+        else:
+            state = model.predict(setup, env, cpkey)
+        lat_conf = state.states.get("accel_lat_g_max")
+        if lat_conf is None:
+            continue
+        lat_g = float(lat_conf.value)
+        if not np.isfinite(lat_g) or abs(lat_g) < 0.5:
+            # Below mid-corner threshold from the ceiling fit; the
+            # ratio computation would extrapolate outside the fitted
+            # support.
+            continue
+        try:
+            ratios = compute_axle_grip_ratios(
+                np.array([lat_g]), np.array([0.0]), car,
+            )
+        except (KeyError, ValueError):
+            continue
+        front_ratio = float(ratios["front"][0])
+        rear_ratio = float(ratios["rear"][0])
+        front_margin = front_ratio / max(front_ceil.mu_peak, 1e-9)
+        rear_margin = rear_ratio / max(rear_ceil.mu_peak, 1e-9)
+        if front_margin > 1.0 or rear_margin > 1.0:
+            w = float(weights.get(int(corner_id), 0.0))
+            total += w * _GUARDRAIL_PENALTY_OVER_CEILING
+    return total
 
 
 # --------------------------------------------------------------------------
@@ -875,6 +1057,7 @@ def recommend_staged(
     quali: bool = False,
     explore_pct: float = 0.0,
     reset_mode: bool = False,
+    surrogate_only: bool = False,
 ) -> SetupRecommendation:
     """Run DE in 4 progressive stages + 1 polish pass over everything.
 
@@ -920,7 +1103,7 @@ def recommend_staged(
         rec = recommend(
             model, track, env, stage_constraints,
             schedule=schedule, quali=quali, explore_pct=explore_pct,
-            reset_mode=reset_mode,
+            reset_mode=reset_mode, surrogate_only=surrogate_only,
         )
 
         # Carry forward this stage's chosen values for the next stage's
@@ -939,7 +1122,7 @@ def recommend_staged(
         return recommend(
             model, track, env, constraints,
             schedule=schedule, quali=quali, explore_pct=explore_pct,
-            reset_mode=reset_mode,
+            reset_mode=reset_mode, surrogate_only=surrogate_only,
         )
     # Polish stage uses the user-supplied explore_pct directly.
     # Previously this was forced to `max(explore_pct, 5.0)`, silently
@@ -958,7 +1141,7 @@ def recommend_staged(
     polish_rec = recommend(
         polish_model, track, env, constraints,
         schedule=schedule, quali=quali, explore_pct=explore_pct,
-        reset_mode=reset_mode,
+        reset_mode=reset_mode, surrogate_only=surrogate_only,
     )
     return polish_rec
 

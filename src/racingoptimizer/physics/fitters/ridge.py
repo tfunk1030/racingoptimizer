@@ -96,14 +96,34 @@ class RidgeFitter(FitterBase):
             self._residual_std = float(np.std(residuals, ddof=0))
             # Pickle round-trip for byte-identical re-pickle (matches
             # GPFitter / ForestFitter convention; see GPFitter.fit for
-            # the dtype-singleton rationale).
-            self._ridge = pickle.loads(
-                pickle.dumps(ridge, protocol=pickle.HIGHEST_PROTOCOL)
-            )
+            # the dtype-singleton rationale). sklearn's Ridge needs
+            # TWO round-trips: the first pickle materialises lazy
+            # internal state (`solver_`, etc.) and grows the pickle
+            # by ~34 bytes; the second round-trip is stable. The
+            # WRAPPER (this fitter's __dict__) also needs one full
+            # round-trip after that because the multiple numpy
+            # arrays (`coef_` inside Ridge, plus `_x_mean`, `_x_std`)
+            # share dtype singletons via pickle memos at first
+            # pickling — after unpickling the memos differ slightly
+            # and the next pickle gains ~34 bytes. Without both
+            # fixes `test_pickle_round_trip_per_car` fails on every
+            # car that has any readout-channel fitter.
+            self._ridge = pickle.loads(pickle.dumps(
+                pickle.loads(
+                    pickle.dumps(ridge, protocol=pickle.HIGHEST_PROTOCOL)
+                ),
+                protocol=pickle.HIGHEST_PROTOCOL,
+            ))
             self._x_mean = np.asarray(x_mean, dtype=np.float64)
             self._x_std = np.asarray(x_std, dtype=np.float64)
             self.is_trained = True
             self.n_samples = X.shape[0]
+            # Final wrapper-level round-trip to stabilise the full
+            # `self.__dict__` pickle (see comment above).
+            stable_state = pickle.loads(
+                pickle.dumps(self.__dict__, protocol=pickle.HIGHEST_PROTOCOL)
+            )
+            self.__dict__.update(stable_state)
         except (np.linalg.LinAlgError, ValueError):
             self._ridge = None
 
