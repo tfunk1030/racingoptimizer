@@ -219,10 +219,12 @@ per-car override below.
 | RL | 13.90 | 18.20 |
 | RR | 13.90 | 18.20 |
 
-### Corner weight (target)
-Per-corner corner-weight targets in the iRacing garage (values are
-stored as force in N in the setup YAML despite the legacy `_kg` suffix
-in the ontology). Envelope derived from observed GTP corpus (2582–3079 N).
+### Corner weight (observation envelope)
+Per-corner `CornerWeight` values in the setup YAML (stored as force in N
+despite the legacy `_kg` ontology suffix). **Calculated readout** — the
+driver cannot type these; the optimizer does not search over them. Rows
+below record the observed GTP corpus envelope (2582–3079 N) for sanity
+checks and future readout prediction only.
 | corner | min | max |
 | --- | --- | --- |
 | FL | 2400.0 N | 3300.0 N |
@@ -397,3 +399,6 @@ of the BMW/Cadillac 14-discrete-mm list.
 - **Rear third spring rate:** 80.0 – 800.0 N/mm
 - **Rear coil spring rate:** 105.0 – 280.0 N/mm
 - **Heave perch offset front:** 40.0 – 90.0 mm
+- **Spring perch offset rear:** -150.0 – 150.0 mm
+- **Third perch offset rear:** -150.0 – 150.0 mm
+- **Anti-roll bar rear:** 1 – 16 index

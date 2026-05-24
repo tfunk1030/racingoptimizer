@@ -578,6 +578,18 @@ def _pin_or_trust_bounds(
     """
     lo, hi = bound
     span = hi - lo
+    # Defensive: the caller passes ``baseline`` as ``trust_baseline`` from
+    # ``_bayes_trust_anchor``, which returns the empirical Bayes posterior
+    # mean unclamped. When constraints.md is wrong (or the driver's setup
+    # has drifted outside our coded legal envelope), the anchor can sit
+    # well outside ``[lo, hi]`` — and the PIN branch below would then
+    # collapse to an inverted window (e.g. baseline=10.0 against bound
+    # (1.0, 5.0) → pinned_lo=9.999996, pinned_hi=5.0). Clamping here
+    # guarantees every downstream branch sees a baseline inside the
+    # constraint envelope; the bound-mismatch is reported as a clamp
+    # warning at the call site.
+    if span > 0.0:
+        baseline = min(max(baseline, lo), hi)
     # `--reset` short-circuits: skip the corpus-density pin check (so
     # parameters the driver held constant can still move) and skip the
     # regime-driven trust-radius narrowing. The user has signalled the

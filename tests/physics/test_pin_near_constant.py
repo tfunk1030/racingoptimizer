@@ -152,6 +152,35 @@ def test_user_pin_outside_target_observed_does_not_invert() -> None:
     assert 8.0 - 1e-6 <= lo <= hi <= 8.0 + 1e-6
 
 
+def test_out_of_bound_baseline_does_not_invert() -> None:
+    """Bayes anchor outside the constraint bound must not collapse to inverted DE bounds.
+
+    Regression: ``_bayes_trust_anchor`` returns the unclamped empirical Bayes
+    posterior mean, which can be far outside the constraint bound when
+    constraints.md is wrong (or the driver's setup drifts outside our coded
+    legal envelope). The PIN branch then built
+    ``pinned_lo = max(lo, baseline - eps) = baseline - eps`` and
+    ``pinned_hi = min(hi, baseline + eps) = hi``, producing
+    e.g. baseline=10.0 against bound (1.0, 5.0) -> (9.999996, 5.0) — inverted.
+    The fix clamps ``baseline`` to ``[lo, hi]`` at function entry so every
+    downstream branch sees a valid baseline.
+    """
+    bound = (1.0, 5.0)  # Porsche anti_roll_bar_rear pre-override default
+    out_of_bound_baseline = 10.0  # actual observed Porsche value
+    sub_bounds, was_pinned = _pin_or_trust_bounds(
+        bound=bound, baseline=out_of_bound_baseline, regime="sparse",
+        observed_std=0.0, target_observed=(10.0,),
+        click_step=0.04, empirical_range=0.0,
+    )
+    lo, hi = sub_bounds
+    assert lo <= hi, (
+        f"DE requires lo<=hi but got ({lo}, {hi}); "
+        "out-of-bound baseline produced inverted window"
+    )
+    # Result must sit inside the legal bound.
+    assert bound[0] <= lo <= hi <= bound[1]
+
+
 def test_pin_with_zero_span_bound_is_safe() -> None:
     """Degenerate constraint (lo == hi) should not crash."""
     bound = (10.0, 10.0)
@@ -302,9 +331,11 @@ def test_full_recommend_pins_near_constant_param(bmw_model_session) -> None:
     """
     from racingoptimizer.constraints import load_constraints
     from racingoptimizer.context import EnvironmentFrame
+    from racingoptimizer.physics.corner_schedule import build_corner_schedule
     from racingoptimizer.physics.recommend import recommend
+    from racingoptimizer.ingest.api import sessions as ingest_sessions
 
-    model, track, _ = bmw_model_session
+    model, track, corpus_root = bmw_model_session
     # Force every parameter into the pinned regime by overriding the field.
     object.__setattr__(model, "parameter_observed_std", {
         name: 0.0 for name in model.baseline_setup
@@ -315,7 +346,10 @@ def test_full_recommend_pins_near_constant_param(bmw_model_session) -> None:
         air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
         wind_dir_deg=120.0, track_wetness=0.0,
     )
-    rec = recommend(model, track, env, constraints)
+    sess_df = ingest_sessions(corpus_root=corpus_root)
+    session_ids = sess_df["session_id"].to_list()
+    schedule = build_corner_schedule(session_ids, corpus_root=corpus_root)
+    rec = recommend(model, track, env, constraints, schedule=schedule)
 
     # Every fittable parameter that ended up in the recommendation must be
     # within the pinning tolerance of the LEGAL-CLAMPED baseline (i.e. the

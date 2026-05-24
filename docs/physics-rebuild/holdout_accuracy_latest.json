@@ -1,0 +1,27 @@
+[
+  {
+    "car": "bmw",
+    "skipped": "exception",
+    "error": "CornerPhaseKey.__new__() missing 2 required positional arguments: 'session_id' and 'lap_index'"
+  },
+  {
+    "car": "cadillac",
+    "skipped": "exception",
+    "error": "CornerPhaseKey.__new__() missing 2 required positional arguments: 'session_id' and 'lap_index'"
+  },
+  {
+    "car": "ferrari",
+    "skipped": "exception",
+    "error": "CornerPhaseKey.__new__() missing 2 required positional arguments: 'session_id' and 'lap_index'"
+  },
+  {
+    "car": "acura",
+    "skipped": "exception",
+    "error": "CornerPhaseKey.__new__() missing 2 required positional arguments: 'session_id' and 'lap_index'"
+  },
+  {
+    "car": "porsche",
+    "skipped": "exception",
+    "error": "CornerPhaseKey.__new__() missing 2 required positional arguments: 'session_id' and 'lap_index'"
+  }
+]
