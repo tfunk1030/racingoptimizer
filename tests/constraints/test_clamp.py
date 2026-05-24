@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from racingoptimizer.constraints import ClampResult, clamp, load_constraints
+from racingoptimizer.constraints.loader import ConstraintsTable
 
 
 def test_clamp_above_acura_max() -> None:
@@ -33,11 +34,17 @@ def test_clamp_below_default_min() -> None:
 
 
 def test_clamp_unbounded_parameter() -> None:
-    # Damper LSC was previously TODO; now bounded 0..11 by default. Use
-    # a parameter that is genuinely still TODO in `constraints.md` (the
-    # corner-weight target rows).
-    r = clamp(2000.0, "corner_weight_fl_kg", "bmw")
-    assert r.value == 2000.0
+    """Parameters with ``None`` bounds pass through unchanged."""
+    table = ConstraintsTable(
+        _by_car={
+            "default": {
+                "rear_wing_angle_deg": (12.0, 17.0),
+                "synthetic_unbounded": None,
+            },
+        },
+    )
+    r = clamp(42.0, "synthetic_unbounded", "bmw", table=table)
+    assert r.value == 42.0
     assert r.was_clamped is False
     assert r.bound is None
     assert r.status == "unbounded"

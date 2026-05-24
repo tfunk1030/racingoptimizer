@@ -54,11 +54,8 @@ CANONICAL_CARS = ("acura", "bmw", "cadillac", "ferrari", "porsche")
 # Cars that use the per-car (track-agnostic) physics model. Per VISION §3 /
 # §6: "Build an empirical physics model for each car... be able to generate
 # optimal setups for any track from just the track model and aero maps."
-# We are rolling this out one car at a time. Cadillac came first (most
-# coverage on a single track + brand-new spa data); BMW joins now that
-# constraints.md mirrors BMWBounds.md and a fresh BMW@Spa session has been
-# captured. Other cars stay on the per-(car, track) v3 path until each is
-# validated.
+# All five GTP cars use the v4 per-car pooled model (`fit_per_car`). The
+# v3 per-(car, track) branch below is retained for rollback only.
 PER_CAR_MODEL_CARS: frozenset[str] = frozenset(
     {"cadillac", "bmw", "ferrari", "acura", "porsche"},
 )
@@ -253,8 +250,12 @@ def recommend_cmd(
     _floor_msg = _apply_tyre_pressure_floor_pin(
         pinned_overrides, constraints_for_floor, car_key,
     )
+    pin_info_messages: list[str] = []
     if _floor_msg is not None:
-        click.echo(_floor_msg, err=True)
+        if as_json:
+            pin_info_messages.append(_floor_msg)
+        else:
+            click.echo(_floor_msg, err=True)
     # Race-mode auto fuel pin: without --quali AND without an explicit
     # --fuel/--pin, anchor fuel to the most-recent past-session value
     # (typically the user's last race load, e.g. 58 L on BMW). The
@@ -288,23 +289,29 @@ def recommend_cmd(
                 past_fuel = None
             if past_fuel is not None:
                 pinned_overrides["fuel_level_l"] = float(past_fuel)
-                click.echo(
+                fuel_msg = (
                     f"Race fuel auto-pinned to past-session value: "
                     f"{past_fuel:.1f} L (override with --fuel N, or use "
-                    f"--quali --fuel N for short stint).",
-                    err=True,
+                    f"--quali --fuel N for short stint)."
                 )
+                if as_json:
+                    pin_info_messages.append(fuel_msg)
+                else:
+                    click.echo(fuel_msg, err=True)
     constraints_table = load_constraints()
     pinned_constraints = _apply_pins_to_constraints(
         constraints_table, car_key, pinned_overrides,
     )
 
     if reset_mode:
-        click.echo(
+        reset_msg = (
             "RESET MODE -- recommendations diverge sharply from your past "
-            "setup; treat as a fresh starting point and verify on track.",
-            err=True,
+            "setup; treat as a fresh starting point and verify on track."
         )
+        if as_json:
+            pin_info_messages.append(reset_msg)
+        else:
+            click.echo(reset_msg, err=True)
 
     if car_key in PER_CAR_MODEL_CARS:
         # Per-car path: pool every Cadillac session across every track. The
@@ -363,6 +370,15 @@ def recommend_cmd(
     rec, clamp_warnings, top_warnings = _post_clamp(rec, model, constraints_table)
 
     recommended_setup = {name: float(val[0]) for name, val in rec.parameters.items()}
+    opt_setup: dict[str, float] = dict(model.baseline_setup)
+    opt_setup.update(recommended_setup)
+    try:
+        predicted_readouts = model.predict_setup_readouts(opt_setup, env)
+    except AttributeError:
+        predicted_readouts = {}
+    top_warnings.extend(
+        _static_ride_height_envelope_warnings(predicted_readouts),
+    )
     top_warnings.extend(
         _heave_slider_tech_warnings(model, recommended_setup, env, schedule),
     )
@@ -375,6 +391,8 @@ def recommend_cmd(
     top_warnings.extend(
         _within_track_variance_warnings(model, track_slug, rec.parameters),
     )
+    if pin_info_messages:
+        top_warnings = pin_info_messages + top_warnings
 
     if donor_track is not None:
         rec = _force_sparse_regime(rec, track_slug)
@@ -432,12 +450,11 @@ def recommend_cmd(
         opt_setup: dict[str, float] = dict(model.baseline_setup)
         for _name, (_val, _conf) in rec.parameters.items():
             opt_setup[_name] = float(_val)
-        try:
-            predicted_readouts = model.predict_setup_readouts(opt_setup, env)
-        except AttributeError:
-            # Legacy pickle predates predict_setup_readouts; fall back to
-            # echoing past readouts.
-            predicted_readouts = {}
+        if not predicted_readouts:
+            try:
+                predicted_readouts = model.predict_setup_readouts(opt_setup, env)
+            except AttributeError:
+                predicted_readouts = {}
         if detailed:
             briefing = render_recommendation_text(
                 rec, model,
@@ -1634,6 +1651,39 @@ def _within_track_variance_warnings(
     return warnings
 
 
+def _static_ride_height_envelope_warnings(
+    predicted_readouts: dict[str, float],
+) -> list[str]:
+    """Warn when predicted static ride heights fall outside observation envelopes.
+
+    `constraints.md` static RH rows are not DE feasibility constraints;
+    this check surfaces likely garage readout mismatches before the user
+    enters values in iRacing.
+    """
+    if not predicted_readouts:
+        return []
+    _FRONT_BOUNDS = (30.0, 80.0)
+    _REAR_BOUNDS = (30.0, 80.0)
+    _CHECKS: tuple[tuple[str, str, tuple[float, float]], ...] = (
+        ("setup_static_lf_ride_height_mm", "LF static ride height", _FRONT_BOUNDS),
+        ("setup_static_rf_ride_height_mm", "RF static ride height", _FRONT_BOUNDS),
+        ("setup_static_lr_ride_height_mm", "LR static ride height", _REAR_BOUNDS),
+        ("setup_static_rr_ride_height_mm", "RR static ride height", _REAR_BOUNDS),
+    )
+    warnings: list[str] = []
+    for channel, label, (lo, hi) in _CHECKS:
+        value = predicted_readouts.get(channel)
+        if value is None:
+            continue
+        rh = float(value)
+        if rh < lo or rh > hi:
+            warnings.append(
+                f"Predicted {label} {rh:.1f} mm outside observation envelope "
+                f"({lo:.0f}-{hi:.0f} mm) -- verify platform inputs before running."
+            )
+    return warnings
+
+
 def _heave_slider_tech_warnings(
     model,
     setup: dict[str, float],
@@ -1887,8 +1937,8 @@ def _overall_regime(coverage: list[TrackCoverage]) -> str:
 
 def _status_notes() -> list[str]:
     return [
-        "constraints.md is missing bounds for: dampers, corner_weights, toe, "
-        "brake_ducts, differential coast/power details, and throttle/brake mapping.",
+        "constraints.md is missing bounds for: brake_ducts, "
+        "throttle/brake mapping, and some per-car blocked garage leaves.",
     ]
 
 

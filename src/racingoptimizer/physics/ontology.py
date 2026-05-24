@@ -335,23 +335,23 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         ),
         "corner_weight_fl_kg": ParameterSpec(
             json_path=("Chassis", "LeftFront", "CornerWeight"), dtype=float,
-            units="N", family="corner_weight", fittable=True,
-            user_settable=True, step=10.0,
+            units="N", family="corner_weight", fittable=False,
+            user_settable=False, step=10.0,
         ),
         "corner_weight_fr_kg": ParameterSpec(
             json_path=("Chassis", "RightFront", "CornerWeight"), dtype=float,
-            units="N", family="corner_weight", fittable=True,
-            user_settable=True, step=10.0,
+            units="N", family="corner_weight", fittable=False,
+            user_settable=False, step=10.0,
         ),
         "corner_weight_rl_kg": ParameterSpec(
             json_path=("Chassis", "LeftRear", "CornerWeight"), dtype=float,
-            units="N", family="corner_weight", fittable=True,
-            user_settable=True, step=10.0,
+            units="N", family="corner_weight", fittable=False,
+            user_settable=False, step=10.0,
         ),
         "corner_weight_rr_kg": ParameterSpec(
             json_path=("Chassis", "RightRear", "CornerWeight"), dtype=float,
-            units="N", family="corner_weight", fittable=True,
-            user_settable=True, step=10.0,
+            units="N", family="corner_weight", fittable=False,
+            user_settable=False, step=10.0,
         ),
         # Race fuel load. iRacing exposes this as a typed value the user
         # picks pre-session (race default: ~58 L on the BMW M Hybrid V8;

@@ -1,5 +1,61 @@
 # VISION.md Compliance Report
 
+> **Currency note (2026-05-23):** audit fixes from
+> `docs/audit_2026-05-23/00_findings_and_fix_plan.md` — corner weights
+> are calculated readouts; static RH envelope warnings; hybrid DE default;
+> headroom baseline fix; rear perch mirror; narrative sensitivity. The
+> 2026-05-08 post-rebuild section below remains the physics-rebuild baseline;
+> the 2026-05-23 section captures audit closure.
+
+## 2026-05-23 audit fixes (post-rebuild closure)
+
+Full findings: `docs/audit_2026-05-23/00_findings_and_fix_plan.md`.
+
+### §3 Physics Model
+- Corner weights (`corner_weight_*`) relabeled **calculated readouts** in
+  `physics/ontology.py` (`fittable=False`, `user_settable=False`). Setup
+  card renders `[readout]`; they remain fit targets for readout prediction
+  but never enter DE search.
+- Grip headroom in `physics/score.py` uses corpus `baselines.max_lateral_g`
+  instead of surrogate-predicted `lat_g` (closes circular headroom reference).
+
+### §4 Setup Evaluation / §5 Optimization
+- **Hybrid scoring is the default DE objective** (`use_hybrid = not
+  surrogate_only` → `score.py::_corner_phase_objective_value` →
+  `hybrid_score()`). `--surrogate-only` retains legacy surrogate +
+  `_axle_guardrail_penalty` path.
+- `grip_inconsistency` guardrail penalty wired at quarter strength in
+  `hybrid_score()`.
+- All five GTP cars on v4 per-car path (`PER_CAR_MODEL_CARS`); v3 branch
+  retained for rollback only.
+
+### §7 Output
+- Static ride height **observation envelope warnings** after recommend
+  (`cli/recommend.py::_static_ride_height_envelope_warnings`) — warn-only,
+  not clamp; user validates predicted vs iRacing garage readout.
+- Rear spring perch offset mirrored LR→RR (`explain/full_setup_card.py`
+  `_MIRRORED_LEAVES`).
+- Default narrative: compact ±1-click sensitivity; NOTES block separates
+  pinned / untrained / blocked readouts.
+
+### §8 User Experience
+- `--json` warnings array carries pin/fuel/reset/static-RH notices (stderr
+  save line may still appear unless `--output-file -`).
+
+### Cross-cutting / CI
+- `tests/test_calibration_gate.py` — fails when corpus present and Day 12b
+  Spearman gate misses fallback threshold.
+- `.github/workflows/ci.yml` — ruff, fast pytest, holdout integrity.
+
+### Known gaps (still open after 2026-05-23)
+- Evaluator within-group Spearman ~0.19 (below PLAN 0.35 target) — product
+  posture is guardrailed surrogate + physics checks, not lap-time physics.
+- Held-out hybrid vs `--surrogate-only` A/B on H1–H5 not in CI.
+- Brake duct openings still `<TODO>` in `constraints.md`.
+- Wind directional decomposition deferred.
+
+---
+
 > **Currency note (2026-05-08):** post-rebuild. The 2026-05-08 14-day
 > physics-rebuild (`docs/physics-rebuild/COMPLETE.md`) added 8 new
 > modules across `physics/` and `aero/` and shipped 4 of 5 documented
@@ -172,7 +228,8 @@ change below sits on `master` as of `7e3c172` (2026-05-06).
 - `_MIRRORED_LEAVES` in the renderer covers iRacing's required-symmetric pairs: rear coil spring rate, front + rear torsion bar turns, front + rear torsion bar OD, rear toe-in. The optimizer trains the LEFT side only; the renderer mirrors the right.
 
 ### §3 Physics Model
-- BMW per-car path enabled (`PER_CAR_MODEL_CARS` = `{"cadillac", "bmw", "ferrari"}`).
+- BMW per-car path enabled; **all five GTP cars** now on v4 per-car pooled
+  path as of 2026-05-23 (`PER_CAR_MODEL_CARS` in `cli/recommend.py`).
 - Ferrari per-car ontology lands the architecture's biggest divergence: indexed heave springs (front 0–8 / rear 0–9), 4-corner torsion bars, ARB letter labels (Disconnected/A..E), `Dampers.<Corner>Damper.*` paths, front+rear diffs, wider damper range (0–40), in `physics/ontology.py::_FERRARI_OVERRIDES`.
 - Cross-car schedule fallback (`cli/recommend.py::_maybe_borrow_cross_car_track`) lets Ferrari@Spa work even though Ferrari has no Spa IBTs — borrows corner geometry from BMW/Cadillac on that track. Fitter still trains on Ferrari sessions only.
 - Toe-in modeled in mm (`Chassis.Front.ToeIn` axle-level + `Chassis.<Rear>.ToeIn` per-corner with LR=RR mirror). The "toe units mismatch TODO" is closed.
@@ -215,9 +272,9 @@ change below sits on `master` as of `7e3c172` (2026-05-06).
 - `EnvironmentFrame` exposes all 12 channels in JSON renderer (was dropping 7).
 - Pin warnings + clamp warnings continue to surface in the briefing's `Warnings:` section.
 
-### Known regressions / gaps (still open)
-- `optimize <car> <track> --json` — `[saved to ...]` stderr line still bleeds into stdout. Production bug (not just test). Fix: when `as_json AND output_file is None`, default `output_file = Path("-")` to skip the saver block.
-- 4 corner_weight targets still `<TODO>` in `constraints.md`; render as `[past]` and appear in `untrained_parameters`. Plus diff coast/power %, brake ducts F+R, throttle/brake mapping = 5 unbounded families pending iRacing UI capture.
+### Known regressions / gaps (still open — superseded in part by 2026-05-23 section above)
+- `optimize <car> <track> --json` — pin/warning content now in `warnings` array; `[saved to ...]` stderr line may still appear unless `--output-file -`.
+- Corner weights are calculated readouts (2026-05-23); brake ducts F+R, throttle/brake mapping still pending iRacing UI capture.
 - Wind directional decomposition deferred (needs per-corner heading data).
 - Driver-input output channels (throttle, brake, damper velocity) plateau at fit_quality ~0.50 (signal == noise) — structural ceiling for channels driver-controlled more than setup-controlled.
 

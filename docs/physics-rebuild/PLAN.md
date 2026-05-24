@@ -11,6 +11,10 @@ in Section 4 verbatim. If a numeric, file path, or rule below appears
 to drift in implementation, the implementation is wrong, not the plan.
 
 > Status: DRAFT, awaiting user sign-off (see Section 17).
+>
+> **Currency (2026-05-23):** implementation has moved on — all five GTP cars
+> use v4 per-car path; hybrid DE default is `hybrid_score()`. Treat v3-path
+> references below as historical plan context, not current routing.
 
 ---
 

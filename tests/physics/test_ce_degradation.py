@@ -36,7 +36,7 @@ def test_unbounded_families_show_in_untrained(tmp_path: Path) -> None:
     assert "anti_roll_bar_rear" not in untrained
     assert "brake_bias_pct" not in untrained
     assert "diff_preload_nm" not in untrained
-    # Bounded dampers and corner weights are fittable.
+    # Bounded dampers are fittable; corner weights are calculated readouts.
     assert "damper_lsc_fl" not in untrained
     assert "damper_hsc_rr" not in untrained
-    assert "corner_weight_fl_kg" not in untrained
+    assert "corner_weight_fl_kg" in untrained

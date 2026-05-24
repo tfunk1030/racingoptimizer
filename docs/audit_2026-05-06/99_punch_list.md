@@ -99,3 +99,16 @@ files / new tests to write). CR.5 is hygiene.
 ## Verification rule
 
 After closing any item: cross-check the per-slice audit doc that flagged it, mark it [resolved by `<commit>`] in this file, and update the status row in `00_summary.md`.
+
+## Closed by 2026-05-23 audit (`docs/audit_2026-05-23/`)
+
+* Corner weights → calculated readouts (`ontology.py`, setup card `[readout]`)
+* Static RH envelope warnings (`cli/recommend.py::_static_ride_height_envelope_warnings`)
+* Hybrid DE default (`hybrid_score()`); `--surrogate-only` escape hatch
+* Headroom baseline fix (`score.py` uses `max_lateral_g`)
+* Rear spring perch LR→RR mirror (`_MIRRORED_LEAVES`)
+* Narrative ±1-click sensitivity + NOTES pinned/untrained split
+* Docs refresh: `README.md`, `GETTING_STARTED.md`, `CLAUDE.md`, `VISION_COMPLIANCE.md`, `AGENTS.md`, `COMPLETE.md`
+* CI: `.github/workflows/ci.yml`, `tests/test_calibration_gate.py`
+
+Still open from 2026-05-23 audit: held-out hybrid A/B (H1–H5), brake duct bounds, evaluator Spearman ≥0.35 stretch goal.

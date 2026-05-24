@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from racingoptimizer.constraints import load_constraints
 from racingoptimizer.corner import CornerPhaseKey, Phase
 from racingoptimizer.explain.justification import (
     CornerPhaseImpact,
@@ -896,6 +897,14 @@ def _render_change(
             body.append(f"  Watch: {hurts}")
         if not helps and not hurts:
             body.append("  (no per-corner trade-off -- model held this at training baseline)")
+    if not j.pinned and (
+        abs(j.sensitivity_plus_1_click) > 1e-6
+        or abs(j.sensitivity_minus_1_click) > 1e-6
+    ):
+        body.append(
+            f"  Sensitivity: +1 click {j.sensitivity_plus_1_click:+.3f} score, "
+            f"-1 click {j.sensitivity_minus_1_click:+.3f} score"
+        )
     return body
 
 
@@ -1337,12 +1346,30 @@ def _notes_block(
         for name in sorted(rec.pinned_to_observed_median):
             label = _PARAM_LABEL.get(name, _humanize(name))
             out.append(
-                f"  {label}: corpus has only one value -- vary it next session "
-                f"for a recommendation"
+                f"  {label}: pinned to observed median (no corpus variance on "
+                f"this parameter -- vary it in a session to unlock search)"
             )
     if rec.untrained_parameters:
-        params_str = ", ".join(sorted(rec.untrained_parameters))
-        out.append(f"  Untrained (constraints.md TODO): {params_str}")
+        table = load_constraints()
+        no_bounds: list[str] = []
+        blocked: list[str] = []
+        for name in sorted(rec.untrained_parameters):
+            spec = onto.get(name)
+            if spec is not None and not spec.fittable:
+                blocked.append(name)
+            elif table.bounds(rec.car, name) is None:
+                no_bounds.append(name)
+            else:
+                blocked.append(name)
+        if no_bounds:
+            params_str = ", ".join(no_bounds)
+            out.append(f"  Untrained (no constraints.md bounds): {params_str}")
+        if blocked:
+            params_str = ", ".join(blocked)
+            out.append(
+                f"  Not searched (calculated readout or blocked in ontology): "
+                f"{params_str}"
+            )
     for w in warnings:
         out.append(f"  ! {w}")
     return out

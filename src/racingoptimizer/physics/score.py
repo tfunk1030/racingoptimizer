@@ -814,6 +814,14 @@ def _long_g_for_phase(phase_str: str) -> float:
     return 0.0
 
 
+def _headroom_reference_g(baselines: CarBaselines) -> float | None:
+    """Corpus-derived lateral-G reference for headroom scoring (not surrogate self-ref)."""
+    ref = float(baselines.max_lateral_g)
+    if not np.isfinite(ref) or ref <= 0.5:
+        return None
+    return ref
+
+
 def _corner_phase_objective_value(
     model: PhysicsModel,
     setup: dict[str, float],
@@ -862,6 +870,8 @@ def _corner_phase_objective_value(
     speed_ms = _speed_ms_from_archetype(archetype, state)
     balance_pct, ld_ratio = _aero_balance_ld_from_state(setup, state, env, aero)
 
+    headroom_ref = _headroom_reference_g(baselines)
+
     from racingoptimizer.physics.axle_grip import (
         axle_grip_margin,
         compute_axle_grip_ratios,
@@ -883,7 +893,7 @@ def _corner_phase_objective_value(
         aero_ld_ratio=ld_ratio,
         front_ceiling=front_ceil,
         rear_ceiling=rear_ceil,
-        surrogate_lat_g_ceiling=lat_g if lat_g > 0.5 else None,
+        surrogate_lat_g_ceiling=headroom_ref,
     )
     try:
         ratios = compute_axle_grip_ratios(
@@ -904,6 +914,7 @@ def _corner_phase_objective_value(
         surrogate_score=surrogate_score,
         over_axle_ceiling=guard.over_axle_ceiling,
         severely_off_balance=guard.severely_off_balance,
+        grip_inconsistency=guard.grip_inconsistency,
     )
     return float(hs.hybrid_score * corner_weight)
 
@@ -965,6 +976,7 @@ def guardrail_warnings_for_setup(
         long_g = _long_g_for_phase(phase_str)
         speed_ms = _speed_ms_from_archetype(entry.archetype, state)
         balance_pct, ld_ratio = _aero_balance_ld_from_state(setup, state, env, aero)
+        headroom_ref = _headroom_reference_g(model.resolved_baselines)
         cps = evaluate_corner_phase(
             model.car,
             corner_id,
@@ -976,7 +988,7 @@ def guardrail_warnings_for_setup(
             aero_ld_ratio=ld_ratio,
             front_ceiling=ceilings["front"],
             rear_ceiling=ceilings["rear"],
-            surrogate_lat_g_ceiling=lat_g,
+            surrogate_lat_g_ceiling=headroom_ref,
         )
         try:
             ratios = compute_axle_grip_ratios(

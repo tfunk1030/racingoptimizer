@@ -116,27 +116,14 @@ is the genuine value.
    lap-time prediction with per-corner duration weights. Day 13's
    investigation showed this is the right granularity.
 
-2. **Wire hybrid optimizer into recommend.py**: ~~Day 14 ships the
-   `--physics` flag as informational. A future iteration could
-   actually use the hybrid score in DE search.~~ **PARTIALLY DONE
-   2026-05-23 (post-rebuild)**: the guardrail half is wired.
-   `physics/recommend.py::_axle_guardrail_penalty` runs inside the
-   DE objective and subtracts a corner-time-weighted penalty for
-   every mid-corner phase entry whose predicted axle utilization
-   exceeds the empirical ceiling. Required `FITTERS_LAYOUT_VERSION`
-   bump 3 → 4 and new field `PhysicsModel.axle_grip_ceilings` (None
-   on legacy pickles → guardrail inactive, no regression).
-   Long-G approximated as 0 in mid-corner since `accel_long_g_*`
-   isn't in `TARGET_OUTPUT_CHANNELS` — slight rear-margin inflation
-   is a safe failure mode (more likely to flag than miss). 13 tests
-   in `tests/physics/test_guardrail_wiring.py` cover the helper
-   logic + pickle backward compat + real BMW Sebring end-to-end.
-   **Still deferred**: the *blend* (mid_corner=0.40 etc.) — that
-   reorders setups whereas the guardrail only penalises anomalies,
-   so the blend warrants a separate corpus validation cycle to
-   confirm it doesn't degrade recommendations on cars where the
-   per-car-calibrated weights are weak (Acura/Porsche have no v4
-   calibration; default weights kick in there).
+2. **Wire hybrid optimizer into recommend.py**: **DONE 2026-05-23**.
+   Production DE uses `score.py::_corner_phase_objective_value` →
+   `hybrid_score()` by default (`hybrid=True`). `--surrogate-only` keeps
+   surrogate + `_axle_guardrail_penalty`. Guardrail penalties include
+   axle ceiling, balance, and `grip_inconsistency` (quarter strength).
+   Headroom uses corpus `max_lateral_g`, not surrogate self-reference.
+   **Still deferred**: held-out A/B validation that hybrid default does not
+   regress vs `--surrogate-only` on H1–H5.
 
 3. **Refine damper curve fit**: Day 9 shipped a 2-parameter
    percentile-anchored fit. A 3-parameter fit (separate low-speed,

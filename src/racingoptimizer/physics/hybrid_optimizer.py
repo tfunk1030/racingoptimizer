@@ -97,6 +97,7 @@ def hybrid_score(
     surrogate_score: float,
     over_axle_ceiling: bool = False,
     severely_off_balance: bool = False,
+    grip_inconsistency: bool = False,
     physics_weight_override: float | None = None,
 ) -> HybridScore:
     """Combine physics and surrogate scores with phase-aware weighting.
@@ -112,6 +113,8 @@ def hybrid_score(
             penalty
         severely_off_balance: from `guardrail_check`; if True, applies
             smaller penalty
+        grip_inconsistency: from `guardrail_check`; if True, applies
+            a smaller penalty (physics aero peak vs corpus reference)
         physics_weight_override: optional explicit weight; bypasses
             phase-aware default
 
@@ -130,6 +133,8 @@ def hybrid_score(
         penalty += _GUARDRAIL_PENALTY_OVER_CEILING
     if severely_off_balance:
         penalty += _GUARDRAIL_PENALTY_OVER_CEILING / 2.0
+    if grip_inconsistency:
+        penalty += _GUARDRAIL_PENALTY_OVER_CEILING / 4.0
     final = max(0.0, raw - penalty)
 
     return HybridScore(
@@ -165,6 +170,7 @@ def hybrid_score_lap(
                 surrogate_score=float(s["surrogate_score"]),
                 over_axle_ceiling=bool(s.get("over_axle_ceiling", False)),
                 severely_off_balance=bool(s.get("severely_off_balance", False)),
+                grip_inconsistency=bool(s.get("grip_inconsistency", False)),
                 physics_weight_override=s.get("physics_weight_override"),
             ))
         except (KeyError, TypeError, ValueError):

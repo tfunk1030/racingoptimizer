@@ -119,6 +119,16 @@ def test_hybrid_score_balance_penalty_smaller() -> None:
     assert score.guardrail_penalty == _GUARDRAIL_PENALTY_OVER_CEILING / 2.0
 
 
+def test_hybrid_score_grip_inconsistency_penalty_quarter() -> None:
+    """grip_inconsistency penalty is one quarter of the axle-ceiling penalty."""
+    score = hybrid_score(
+        car="bmw", corner_id=5, phase="mid_corner",
+        physics_score=0.8, surrogate_score=0.5,
+        grip_inconsistency=True,
+    )
+    assert score.guardrail_penalty == _GUARDRAIL_PENALTY_OVER_CEILING / 4.0
+
+
 def test_hybrid_score_both_penalties_stack() -> None:
     """Both guardrails firing -> stacked penalty."""
     score = hybrid_score(
