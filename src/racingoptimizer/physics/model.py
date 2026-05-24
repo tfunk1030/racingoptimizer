@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from racingoptimizer.aero.residual_correction import AeroResidualCorrection
 from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import ConstraintsTable
 from racingoptimizer.context import EnvironmentFrame
@@ -178,6 +179,12 @@ class PhysicsModel:
     # Keyed by axle name: {"front": AxleGripCeiling, "rear": AxleGripCeiling}.
     axle_grip_ceilings: dict[str, AxleGripCeiling] | None = None
 
+    # Optional per-car scalar correction applied to aero-map-derived peak
+    # lat-G before evaluator grip-headroom scoring. None on legacy pickles
+    # (pre-Day-11 residual-correction wiring) and on fits where insufficient
+    # clean samples prevent a stable correction fit.
+    aero_residual_correction: AeroResidualCorrection | None = None
+
     @property
     def resolved_baselines(self) -> CarBaselines:
         """Return `car_baselines` if set, else the per-car cold-start default.
@@ -221,6 +228,7 @@ class PhysicsModel:
         slot_values.setdefault("per_track_parameter_observed", {})
         slot_values.setdefault("bayes_posteriors", {})
         slot_values.setdefault("axle_grip_ceilings", None)
+        slot_values.setdefault("aero_residual_correction", None)
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 

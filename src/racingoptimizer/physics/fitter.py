@@ -361,7 +361,11 @@ def fit(
             f"no fitters trained for car={car_key!r}; need more sessions on this car"
         )
 
-    aero_available = _try_load_aero(car_key)
+    aero_surface = _load_aero_surface(car_key)
+    aero_available = aero_surface is not None
+    aero_residual_correction = _fit_aero_residual_correction(
+        car_key, joint, aero_surface=aero_surface,
+    )
 
     # Per-parameter observed values across the requested sessions. Both
     # `baseline_setup` (median) and `parameter_observed_std` (population std)
@@ -417,6 +421,7 @@ def fit(
         constraints=constraints,
         untrained_parameters=tuple(sorted(untrained_params)),
         aero_correction_available=aero_available,
+        aero_residual_correction=aero_residual_correction,
         baseline_setup=baseline,
         parameter_observed_std=parameter_observed_std,
         seed=int(seed),
@@ -904,7 +909,11 @@ def fit_per_car(
             f"need more sessions on this car"
         )
 
-    aero_available = _try_load_aero(car_key)
+    aero_surface = _load_aero_surface(car_key)
+    aero_available = aero_surface is not None
+    aero_residual_correction = _fit_aero_residual_correction(
+        car_key, joint, aero_surface=aero_surface,
+    )
 
     # Lap-time-weighted samples (PLAN.md Day 6, Mode 3): bias the
     # per-session contribution toward fast laps so a conservative
@@ -996,6 +1005,7 @@ def fit_per_car(
         constraints=constraints,
         untrained_parameters=tuple(sorted(untrained_params)),
         aero_correction_available=aero_available,
+        aero_residual_correction=aero_residual_correction,
         baseline_setup=baseline,
         parameter_observed_std=parameter_observed_std,
         seed=int(seed),
@@ -1254,19 +1264,114 @@ def _kfold_residual_std(
     return float(np.std(np.concatenate(residuals), ddof=0))
 
 
-def _try_load_aero(car: str) -> bool:
-    """Per spec §9: detect whether slice C is reachable for `car`."""
+_AIR_DENSITY_REF: float = 1.225
+
+
+def _load_aero_surface(car: str):
+    """Best-effort aero-map loader for fit-time correction wiring."""
     try:
         from racingoptimizer.aero import AeroLoadError, load_aero_maps
     except ImportError:
-        return False
+        return None
     try:
-        load_aero_maps(car)
+        return load_aero_maps(car)
     except (FileNotFoundError, AeroLoadError, ImportError):
-        return False
+        return None
     except Exception:  # pragma: no cover — defensive against future load errors
-        return False
-    return True
+        return None
+
+
+def _fit_aero_residual_correction(
+    car: str,
+    frame: pl.DataFrame,
+    *,
+    aero_surface,
+):
+    """Fit per-car Day-11 residual correction from mid-corner rows."""
+    if aero_surface is None:
+        return None
+    required = {
+        "phase",
+        "accel_lat_g_max",
+        "aero_platform_front_rh_mean_mm",
+        "aero_platform_rear_rh_mean_mm",
+    }
+    if not required.issubset(set(frame.columns)):
+        return None
+    speed_col = "corner_apex_speed_ms"
+    if speed_col not in frame.columns:
+        speed_col = "speed_min_ms"
+    if speed_col not in frame.columns:
+        return None
+    cols = list(required)
+    cols.append(speed_col)
+    has_wing_col = "rear_wing_angle_deg" in frame.columns
+    if has_wing_col:
+        cols.append("rear_wing_angle_deg")
+    sample_frame = (
+        frame.filter(pl.col("phase") == "mid_corner")
+        .select(cols)
+        .drop_nulls([
+            "accel_lat_g_max",
+            speed_col,
+            "aero_platform_front_rh_mean_mm",
+            "aero_platform_rear_rh_mean_mm",
+        ])
+    )
+    if sample_frame.height < 50:
+        return None
+
+    from racingoptimizer.aero.residual_correction import fit_residual_correction
+
+    default_wing = float(
+        aero_surface.bounds.wing_angles[len(aero_surface.bounds.wing_angles) // 2]
+    )
+    samples: list[dict[str, float]] = []
+    for row in sample_frame.to_dicts():
+        try:
+            speed_ms = float(row[speed_col])
+            observed_lat = float(row["accel_lat_g_max"])
+            front_rh = float(row["aero_platform_front_rh_mean_mm"])
+            rear_rh = float(row["aero_platform_rear_rh_mean_mm"])
+            if not (
+                np.isfinite(speed_ms)
+                and np.isfinite(observed_lat)
+                and np.isfinite(front_rh)
+                and np.isfinite(rear_rh)
+            ):
+                continue
+            if speed_ms <= 0.0:
+                continue
+            wing_deg = (
+                float(row["rear_wing_angle_deg"])
+                if has_wing_col and row.get("rear_wing_angle_deg") is not None
+                else default_wing
+            )
+            _balance, ld_ratio = aero_surface.interpolate(
+                front_rh, rear_rh, wing_deg, _AIR_DENSITY_REF,
+            )
+            if not np.isfinite(ld_ratio) or ld_ratio <= 0.0:
+                continue
+        except (TypeError, ValueError):
+            continue
+        samples.append(
+            {
+                "ld_ratio": float(ld_ratio),
+                "speed_ms": speed_ms,
+                "observed_lat_g": observed_lat,
+            }
+        )
+    if len(samples) < 50:
+        return None
+    try:
+        return fit_residual_correction(car, samples)
+    except ValueError:
+        return None
+
+
+def _try_load_aero(car: str) -> bool:
+    """Per spec §9: detect whether slice C is reachable for `car`."""
+    return _load_aero_surface(car) is not None
 
 
 def _dominant_track(track_models_used: dict[str, str]) -> str:
