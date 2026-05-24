@@ -84,13 +84,20 @@ _WEIGHT_GRIP_HEADROOM: float = 0.2
 # `(util, balance, head)` summing to 1.0; empirically derived by
 # grid-searching weight space against held-out corner-phase
 # duration_s on production corpora, controlling for corner-type
-# (within-group Spearman). Results:
-#   - BMW:      (0.2, 0.8, 0.0) Spearman=+0.189
-#   - Cadillac: (0.2, 0.3, 0.5) Spearman=+0.122
-#   - Ferrari:  (0.0, 0.0, 1.0) Spearman=+0.249  PASSES fallback (>=0.20)
+# (within-group Spearman).
+#
+# Numbers below are from the pre-2026-05-24 single-track scope
+# (one `PRODUCTION_TRACK_BY_CAR[car]`, max 10 sessions). Re-run
+# `scripts/day_12b_calibrate_evaluator.py` to refresh against the
+# v4 all-tracks-pooled scope now in production:
+#   - BMW:      (0.2, 0.8, 0.0) Spearman=+0.189 (sebring only)
+#   - Cadillac: (0.2, 0.3, 0.5) Spearman=+0.122 (lagunaseca only)
+#   - Ferrari:  (0.0, 0.0, 1.0) Spearman=+0.249 (hockenheim only)
+#   - Porsche:  (0.0, 0.5, 0.5) Spearman not yet documented post-add
 # The evaluator's primary value is GUARDRAILS (see `guardrail_check`);
 # the lap-time predictor is a secondary use that fully passes only on
-# Ferrari and partially on BMW/Cadillac.
+# Ferrari (within-group Spearman >= 0.20 fallback) and partially on
+# BMW/Cadillac.
 _CALIBRATED_WEIGHTS: dict[str, tuple[float, float, float]] = {
     "bmw": (0.2, 0.8, 0.0),
     "cadillac": (0.2, 0.3, 0.5),

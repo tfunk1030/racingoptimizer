@@ -382,12 +382,20 @@ def recommend_cmd(
     top_warnings.extend(
         _heave_slider_tech_warnings(model, recommended_setup, env, schedule),
     )
-    from racingoptimizer.physics.score import guardrail_warnings_for_setup
+    from racingoptimizer.physics.score import (
+        guardrail_warnings_for_setup,
+        headroom_baseline_missing_warning,
+    )
     top_warnings.extend(
         guardrail_warnings_for_setup(
             model, recommended_setup, env, schedule or [],
         ),
     )
+    head_warn = headroom_baseline_missing_warning(
+        model, surrogate_only=surrogate_only,
+    )
+    if head_warn is not None:
+        top_warnings.append(head_warn)
     top_warnings.extend(
         _within_track_variance_warnings(model, track_slug, rec.parameters),
     )

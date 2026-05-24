@@ -323,5 +323,7 @@ Ongoing: Phase 4 as garage UI data arrives
 | 3.5 grip_inconsistency DE penalty | **Done** — quarter penalty in `hybrid_score` |
 | 3.6 Fast per-car recommend smoke | **Done** — `test_per_car_recommend_fast.py` |
 | 3.3 Held-out hybrid A/B | **Done** — `tests/physics/test_hybrid_heldout_ab.py` (2026-05-24); scores observed setup at H1-H5 under hybrid vs surrogate-only, asserts identical key sets + bounded |Δtotal|/total |
+| Day-12b scope alignment (v4 all-tracks pooled) | **Done** (2026-05-24) — `scripts/day_12b_calibrate_evaluator.py` pools every production track per car instead of one `PRODUCTION_TRACK_BY_CAR[car]` with `max_sessions=10`. Matches the v4 `fit_per_car` training scope. Re-run script + refresh per-car Spearman numbers in `evaluator.py` header. |
+| Headroom-missing-baseline warning | **Done** (2026-05-24) — `physics/score.py::headroom_baseline_missing_warning` wired into `cli/recommend.py`. Fires when `_headroom_reference_g` returns None AND car has non-zero headroom weight (Ferrari 1.0, Cadillac/Porsche 0.5, Acura default 0.2). |
 | Phase 4 garage completeness | **Deferred** (UI verification) |
 | 2.2 JSON pin warnings regression test | **Deferred** (JSON warnings path already in `recommend.py`) |

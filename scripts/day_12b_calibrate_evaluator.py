@@ -4,9 +4,19 @@ The Day 12 gate (per-sample Spearman vs speed) was a methodology
 shortcut. PLAN.md §15.4 actually specifies "Spearman vs lap-time-per-
 corner-phase" -- per-corner-phase elapsed time is the right granularity.
 
+**Production-scope alignment (2026-05-24):** pools every production
+track per car instead of restricting to one canonical track per car.
+This matches the v4 `fit_per_car` path that ships in production --
+the recommender's per-car surrogate is trained on the union of every
+track the car has been driven on, so the evaluator should be
+calibrated on the same data slice. Previously the script restricted
+to one `PRODUCTION_TRACK_BY_CAR[car]` with `max_sessions=10`, which
+both under-sampled the corpus and decoupled the calibration target
+from the production fitter's scope.
+
 This script:
-  1. Pulls `corner_phase_states` for many production sessions across
-     all 3 v4 cars.
+  1. Pulls `corner_phase_states` for every production session of each
+     v4 car (all tracks pooled; held_out=1 sessions excluded).
   2. For each (session, corner_id, phase) row, computes the three
      evaluator sub-scores (axle_util, aero_balance, grip_headroom)
      from the row's aggregate values (lat_g_mean, lon_g_max,
@@ -17,8 +27,8 @@ This script:
      desired score.
   4. Reports per-component Spearman so we can see WHICH component
      actually correlates with corner-phase performance.
-  5. Grid-searches weights (5x5x5 with sum=1 step 0.2) to find the
-     COMPOSITE that maximizes mean-Spearman across groups.
+  5. Grid-searches weights (sum=1, step 0.1) to find the COMPOSITE
+     that maximizes mean-Spearman across groups.
   6. Held-out evaluation: re-run the calibrated weights on H1/H2/H3
      and report whether the calibrated evaluator hits the 0.35
      threshold.
@@ -62,13 +72,10 @@ HELD_OUT_BY_CAR: dict[str, str] = {
     "porsche": "a3d43056a952ff99",
 }
 
-PRODUCTION_TRACK_BY_CAR: dict[str, str] = {
-    "bmw": "sebring_international",
-    "cadillac": "lagunaseca",
-    "ferrari": "hockenheim_gp",
-    "acura": "daytona_2011_road",
-    "porsche": "algarve_gp",
-}
+# Per-car all-tracks pooling matches the v4 `fit_per_car` production
+# path. `PRODUCTION_TRACK_BY_CAR` (single canonical track per car) was
+# removed on 2026-05-24 -- calibrating on one track decoupled the
+# evaluator from the surrogate's training scope.
 
 
 def _spearman(a: np.ndarray, b: np.ndarray) -> float:
@@ -81,18 +88,22 @@ def _spearman(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.corrcoef(a_ranks, b_ranks)[0, 1])
 
 
-def _build_corner_phase_rows(car: str, max_sessions: int = 8, root=None):
-    """Pull corner_phase_states for `max_sessions` production sessions of `car`.
+def _build_corner_phase_rows(car: str, max_sessions: int = 200, root=None):
+    """Pull corner_phase_states across all production sessions of `car`.
+
+    Pools every track the car has been driven on (matches the v4
+    `fit_per_car` production scope). `max_sessions` is a safety cap;
+    the default (200) is effectively unlimited for current corpus
+    sizes.
 
     Returns a polars DataFrame with one row per (session_id, corner_id, phase)
     + the aggregate columns.
     """
     if root is None:
         root = resolve_corpus_root(None)
-    track = PRODUCTION_TRACK_BY_CAR[car]
     with cat.open_catalog(catalog_path(root)) as conn:
         sessions = cat.query_sessions(
-            conn, car=car, track=track, valid_only=True, include_held_out=False,
+            conn, car=car, valid_only=True, include_held_out=False,
         )
 
     import polars as pl
@@ -168,11 +179,18 @@ def _score_row(car: str, row: dict, surface: AeroSurface, front_ceiling, rear_ce
 
 def _calibrate_for_car(car: str, root):
     print(f"\n[{car}]")
-    cps_df = _build_corner_phase_rows(car, max_sessions=10, root=root)
+    cps_df = _build_corner_phase_rows(car, root=root)
     if cps_df is None:
         print(f"  no corner_phase_states; skipping {car}")
         return None
-    print(f"  collected {cps_df.height} corner-phase rows from production")
+    n_sessions = (
+        cps_df.select("session_id").n_unique()
+        if "session_id" in cps_df.columns else 0
+    )
+    print(
+        f"  collected {cps_df.height} corner-phase rows from "
+        f"{n_sessions} production sessions (all tracks pooled)"
+    )
 
     # Fit per-axle ceilings from production lat-G samples.
     lat = cps_df["accel_lat_g_mean"].to_numpy().astype(np.float64)

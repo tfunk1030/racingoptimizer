@@ -1020,12 +1020,51 @@ def guardrail_warnings_for_setup(
     return warnings
 
 
+def headroom_baseline_missing_warning(
+    model: PhysicsModel,
+    *,
+    surrogate_only: bool = False,
+) -> str | None:
+    """Warn when the hybrid path will silently default headroom to 1.0.
+
+    `evaluator.evaluate_corner_phase` defaults `grip_headroom_score=1.0`
+    when `surrogate_lat_g_ceiling` is None, which happens when
+    `_headroom_reference_g(baselines)` rejects the model's
+    `max_lateral_g` (not finite, or <= 0.5 G). For cars with a non-zero
+    headroom weight that means a free perfect score on a real evaluator
+    component -- inflating composite scores for any setup that would
+    otherwise be penalised for low grip headroom. Ferrari is the
+    extreme case (calibrated weight 1.0 on headroom).
+
+    Returns a one-line message for the recommend `warnings[]` contract,
+    or None when the issue does not apply (surrogate-only mode,
+    baseline resolves, or the car's headroom weight is zero).
+    """
+    if surrogate_only:
+        return None
+    from racingoptimizer.physics.evaluator import get_weights_for_car
+
+    if _headroom_reference_g(model.resolved_baselines) is not None:
+        return None
+    head_weight = get_weights_for_car(model.car)[2]
+    if head_weight <= 0.0:
+        return None
+    return (
+        f"Grip headroom baseline did not resolve for {model.car} "
+        f"(max_lateral_g={model.resolved_baselines.max_lateral_g:.2f}); "
+        f"hybrid evaluator defaults headroom score to 1.0 for every "
+        f"corner-phase. With weights[head]={head_weight:.2f}, the "
+        "composite score may be inflated -- verify on track."
+    )
+
+
 __all__ = [
     "aero_eff",
     "aggregate_utilization",
     "balance",
     "guardrail_warnings_for_setup",
     "grip",
+    "headroom_baseline_missing_warning",
     "platform",
     "score_breakdown",
     "score_setup",

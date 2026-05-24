@@ -363,3 +363,62 @@ def test_constants_sum_to_one() -> None:
     """The three score-component weights must sum to exactly 1.0."""
     total = _WEIGHT_AXLE_UTIL + _WEIGHT_AERO_BALANCE + _WEIGHT_GRIP_HEADROOM
     assert total == pytest.approx(1.0)
+
+
+# ---- headroom_baseline_missing_warning ---------------------------------
+
+
+class _StubModel:
+    """Minimal stand-in for PhysicsModel exposing the fields the warning reads."""
+
+    def __init__(self, car: str, max_lateral_g: float) -> None:
+        from racingoptimizer.physics.baselines import default_baselines_for
+
+        defaults = default_baselines_for(car)
+        from dataclasses import replace
+        self.car = car
+        self.resolved_baselines = replace(defaults, max_lateral_g=max_lateral_g)
+
+
+def test_headroom_warning_fires_for_ferrari_when_baseline_missing() -> None:
+    """Ferrari's headroom weight is 1.0; NaN baseline = silent free perfect score."""
+    from racingoptimizer.physics.score import headroom_baseline_missing_warning
+
+    model = _StubModel("ferrari", float("nan"))
+    msg = headroom_baseline_missing_warning(model)
+    assert msg is not None
+    assert "ferrari" in msg.lower()
+    assert "headroom" in msg.lower()
+
+
+def test_headroom_warning_silent_when_baseline_resolves() -> None:
+    from racingoptimizer.physics.score import headroom_baseline_missing_warning
+
+    model = _StubModel("ferrari", 1.8)
+    assert headroom_baseline_missing_warning(model) is None
+
+
+def test_headroom_warning_silent_for_bmw_zero_weight() -> None:
+    """BMW's calibrated headroom weight is 0.0 -- missing baseline can't inflate."""
+    from racingoptimizer.physics.score import headroom_baseline_missing_warning
+
+    model = _StubModel("bmw", float("nan"))
+    assert headroom_baseline_missing_warning(model) is None
+
+
+def test_headroom_warning_silent_under_surrogate_only() -> None:
+    """`--surrogate-only` bypasses the hybrid evaluator entirely."""
+    from racingoptimizer.physics.score import headroom_baseline_missing_warning
+
+    model = _StubModel("ferrari", float("nan"))
+    assert headroom_baseline_missing_warning(model, surrogate_only=True) is None
+
+
+def test_headroom_warning_silent_when_baseline_too_low() -> None:
+    """`_headroom_reference_g` rejects baseline <= 0.5; warning should fire."""
+    from racingoptimizer.physics.score import headroom_baseline_missing_warning
+
+    model = _StubModel("ferrari", 0.3)
+    msg = headroom_baseline_missing_warning(model)
+    assert msg is not None
+    assert "0.30" in msg
