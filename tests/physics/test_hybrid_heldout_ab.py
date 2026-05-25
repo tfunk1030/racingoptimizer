@@ -260,3 +260,21 @@ def test_hybrid_vs_surrogate_only_at_observed_setup(
         "regressed; investigate evaluator weights, guardrail penalties, or "
         "phase weights."
     )
+
+    # Per-car asymmetric "hybrid doesn't lose" guard (PLAN P1.3). The
+    # 50%-symmetric bound above catches catastrophic blend regressions in
+    # either direction. This tighter one-sided bound catches hybrid
+    # specifically falling BELOW surrogate by more than 20% on a real
+    # driver-validated setup. Guardrail penalties exist for setups outside
+    # the empirical envelope; the observed setup IS inside the envelope
+    # by construction, so heavy penalty firing here means the constraints
+    # are biased against driven reality (e.g. axle-utilisation ceilings
+    # mis-calibrated, balance penalty too aggressive).
+    _ASYMMETRIC_TOLERANCE = 0.20
+    assert total_h >= total_s * (1.0 - _ASYMMETRIC_TOLERANCE), (
+        f"{label}: hybrid total {total_h:.4f} fell more than "
+        f"{_ASYMMETRIC_TOLERANCE:.0%} below surrogate {total_s:.4f} on a "
+        "driver-validated observed setup -- guardrail penalties are firing "
+        "against real-world driving; recalibrate axle ceilings and balance "
+        "penalty weights."
+    )

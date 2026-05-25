@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The post-physics-rebuild work (2026-05-09 → 2026-05-24) wired hybrid scoring, axle ceilings, static-RH co-optimization, garage symmetry, snap-to-step, and a per-track residual correction. Several of those changes broke the "physics-based and calibrated" claim. The current plan is in `docs/accuracy-rebuild-2026-05-24/PLAN.md`.
 
-**Closed in W1-W4 (2026-05-24):** P0.1, P0.2, P0.3, P0.4, P1.1, P1.4, P2.3, P2.4, P3.1, P3.2, P3.3. The legacy k-NN static-RH repair is bypassed when the kinematic fit ships (W2 cleanup).
+**Closed in W1-W5 (2026-05-24 → 2026-05-25):** every plan item (P0.1, P0.2, P0.3, P0.4, P1.1, **P1.2**, **P1.3**, P1.4, **P2.1**, **P2.2**, P2.3, P2.4, P3.1, P3.2, P3.3). The legacy k-NN static-RH repair is bypassed when the kinematic fit ships (W2 cleanup). Bold items closed in W5 (2026-05-25); the remainder closed in W1-W4. Definition-of-done validation (held-out gate green on all 5 cars, lap-time Spearman ≥ 0.30 per pair, in-garage RH within 1 mm) requires offline runs on the full corpus.
 
 - **P0.1 — `per_track_residuals` retired.** The slot is preserved on `PhysicsModel` for pickle compat but the predict path no longer reads it and `fit_per_car` no longer computes it. `FITTERS_LAYOUT_VERSION = 10` invalidates every pre-2026-05-24 pickle so they refit clean.
 - **P0.2 — Deterministic kinematic static-RH fit ships.** `physics/static_rh_kinematic.py` is a per-car closed-form ridge-regularised OLS gated on R² ≥ 0.98 across the four `setup_static_*_ride_height_mm` channels. Wired into `PhysicsModel.predict_setup_readouts` (kinematic wins for those four channels; surrogate fallback for everything else). Slot validated by `_validate_pickle_slots`. `physics/recommend.py::_kinematic_static_rh_ready` skips the legacy k-NN `enforce_static_rh_feasible` repair when the kinematic fit shipped (would degrade an already-correct prediction); falls back to the legacy k-NN path when kinematic refused (R² < 0.98 or thin corpus).
@@ -23,15 +23,12 @@ The post-physics-rebuild work (2026-05-09 → 2026-05-24) wired hybrid scoring, 
 - **P3.1 — Briefing header carries channel-level error budget.** `explain/narrative.py::_render_error_budget_block` loads `holdout_accuracy_latest.json` and renders one line per `_HEADER_ERROR_BUDGET_CHANNELS` entry. Falls back to the legacy `Confidence: <regime> (median n=N)` line when no row matches.
 - **P3.2 — Watch-most picker normalisation.** `_dominant_impact_corner` and `_telemetry_why` divide each impact's `|score_delta|` by the corner's pre-filter spread in the candidate pool, so a long corner with broad-impact loses to a corner with concentrated impact.
 - **P3.3 — Thin-corpus refusal banner.** `cli/recommend.py::_is_thin_corpus_for_recommend` (n_prod < 20 OR `axle_grip_ceilings is None`) gates `recommend_cmd`; refusal emits a banner pointing at `optimize calibrate <car> <track>` and returns before DE.
+- **P1.2 — Real LOSO orchestration (W5, 2026-05-25).** `scripts/lap_time_correlation_gate.py::_compute_loso_pairs_for_track` walks every qualifying pair, holds each session out, refits per-car on the rest, and pairs the score against the held session's median lap time. Heavy (~2.5 hr per 10-session pair); intended to run offline on a workstation and the JSON committed for CI consumption.
+- **P1.3 — CI flip + asymmetric A/B assertion (W5, 2026-05-25).** `tests/physics/test_hybrid_heldout_ab.py` now carries `total_hybrid >= total_surrogate * (1 - 0.20)` per-car -- catches hybrid specifically falling >20% below surrogate on a driver-validated setup (guardrail penalties firing on real-world driving). `.github/workflows/ci.yml::calibration-weekly` invokes the A/B test + lap-time gate on the cron schedule.
+- **P2.1 — Curb / off-line row masking before fit (W5, 2026-05-25).** `corner.states.corner_phase_states` gained a `track_model=` kwarg; `_attach_cleanliness_masks` pulls per-sample curb + off-track masks from the TrackModel and the aggregator emits `curb_frac_mean` + `off_track_frac_mean` per (corner, phase). `physics/fitter.py::_collect_training_frames` lazily builds a per-track TrackModel from the catalog and filters rows where `curb_frac_mean > 0.5` (the plan's "median sample on a curb" cutoff) or `off_track_frac_mean > 0.0` before training. Cold-start TrackModels return zero masks; the filter is a no-op until the corpus reaches the compounding regime. `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` 6 → 7.
+- **P2.2 — Per-track random intercepts (W5, 2026-05-25).** `physics/track_random_intercepts.py` ports the conjugate-Gaussian random-intercept math from `bayes_retrofit.py` and centres the prior on zero (residuals already have the surrogate's mean removed). `fit_per_car` populates `PhysicsModel.track_random_intercepts` with `(channel, track) -> TrackIntercept` posteriors (empirical-Bayes shrinkage; pruned to ≥10 residuals per channel). `_predict_v4` accepts a new `track=` kwarg (threaded by the score path) and adds the intercept to mu; CI widens in quadrature by `intercept_std`. The setup gradient is preserved because `alpha_t` does not depend on setup. `FITTERS_LAYOUT_VERSION` 10 → 11.
 
-**Still open (deferred from W4):**
-
-- **P1.2** — script + helpers ship; the per-pair LOSO refit (~2.5 hr per car-track) is a placeholder, populated offline.
-- **P1.3** — `tests/physics/test_hybrid_heldout_ab.py` gates non-regression invariants. CI YAML flip + per-car asymmetric "hybrid doesn't lose" assertion still pending.
-- **P2.1** — curb / off-line row masking deferred (needs `TrackModel.bump_map` API addition; bigger than W3 budget).
-- **P2.2** — per-track mixed-effects model skipped in favour of P2.3.
-
-Full plan and prioritized fixes: `docs/accuracy-rebuild-2026-05-24/PLAN.md`.
+Full plan: `docs/accuracy-rebuild-2026-05-24/PLAN.md`. Definition-of-done items §5.1 / §5.3 / §5.6 (empirical validation on populated corpus + in-garage RH check) require offline runs and are not gated by these code changes.
 
 ## Commands
 
@@ -253,8 +250,8 @@ Cache files at `corpus/models/<car>__per-car__<digest>.pickle` (or `<car>__<trac
 1. `session_ids` — adding a session = new training data
 2. `ontology` fingerprint — `(name, family, fittable, user_settable, json_path)` per spec. **The `json_path` is critical** — without it, a leaf-path correction (e.g. moving `fuel_level_l` from `Chassis.Fuel` to `BrakesDriveUnit.Fuel`) silently reuses the OLD pickle that trained against the wrong YAML field, masking the fix.
 3. `constraints.md` content hash — bounds are baked into the pickle at fit time; editing them must invalidate the cache so DE doesn't search against stale bounds.
-4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`, **currently 10** as of 2026-05-24) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`), OR when PhysicsModel gains a new field that production paths read (forces refit so the field populates rather than default-empty).
-5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4); bumped to 6 on 2026-05-24 with P2.4's `phase_duration_s` injection at fit time.
+4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`, **currently 11** as of 2026-05-25) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`), OR when PhysicsModel gains a new field that production paths read (forces refit so the field populates rather than default-empty). v11 (W5) adds `track_random_intercepts`.
+5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4); bumped to 6 on 2026-05-24 with P2.4's `phase_duration_s` injection; bumped to **7 on 2026-05-25 (W5)** with P2.1's curb/off-track row masking changing the training-set composition.
 
 Editing `constraints.md` invalidates EVERY per-car cache (constraint content hash is a cache-key ingredient). Next recommend per car triggers a ~15-min refit. Plan constraint edits in batches.
 

@@ -240,6 +240,7 @@ def corner_phase_states(
     channels: list[str] | None = None,
     thresholds: PhaseThresholds | None = None,
     corpus_root: Path | str | None = None,
+    track_model: Any | None = None,
 ) -> pl.DataFrame:
     """Aggregate one row per ``(corner_id, phase)`` for a single lap.
 
@@ -251,6 +252,16 @@ def corner_phase_states(
     The ``lap_index == -1`` pre-grid sentinel is rejected up-front; ingest
     flags warm-up samples with that value and they should never reach the
     fitter.
+
+    ``track_model`` (P2.1): when a populated ``TrackModel`` is supplied
+    AND the lap carries ``lap_dist_pct``, the per-sample ``curb_mask``
+    and ``off_track_mask`` are computed and aggregated per (corner_id,
+    phase) into the output's ``curb_frac_mean`` / ``off_track_frac_mean``
+    columns. Callers (typically the fitter's ``_collect_training_frames``)
+    use these to drop rows where the driver was off-line, so the
+    physics fit isn't dragged by curb-bump or off-track-skid telemetry.
+    ``None`` (the default) preserves the legacy behaviour exactly --
+    those two columns are absent from the output frame.
     """
     if lap_index == -1:
         raise ValueError(
@@ -281,10 +292,67 @@ def corner_phase_states(
     if rename_map:
         df = df.rename(rename_map)
 
+    # P2.1: attach per-sample curb / off-track masks (if a TrackModel was
+    # supplied and the lap carries ``lap_dist_pct``). _aggregate emits
+    # per-phase ``curb_frac_mean`` and ``off_track_frac_mean`` columns
+    # when these are present, which the fitter uses to drop dirty rows
+    # before training. Cold-start TrackModels return zeros, so the
+    # output is a no-op until the corpus reaches the compounding regime.
+    if track_model is not None and "lap_dist_pct" in df.columns:
+        df = _attach_cleanliness_masks(df, track_model)
+
     th = _thresholds_for_frame(df, thresholds)
     labeled = segment_lap(df, thresholds=th)
 
     return _aggregate(labeled, session_id=session_id, lap_index=lap_index, car=sess.car)
+
+
+def _attach_cleanliness_masks(
+    df: pl.DataFrame, track_model: Any,
+) -> pl.DataFrame:
+    """Attach per-sample ``_is_curb`` / ``_is_off_track`` boolean columns.
+
+    Uses :meth:`TrackModel.curb_mask` and :meth:`TrackModel.off_track_mask`
+    -- both return ``np.ndarray[bool]`` of length ``df.height``. Defensive
+    against shape mismatches (mask shorter than the lap, e.g. a partial
+    cold-start TrackModel) by padding with ``False`` (treat unknown
+    samples as clean).
+    """
+    n = df.height
+    curb = None
+    off_track = None
+    try:
+        curb = track_model.curb_mask(df)
+    except Exception:
+        curb = None
+    try:
+        off_track = track_model.off_track_mask(df)
+    except Exception:
+        off_track = None
+
+    def _normalize(arr: object) -> list[bool]:
+        if arr is None:
+            return [False] * n
+        try:
+            seq = list(arr)
+        except TypeError:
+            return [False] * n
+        if len(seq) != n:
+            # Pad / truncate so the column length matches the lap.
+            if len(seq) < n:
+                seq = list(seq) + [False] * (n - len(seq))
+            else:
+                seq = list(seq[:n])
+        return [bool(v) for v in seq]
+
+    return df.with_columns(
+        [
+            pl.Series("_is_curb", _normalize(curb), dtype=pl.Boolean),
+            pl.Series(
+                "_is_off_track", _normalize(off_track), dtype=pl.Boolean,
+            ),
+        ]
+    )
 
 
 def _get_session(session_id: str, corpus_root: Path | str | None) -> cat.SessionRow:
@@ -337,6 +405,10 @@ def _aggregate(
         "TrackTempCrew", "TrackWetness",
         "WeatherDeclaredWet", "Precipitation", "Skies",
         "data_quality_mask",
+        # P2.1 per-sample cleanliness masks (attached by
+        # ``_attach_cleanliness_masks`` when a TrackModel is threaded
+        # into ``corner_phase_states``).
+        "_is_curb", "_is_off_track",
     )}
 
     # Spec §6 derived-column gates. Each conditional block below assumes the
@@ -621,6 +693,29 @@ def _aggregate(
             .alias("data_quality_clean_frac")
         )
 
+    # P2.1 per-phase cleanliness fractions. Each is mean(per_sample_bool)
+    # in [0, 1]; the fitter masks out rows where these exceed the
+    # ``_CURB_DIRTY_FRACTION`` / ``_OFF_TRACK_DIRTY_FRACTION`` thresholds
+    # set in ``physics/fitter.py``. Columns only emitted when the
+    # underlying masks were attached -- consumers conservatively treat
+    # missing columns as "all-clean" (the legacy behaviour).
+    if has["_is_curb"]:
+        aggs.append(
+            pl.col("_is_curb")
+            .cast(pl.Float32)
+            .mean()
+            .cast(pl.Float32)
+            .alias("curb_frac_mean")
+        )
+    if has["_is_off_track"]:
+        aggs.append(
+            pl.col("_is_off_track")
+            .cast(pl.Float32)
+            .mean()
+            .cast(pl.Float32)
+            .alias("off_track_frac_mean")
+        )
+
     grouped = inner.group_by(["corner_id", "phase"]).agg(aggs)
 
     # Circular mean of WindDir is not a Polars-native group_by aggregation, so
@@ -742,6 +837,9 @@ def _output_columns(present: list[str]) -> list[str]:
         "precip_type_max",
         "skies_max",
         "data_quality_clean_frac",
+        # P2.1 per-phase cleanliness fractions.
+        "curb_frac_mean",
+        "off_track_frac_mean",
     ]
     present_set = set(present)
     return [c for c in canonical if c in present_set]
@@ -839,6 +937,11 @@ def _empty_frame(has: dict[str, bool]) -> pl.DataFrame:
         schema["skies_max"] = pl.Int32
     if has["data_quality_mask"]:
         schema["data_quality_clean_frac"] = pl.Float32
+    # P2.1 per-phase cleanliness fractions.
+    if has["_is_curb"]:
+        schema["curb_frac_mean"] = pl.Float32
+    if has["_is_off_track"]:
+        schema["off_track_frac_mean"] = pl.Float32
 
     ordered = _output_columns(list(schema.keys()))
     return pl.DataFrame(schema={k: schema[k] for k in ordered})

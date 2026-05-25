@@ -434,7 +434,7 @@ def score_setup(
             )
         breakdown = _score_breakdown_per_car(
             model, setup, env, aero, schedule, weights, baselines,
-            phase_weights=phase_weights, hybrid=hybrid,
+            phase_weights=phase_weights, hybrid=hybrid, track=track,
         )
     else:
         keys = _corner_phase_keys(model)
@@ -471,7 +471,7 @@ def score_breakdown(
             )
         return _score_breakdown_per_car(
             model, setup, env, aero, schedule, weights, baselines,
-            phase_weights=phase_weights, hybrid=hybrid,
+            phase_weights=phase_weights, hybrid=hybrid, track=track,
         )
     keys = _corner_phase_keys(model)
     return _score_breakdown(
@@ -704,6 +704,7 @@ def _score_breakdown_per_car(
     *,
     phase_weights: dict[Phase, dict[str, float]] | None = None,
     hybrid: bool = True,
+    track: str | None = None,
 ) -> dict[CornerPhaseKey, float]:
     """Per-car (v4) score path: iterate the TARGET track's corners.
 
@@ -734,7 +735,7 @@ def _score_breakdown_per_car(
             phase=phase,
         )
         state = model.predict(
-            setup, env, cpkey, corner_archetype=entry.archetype,
+            setup, env, cpkey, corner_archetype=entry.archetype, track=track,
         )
         if not state.states:
             continue
