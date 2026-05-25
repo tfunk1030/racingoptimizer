@@ -95,6 +95,8 @@ DAMPER_SUFFIX = {
     "low speed rebound": "lsr",
     "high speed rebound": "hsr",
     "high speed compression slope": "hsc_slope",
+    "roll low speed compression": "roll_lsc",
+    "roll high speed compression": "roll_hsc",
 }
 
 
@@ -214,6 +216,10 @@ def _section_to_param_base(heading: str) -> tuple[str, str | None] | None:
     # the per-car baseline (~58 L on BMW M Hybrid V8).
     if h == "fuel level":
         return ("fuel_level_l", None)
+    if h == "traction control gain (tc1)":
+        return ("traction_control_gain", None)
+    if h == "traction control slip (tc2)":
+        return ("traction_control_slip", None)
     return None
 
 
@@ -294,6 +300,10 @@ _DAMPER_BASE_FAMILIES: frozenset[str] = frozenset({
     "damper_lsr",
     "damper_hsr",
     "damper_hsc_slope",
+})
+_ROLL_DAMPER_BASE_FAMILIES: frozenset[str] = frozenset({
+    "damper_roll_lsc",
+    "damper_roll_hsc",
 })
 
 # Recognised corner suffixes on per-car override headings. Order
@@ -429,6 +439,9 @@ def load_constraints(path: Path | None = None) -> ConstraintsTable:
                         elif key in _DAMPER_BASE_FAMILIES:
                             for corner in ("fl", "fr", "rl", "rr"):
                                 by_car[current_car][f"{key}_{corner}"] = (lo, hi)
+                        elif key in _ROLL_DAMPER_BASE_FAMILIES:
+                            for axle in ("front", "rear"):
+                                by_car[current_car][f"{key}_{axle}"] = (lo, hi)
                         else:
                             by_car[current_car][key] = (lo, hi)
             i += 1

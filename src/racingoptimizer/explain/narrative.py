@@ -13,7 +13,10 @@ engineering English.
 """
 from __future__ import annotations
 
+import json
+import math
 from collections import defaultdict
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from racingoptimizer.constraints import load_constraints
@@ -26,6 +29,105 @@ from racingoptimizer.physics.ontology import ParameterSpec, ontology_for
 
 if TYPE_CHECKING:
     from racingoptimizer.physics import PhysicsModel, SetupRecommendation
+
+
+# ---------------------------------------------------------------------------
+# P3.1 -- per-channel held-out error budget surfaced in the briefing header
+# ---------------------------------------------------------------------------
+
+# Keep aligned with ``scripts/holdout_accuracy_gate.py::_PER_CHANNEL_THRESHOLDS``.
+# Maps the gate JSON's channel key to ``(label, unit)`` for the briefing
+# header. Channels not in this dict aren't surfaced in the header even if
+# the gate scores them (they may still drive the gate's pass/fail).
+_HEADER_ERROR_BUDGET_CHANNELS: tuple[tuple[str, str, str], ...] = (
+    # (channel, label, unit)
+    ("accel_lat_g_max", "peak lateral G", "g"),
+    ("understeer_angle_mean_rad", "understeer angle", "rad"),
+    ("setup_static_lf_ride_height_mm", "static front RH", "mm"),
+    ("damper_force_p99_n", "damper force p99", "N"),
+)
+
+
+def _holdout_accuracy_path() -> Path:
+    return Path("docs/physics-rebuild/holdout_accuracy_latest.json")
+
+
+def _load_holdout_rows_for(car: str, track: str) -> list[dict] | None:
+    """Return the per-channel rows for ``(car, track)`` from the
+    held-out gate JSON, or None if the file is missing, malformed, or
+    has no matching row.
+
+    The gate runs on a per-(car, held-out track) pair, so the briefing
+    header surfaces the closest match: same car AND same track. When
+    the user is recommending for a track the held-out gate doesn't
+    cover, the header falls back to the legacy ``Confidence: ...`` line.
+    """
+    path = _holdout_accuracy_path()
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, list):
+        return None
+    car_norm = (car or "").lower()
+    track_norm = (track or "").lower()
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        if (
+            str(entry.get("car", "")).lower() == car_norm
+            and str(entry.get("track", "")).lower() == track_norm
+            and isinstance(entry.get("channels"), list)
+        ):
+            return entry["channels"]
+    return None
+
+
+def _format_error_budget_value(channel: str, mean_abs: float, unit: str) -> str:
+    """Render ``+/- X.XX unit`` with channel-aware precision."""
+    if not math.isfinite(mean_abs):
+        return ""
+    if channel == "damper_force_p99_n" or unit == "N":
+        return f"+/- {mean_abs:.0f} {unit}"
+    if abs(mean_abs) >= 10:
+        return f"+/- {mean_abs:.1f} {unit}"
+    return f"+/- {mean_abs:.2f} {unit}"
+
+
+def _render_error_budget_block(car: str, track: str) -> list[str]:
+    """Build the ``Predicted error on this car/track (held-out): ...``
+    block. Returns a list of lines. Empty list when no held-out row
+    matches.
+    """
+    rows = _load_holdout_rows_for(car, track)
+    if not rows:
+        return []
+    by_channel = {row.get("channel"): row for row in rows if isinstance(row, dict)}
+    lines: list[str] = ["Predicted error on this car/track (held-out):"]
+    rendered_any = False
+    for channel, label, unit in _HEADER_ERROR_BUDGET_CHANNELS:
+        row = by_channel.get(channel)
+        if not row:
+            continue
+        try:
+            mean_abs = float(row.get("mean_abs"))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(mean_abs):
+            continue
+        value_str = _format_error_budget_value(channel, mean_abs, unit)
+        if not value_str:
+            continue
+        regime = str(row.get("regime") or "").strip()
+        regime_str = f" ({regime})" if regime else ""
+        # Pad label to 24 chars so columns line up across rows.
+        lines.append(f"  {label:<24} {value_str}{regime_str}")
+        rendered_any = True
+    if not rendered_any:
+        return []
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -616,10 +718,13 @@ def _param_axis(name: str) -> str | None:
 
 
 def _param_damper_mode(name: str) -> str | None:
-    """Pull lsc/hsc/lsr/hsr/hsc_slope from a damper parameter name."""
+    """Pull lsc/hsc/lsr/hsr/hsc_slope/roll_* from a damper parameter name."""
     n = name.lower()
     if "hsc_slope" in n:
         return "hsc_slope"
+    for mode in ("roll_lsc", "roll_hsc"):
+        if f"damper_{mode}_" in n:
+            return mode
     for mode in ("lsc", "hsc", "lsr", "hsr"):
         if f"damper_{mode}_" in n:
             return mode
@@ -698,11 +803,39 @@ _PARAM_LABEL: dict[str, str] = {
     "torsion_bar_od_fl_mm":           "Front torsion bar OD",
     "torsion_bar_turns_rl":           "Rear torsion bar turns",
     "torsion_bar_od_rl_mm":           "Rear torsion bar OD",
-    "camber_fl_deg":                  "FL camber",
-    "camber_fr_deg":                  "FR camber",
-    "camber_rl_deg":                  "RL camber",
-    "camber_rr_deg":                  "RR camber",
+    "traction_control_gain":          "TC1 gain",
+    "traction_control_slip":          "TC2 slip",
+    "damper_roll_lsc_front":          "Front roll damper LSC",
+    "damper_roll_hsc_front":          "Front roll damper HSC",
+    "damper_roll_lsc_rear":           "Rear roll damper LSC",
+    "damper_roll_hsc_rear":           "Rear roll damper HSC",
+    "camber_fl_deg":                  "Front camber",
+    "camber_fr_deg":                  "Front camber",
+    "camber_rl_deg":                  "Rear camber",
+    "camber_rr_deg":                  "Rear camber",
 }
+
+
+def _param_label(name: str, car: str | None = None) -> str:
+    """Human label for a parameter, with per-car garage UI overrides."""
+    if (car or "").lower() == "acura" and name == "spring_perch_offset_rear_mm":
+        return "Rear heave perch"
+    return _PARAM_LABEL.get(name, _humanize(name))
+
+
+def _track_coverage_headline(model: PhysicsModel, track: str) -> str | None:
+    """One-line summary of within-track parameter exploration."""
+    per_track = getattr(model, "per_track_parameter_observed", {}) or {}
+    track_obs = per_track.get(track, {})
+    if not track_obs:
+        return None
+    n_covered = sum(1 for vals in track_obs.values() if len(set(vals)) >= 3)
+    n_total = len(track_obs)
+    pct = int(round(100.0 * n_covered / n_total)) if n_total else 0
+    return (
+        f"Track coverage: {n_covered}/{n_total} parameters with 3+ distinct "
+        f"values ({pct}% explored at {track})"
+    )
 
 
 # Group ordering for the briefing.
@@ -757,7 +890,21 @@ def render_narrative(
     # cpkey) tuple. Computed lazily inside _render_change.
     rec_setup = {name: float(v) for name, (v, _c) in rec.parameters.items()}
 
-    moved = [j for j in justifications if _moved(j, past_value, onto)]
+    # P0.3: parameters where the surrogate cannot resolve +/-1 click
+    # are reset to baseline by ``recommend()`` and listed in
+    # ``rec.suppressed_below_sensitivity``. They MUST NOT appear in the
+    # "moved" block -- baseline_setup (training median) may still
+    # differ from past_setup (most recent IBT), which would otherwise
+    # render them as a phantom move. Surfaced under NOTES instead.
+    suppressed_names = set(
+        getattr(rec, "suppressed_below_sensitivity", ()) or ()
+    )
+
+    moved = [
+        j for j in justifications
+        if _moved(j, past_value, onto)
+        and j.parameter not in suppressed_names
+    ]
     moved_names = {j.parameter for j in moved}
 
     lines: list[str] = []
@@ -777,13 +924,32 @@ def render_narrative(
         1 for name, (_v, conf) in rec.parameters.items()
         if conf.regime == "noisy" and name in moved_names
     )
-    lines.append(
-        f" Conditions: {rec.env.air_temp_c:.0f} C ambient / "
-        f"{rec.env.track_temp_c:.0f} C track  |  "
-        f"Confidence: {rolled} (median n={n_med})  |  "
-        f"Moved params: {sparse_moved} sparse / {noisy_moved} noisy "
-        f"of {len(moved)} changes"
-    )
+    # P3.1: replace the legacy ``Confidence: rolled (median n=N)`` line
+    # (internally inconsistent with per-parameter regime, see PLAN.md
+    # 2.2) with a per-channel held-out error budget pulled from the gate
+    # JSON. Falls back to the legacy line when no held-out row matches
+    # this (car, track) -- e.g. a track the gate doesn't cover.
+    error_budget_block = _render_error_budget_block(model.car, track_label)
+    if error_budget_block:
+        lines.append(
+            f" Conditions: {rec.env.air_temp_c:.0f} C ambient / "
+            f"{rec.env.track_temp_c:.0f} C track  |  "
+            f"Moved params: {sparse_moved} sparse / {noisy_moved} noisy "
+            f"of {len(moved)} changes"
+        )
+        for line in error_budget_block:
+            lines.append(f" {line}")
+    else:
+        lines.append(
+            f" Conditions: {rec.env.air_temp_c:.0f} C ambient / "
+            f"{rec.env.track_temp_c:.0f} C track  |  "
+            f"Confidence: {rolled} (median n={n_med})  |  "
+            f"Moved params: {sparse_moved} sparse / {noisy_moved} noisy "
+            f"of {len(moved)} changes"
+        )
+    coverage_line = _track_coverage_headline(model, track_label)
+    if coverage_line:
+        lines.append(f" {coverage_line}")
     lines.append("=" * 72)
     lines.append("")
 
@@ -852,7 +1018,7 @@ def _render_change(
     schedule: list | None = None,
 ) -> list[str]:
     spec = onto.get(j.parameter)
-    label = _PARAM_LABEL.get(j.parameter, _humanize(j.parameter))
+    label = _param_label(j.parameter, model.car if model is not None else None)
     family = spec.family if spec else "other"
     delta = (j.value - past) if past is not None else 0.0
     direction = _direction_word(family, delta)
@@ -920,7 +1086,7 @@ def _render_change(
 _EVIDENCE_CHANNELS: dict[tuple, list[tuple[str, str, str, str]]] = {
     ("heave_spring", "front"): [
         ("lf_shock_defl_p99_mm", "front-left shock peak compression", "mm", ""),
-        ("setup_static_lf_ride_height_mm", "front static ride height", "mm", ""),
+        ("setup_static_lf_ride_height_mm", "front static garage ride height", "mm", ""),
         ("understeer_angle_mean_rad", "mid-corner understeer angle", "rad", ""),
     ],
     ("torsion_bar", "front"): [
@@ -932,23 +1098,23 @@ _EVIDENCE_CHANNELS: dict[tuple, list[tuple[str, str, str, str]]] = {
     ],
     ("spring_rate", "rear"): [
         ("lr_shock_defl_p99_mm", "rear-left shock peak compression", "mm", ""),
-        ("setup_static_lr_ride_height_mm", "rear static ride height", "mm", ""),
-        ("dynamic_rear_rh_at_speed_mm", "rear ride height at speed", "mm", ""),
+        ("setup_static_lr_ride_height_mm", "rear static garage ride height", "mm", ""),
+        ("dynamic_rear_rh_at_speed_mm", "rear wheel ride height on straights", "mm", ""),
     ],
     ("spring_rate", "rear-third"): [
-        ("dynamic_rear_rh_at_speed_mm", "rear ride height at speed", "mm", ""),
+        ("dynamic_rear_rh_at_speed_mm", "rear wheel ride height on straights", "mm", ""),
         ("lr_shock_defl_p99_mm", "rear shock peak compression", "mm", ""),
     ],
     ("perch_offset", "front"): [
-        ("setup_static_lf_ride_height_mm", "front static ride height", "mm", ""),
-        ("dynamic_front_rh_at_speed_mm", "front ride height at speed", "mm", ""),
+        ("setup_static_lf_ride_height_mm", "front static garage ride height", "mm", ""),
+        ("dynamic_front_rh_at_speed_mm", "front wheel ride height on straights", "mm", ""),
     ],
     ("perch_offset", "rear"): [
-        ("setup_static_lr_ride_height_mm", "rear static ride height", "mm", ""),
-        ("dynamic_rear_rh_at_speed_mm", "rear ride height at speed", "mm", ""),
+        ("setup_static_lr_ride_height_mm", "rear static garage ride height", "mm", ""),
+        ("dynamic_rear_rh_at_speed_mm", "rear wheel ride height on straights", "mm", ""),
     ],
     ("pushrod", "front"): [
-        ("setup_static_lf_ride_height_mm", "front static ride height", "mm", ""),
+        ("setup_static_lf_ride_height_mm", "front static garage ride height", "mm", ""),
     ],
     ("pushrod", "rear"): [
         ("setup_static_lr_ride_height_mm", "rear static ride height", "mm", ""),
@@ -985,7 +1151,7 @@ _EVIDENCE_CHANNELS: dict[tuple, list[tuple[str, str, str, str]]] = {
         ("understeer_angle_mean_rad", "understeer angle", "rad", ""),
     ],
     ("rear_wing", None): [
-        ("dynamic_rear_rh_at_speed_mm", "rear ride height at speed", "mm", ""),
+        ("dynamic_rear_rh_at_speed_mm", "rear wheel ride height on straights", "mm", ""),
         ("accel_lat_g_max", "peak lateral G", "g", ""),
     ],
     ("tyre_pressure", None): [
@@ -1006,7 +1172,7 @@ _EVIDENCE_CHANNELS: dict[tuple, list[tuple[str, str, str, str]]] = {
         ("throttle_max", "throttle application on exit", "", ""),
     ],
     ("fuel", None): [
-        ("setup_static_lf_ride_height_mm", "front static ride height", "mm", ""),
+        ("setup_static_lf_ride_height_mm", "front static garage ride height", "mm", ""),
         ("setup_static_lr_ride_height_mm", "rear static ride height", "mm", ""),
     ],
 }
@@ -1054,9 +1220,18 @@ def _telemetry_why(
     # heaviest-weighted corner (T5 at Spa from corner-duration weighting)
     # for EVERY parameter, making every Why line anchor at the same
     # corner regardless of what the parameter mechanically affects.
-    impacts = list(j.corners_helped) or list(j.corners_hurt)
-    if not impacts:
+    raw_pool = list(j.corners_helped) or list(j.corners_hurt)
+    if not raw_pool:
         return ""
+    # P3.2: count corner spread BEFORE family filter; same rule as
+    # ``_dominant_impact_corner`` so the Why line and Watch-most line
+    # agree on which corner the parameter is mechanically anchored to.
+    corner_counts: dict[int, int] = {}
+    for impact in raw_pool:
+        corner_counts[int(impact.corner_id)] = (
+            corner_counts.get(int(impact.corner_id), 0) + 1
+        )
+    impacts = raw_pool
     preferred = _FAMILY_PREFERRED_PHASES.get(family or "")
     if preferred:
         in_preferred = [i for i in impacts if i.phase in preferred]
@@ -1066,7 +1241,12 @@ def _telemetry_why(
         on_corner = [i for i in impacts if i.phase != Phase.STRAIGHT]
         if on_corner:
             impacts = on_corner
-    top = max(impacts, key=lambda i: abs(i.score_delta))
+    top = max(
+        impacts,
+        key=lambda i: abs(float(i.score_delta)) / float(
+            max(corner_counts.get(int(i.corner_id), 1), 1),
+        ),
+    )
 
     # Counterfactual setup: rec values everywhere except this param.
     counterfactual = dict(rec_setup)
@@ -1152,13 +1332,38 @@ def _dominant_impact_corner(
     so a damper change reports trail-brake/mid-corner/exit, a camber
     reports mid-corner, a diff reports exit -- regardless of which
     corner has the biggest raw score delta (which is duration-biased
-    by the corner-weight refactor in e90e8fd). Falls back to non-
-    STRAIGHT phases, then to any phase, when the preferred-phase
-    pool is empty.
+    by the corner-weight refactor in e90e8fd).
+
+    P3.2: scores impacts by ``|score_delta| / phase_count_in_pool``
+    where ``phase_count_in_pool`` is the number of times this candidate's
+    corner shows up across phases in the filtered pool. The
+    corner-duration weighting makes the longest corner emit a per-phase
+    score delta proportional to its share of lap-time, so a long corner
+    accumulates impact across many phases. Normalising by the corner's
+    phase-spread in the pool penalises that broad-impact pattern and
+    rewards corners with mechanically-concentrated impact -- which is
+    what the user is actually being told to "Watch most".
+
+    Falls back to non-STRAIGHT phases, then to any phase, when the
+    preferred-phase pool is empty.
     """
-    candidates = list(j.corners_helped) + list(j.corners_hurt)
-    if not candidates:
+    raw_pool = list(j.corners_helped) + list(j.corners_hurt)
+    if not raw_pool:
         return ""
+
+    # P3.2: count corner spread BEFORE the family-preferred-phase
+    # filter, so a long corner that emits impact across all five phases
+    # always carries its full duration penalty -- even when the family
+    # filter narrows the candidate pool to one phase. Counting
+    # post-filter would let a long corner that happens to match a
+    # single preferred phase escape the normalisation.
+    corner_counts: dict[int, int] = {}
+    for impact in raw_pool:
+        corner_counts[int(impact.corner_id)] = (
+            corner_counts.get(int(impact.corner_id), 0) + 1
+        )
+
+    candidates = raw_pool
     preferred = _FAMILY_PREFERRED_PHASES.get(family or "")
     if preferred:
         in_preferred = [i for i in candidates if i.phase in preferred]
@@ -1168,7 +1373,12 @@ def _dominant_impact_corner(
         on_corner = [i for i in candidates if i.phase != Phase.STRAIGHT]
         if on_corner:
             candidates = on_corner
-    top = max(candidates, key=lambda i: abs(i.score_delta))
+
+    def _normalised(i) -> float:
+        spread = corner_counts.get(int(i.corner_id), 1)
+        return abs(float(i.score_delta)) / float(max(spread, 1))
+
+    top = max(candidates, key=_normalised)
     phase_label = _PHASE_LABEL.get(top.phase, top.phase.value)
     return f"T{top.corner_id} {phase_label}"
 
@@ -1328,7 +1538,7 @@ def _notes_block(
 ) -> list[str]:
     out: list[str] = []
     for j in pinned_js:
-        label = _PARAM_LABEL.get(j.parameter, _humanize(j.parameter))
+        label = _param_label(j.parameter, rec.car)
         spec = onto.get(j.parameter)
         val_s = _format_value_delta(j, spec, None)
         out.append(f"  {label}: pinned by user at {val_s}")
@@ -1342,12 +1552,34 @@ def _notes_block(
         step = (spec.step if spec and spec.step else 0.5)
         if abs(j.value - past) >= step / 2:
             continue  # actually moved by a half-step or more -- covered above
-    if rec.pinned_to_observed_median:
-        for name in sorted(rec.pinned_to_observed_median):
-            label = _PARAM_LABEL.get(name, _humanize(name))
+    if rec.pinned_within_track_thin:
+        for name in sorted(rec.pinned_within_track_thin):
+            label = _param_label(name, rec.car)
+            out.append(
+                f"  {label}: pinned at target track (fewer than 3 distinct "
+                f"values driven here -- run calibrate probes before trusting "
+                f"cross-track moves)"
+            )
+    global_pinned = [
+        n for n in rec.pinned_to_observed_median
+        if n not in set(rec.pinned_within_track_thin)
+    ]
+    if global_pinned:
+        for name in sorted(global_pinned):
+            label = _param_label(name, rec.car)
             out.append(
                 f"  {label}: pinned to observed median (no corpus variance on "
                 f"this parameter -- vary it in a session to unlock search)"
+            )
+    suppressed = tuple(
+        getattr(rec, "suppressed_below_sensitivity", ()) or ()
+    )
+    if suppressed:
+        for name in sorted(suppressed):
+            label = _param_label(name, rec.car)
+            out.append(
+                f"  {label}: held at past value (model cannot resolve "
+                f"+/-1 click on this corpus -- below sensitivity floor)"
             )
     if rec.untrained_parameters:
         table = load_constraints()

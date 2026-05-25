@@ -4,12 +4,14 @@ VISION §10: headwind/tailwind on a straight scales downforce up/down;
 crosswind shifts aero balance left/right. The aero map's ``air_density``
 correction is symmetric — this module provides the directional component.
 
-This module is intentionally self-contained. It is **not** wired into
-``racingoptimizer.physics.score.aero_eff`` in this slice (S4.6); a future
-PR (Stage 5 polish) will route the modifier into the aero-utilization
-branch of the scorer. Until then, ``decompose_wind`` and
-``aero_wind_modifier`` are available as pure helpers for downstream code
-or notebooks that want directional wind correction.
+This module is intentionally self-contained.
+
+As of the 2026 quick-win enhancements, the helpers are now wired into
+`score.aero_eff` when a `car_heading_deg` is available on the per-phase
+state (see Initiative 3 in the enhancement plan). When heading is absent,
+the legacy magnitude-only tailwind-worst-case path is used as fallback.
+``decompose_wind`` + ``aero_wind_modifier`` remain available for any
+other caller that can supply heading.
 """
 from __future__ import annotations
 

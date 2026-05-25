@@ -18,11 +18,17 @@ Outputs per (car, channel):
   - normed      : mean_abs / max(|actual_std|, 1e-6)
   - coverage    : fraction of actuals inside the predicted CI
 
-Per-car pass criteria:
-  - Median coverage across trained channels >= 0.50 (loose; covers the
-    sparse-regime channels honestly)
-  - Mean coverage on the DENSE-REGIME slice >= 0.85
-  - normed_residual median <= 2.0 (predictions within 2 channel-stds)
+Two gate criteria run side-by-side:
+
+* Per-channel gate (P1.1 of ``docs/accuracy-rebuild-2026-05-24/PLAN.md``;
+  the **hard fail** criterion). Each scoring channel that drives
+  recommendations has a ``mean_abs`` AND ``normed_residual`` target
+  (see ``_PER_CHANNEL_THRESHOLDS``). The gate fails when ANY car fails
+  ANY non-driver-input row.
+
+* Aggregate gate (the original loose criterion, kept for trend
+  tracking only). Median coverage >= 0.50, dense-regime mean coverage
+  >= 0.85, median normed_residual <= 2.0.
 
 Run: `uv run python scripts/holdout_accuracy_gate.py`
 """
@@ -57,6 +63,96 @@ HELDOUT: dict[str, tuple[str, str]] = {
     "acura":    ("72f43fa4527c4260", "daytona_2011_road"),
     "porsche":  ("a3d43056a952ff99", "algarve_gp"),
 }
+
+
+# Per-channel thresholds (PLAN.md §3 P1.1). Map ``channel ->
+# (mean_abs_target, normed_residual_target)``. ``mean_abs_target`` of
+# ``None`` triggers the "30% of channel signal_std" rule (used by
+# damper force where channel scale varies per car/track).
+_PER_CHANNEL_THRESHOLDS: dict[str, tuple[float | None, float | None]] = {
+    # Grip-balance channels
+    "accel_lat_g_max": (0.30, 0.5),
+    "accel_lon_g_min": (0.30, 0.5),
+    "accel_lon_g_max": (0.30, 0.5),
+    "understeer_angle_mean_rad": (0.10, 0.5),
+    # Wheel dynamic ride heights (telemetry-driven)
+    "lf_ride_height_mean_mm": (3.0, 0.5),
+    "rf_ride_height_mean_mm": (3.0, 0.5),
+    "lr_ride_height_mean_mm": (3.0, 0.5),
+    "rr_ride_height_mean_mm": (3.0, 0.5),
+    # Static garage RH (deterministic per P0.2; tighter)
+    "setup_static_lf_ride_height_mm": (1.0, 0.2),
+    "setup_static_rf_ride_height_mm": (1.0, 0.2),
+    "setup_static_lr_ride_height_mm": (1.0, 0.2),
+    "setup_static_rr_ride_height_mm": (1.0, 0.2),
+    # Damper force p99 -- mean_abs_target=None => 30% of channel std
+    "damper_force_p99_n": (None, 0.5),
+}
+
+# Fraction of ``actual_std`` used for the dynamic ``mean_abs`` target
+# when the threshold tuple's first element is ``None``.
+_DYNAMIC_MEAN_ABS_FRACTION: float = 0.30
+
+
+def _per_channel_pass(rows: list[dict]) -> tuple[bool, list[str]]:
+    """Evaluate each row in ``rows`` against ``_PER_CHANNEL_THRESHOLDS``.
+
+    ``rows`` is a list of dicts shaped like ``_gate_one_car``'s
+    ``channels`` output (``channel``, ``mean_abs``, ``normed_residual``,
+    ``actual_std`` per row).
+
+    Returns ``(ok, failed)``: ``ok`` is True iff every gated channel
+    that appears in ``rows`` passes both its mean_abs and normed
+    targets. ``failed`` lists human-readable reasons of the form
+    ``"channel: mean_abs=X.X > target | normed=Y.Y > target"``.
+    Channels not present in ``_PER_CHANNEL_THRESHOLDS`` are skipped (no
+    gating). Channels in the threshold dict but missing from ``rows``
+    are also skipped (not a failure -- the held-out IBT may not have
+    those channels available).
+    """
+    failed: list[str] = []
+    for row in rows:
+        channel = row.get("channel")
+        if channel not in _PER_CHANNEL_THRESHOLDS:
+            continue
+        mean_abs_target, normed_target = _PER_CHANNEL_THRESHOLDS[channel]
+        try:
+            mean_abs = float(row.get("mean_abs", float("nan")))
+            normed = float(row.get("normed_residual", float("nan")))
+            actual_std = float(row.get("actual_std", 0.0))
+        except (TypeError, ValueError):
+            failed.append(f"{channel}: malformed row")
+            continue
+
+        # Resolve the dynamic mean_abs target ("None" => fraction of std)
+        if mean_abs_target is None:
+            if actual_std > 0.0 and math.isfinite(actual_std):
+                effective_mean_abs_target: float | None = (
+                    _DYNAMIC_MEAN_ABS_FRACTION * actual_std
+                )
+            else:
+                effective_mean_abs_target = None
+        else:
+            effective_mean_abs_target = float(mean_abs_target)
+
+        reasons: list[str] = []
+        if (
+            effective_mean_abs_target is not None
+            and math.isfinite(mean_abs)
+            and mean_abs > effective_mean_abs_target
+        ):
+            reasons.append(
+                f"mean_abs={mean_abs:.3f} > {effective_mean_abs_target:.3f}"
+            )
+        if (
+            normed_target is not None
+            and math.isfinite(normed)
+            and normed > float(normed_target)
+        ):
+            reasons.append(f"normed={normed:.2f} > {normed_target:.2f}")
+        if reasons:
+            failed.append(f"{channel}: " + " | ".join(reasons))
+    return (len(failed) == 0, failed)
 
 
 def _env_from_row(row: dict) -> EnvironmentFrame:
@@ -342,6 +438,11 @@ def _gate_one_car(car: str, session_id: str, track: str, root: Path) -> dict:
     print(f"  scored {sum(r['n'] for r in summary_rows)} (channel, sample) pairs "
           f"across {len(summary_rows)} channels")
 
+    per_channel_ok, per_channel_failed = _per_channel_pass(summary_rows)
+    gated_channels = [
+        r["channel"] for r in summary_rows
+        if r["channel"] in _PER_CHANNEL_THRESHOLDS
+    ]
     return {
         "car": car,
         "session_id": session_id,
@@ -349,6 +450,11 @@ def _gate_one_car(car: str, session_id: str, track: str, root: Path) -> dict:
         "n_prod_sessions": n_prod,
         "n_holdout_rows": len(all_rows),
         "channels": summary_rows,
+        "per_channel_pass": gated_channels if per_channel_ok else [
+            ch for ch in gated_channels
+            if not any(line.startswith(f"{ch}:") for line in per_channel_failed)
+        ],
+        "per_channel_failed": per_channel_failed,
     }
 
 
@@ -380,6 +486,15 @@ def _print_per_car(result: dict) -> None:
     print(f"    summary: median_cov={statistics.median(cov):.2f} "
           f"median_normed={(statistics.median(normed) if normed else float('nan')):.2f} "
           f"dense_mean_cov={(statistics.mean(dense) if dense else float('nan')):.2f}")
+
+    failed = result.get("per_channel_failed") or []
+    passed = result.get("per_channel_pass") or []
+    if failed:
+        print("    per-channel FAIL:")
+        for line in failed:
+            print(f"      - {line}")
+    if passed:
+        print(f"    per-channel PASS: {', '.join(passed)}")
 
 
 def _gate_pass(result: dict) -> tuple[bool, str]:
@@ -422,22 +537,53 @@ def main() -> int:
     print("\n" + "=" * 72)
     print("PER-CAR RESULTS")
     print("=" * 72)
-    pass_count = 0
-    fail_lines: list[str] = []
+    aggregate_pass = 0
+    per_channel_pass = 0
+    aggregate_fail_lines: list[str] = []
+    per_channel_fail_lines: list[str] = []
     for r in results:
         _print_per_car(r)
         ok, why = _gate_pass(r)
         if ok:
-            pass_count += 1
-            print(f"    GATE PASS: {r['car']}")
+            aggregate_pass += 1
+            print(f"    AGGREGATE GATE (informational) PASS: {r['car']}")
         else:
-            fail_lines.append(f"    GATE FAIL: {r['car']} -- {why}")
-            print(f"    GATE FAIL: {r['car']} -- {why}")
+            aggregate_fail_lines.append(
+                f"    AGGREGATE GATE (informational) FAIL: {r['car']} -- {why}"
+            )
+            print(
+                f"    AGGREGATE GATE (informational) FAIL: {r['car']} -- {why}"
+            )
+        if r.get("skipped"):
+            per_channel_fail_lines.append(
+                f"    PER-CHANNEL GATE FAIL: {r['car']} -- skipped:{r['skipped']}"
+            )
+            continue
+        failed = r.get("per_channel_failed") or []
+        if not failed:
+            per_channel_pass += 1
+            print(f"    PER-CHANNEL GATE PASS: {r['car']}")
+        else:
+            per_channel_fail_lines.append(
+                f"    PER-CHANNEL GATE FAIL: {r['car']} -- "
+                + "; ".join(failed[:3])
+                + (f" (+{len(failed) - 3} more)" if len(failed) > 3 else "")
+            )
+            print(
+                f"    PER-CHANNEL GATE FAIL: {r['car']} -- {len(failed)} channel(s)"
+            )
 
     print("\n" + "=" * 72)
-    print(f"OVERALL: {pass_count}/{len(results)} cars pass")
-    if fail_lines:
-        print("\n".join(fail_lines))
+    print(
+        f"AGGREGATE (informational): {aggregate_pass}/{len(results)} cars pass"
+    )
+    if aggregate_fail_lines:
+        print("\n".join(aggregate_fail_lines))
+    print(
+        f"PER-CHANNEL (gating): {per_channel_pass}/{len(results)} cars pass"
+    )
+    if per_channel_fail_lines:
+        print("\n".join(per_channel_fail_lines))
     print("=" * 72)
 
     # Dump JSON for downstream consumers
@@ -445,7 +591,7 @@ def main() -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(results, indent=2, default=str))
     print(f"\n[saved JSON: {out_path}]")
-    return 0 if pass_count == len(results) else 1
+    return 0 if per_channel_pass == len(results) else 1
 
 
 if __name__ == "__main__":

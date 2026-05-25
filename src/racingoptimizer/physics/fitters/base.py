@@ -21,7 +21,21 @@ class FitterBase(ABC):
         self.n_samples = 0
 
     @abstractmethod
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None: ...
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        sample_weight: np.ndarray | None = None,
+    ) -> None:
+        """Fit the model.
+
+        ``sample_weight`` (optional) lets callers up-weight or down-weight
+        individual rows -- used by P2.3 (inverse-track-sample-count
+        weights) to keep a Sebring-heavy corpus from drowning Spa rows.
+        Implementations that cannot honour weights MUST silently ignore
+        them so the orchestrator can pass them unconditionally.
+        """
 
     @abstractmethod
     def predict(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]: ...

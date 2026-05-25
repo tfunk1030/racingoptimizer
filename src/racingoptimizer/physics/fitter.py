@@ -56,6 +56,10 @@ from racingoptimizer.physics.ontology import (
     ontology_for,
     setup_value,
 )
+from racingoptimizer.physics.static_rh_kinematic import (
+    fit_static_rh_kinematic,
+)
+from racingoptimizer.physics.static_rh_knn import build_static_rh_corpus
 from racingoptimizer.track.builder import TrackModel
 
 # Curated set of corner-phase output channels we attempt to fit. Picked from
@@ -88,6 +92,13 @@ TARGET_OUTPUT_CHANNELS: tuple[str, ...] = (
     "damper_velocity_mean_mms",
     "damper_force_p99_n",
     "damper_force_mean_n",
+    # Traction / longitudinal dynamics (previously only partially surfaced).
+    # wheel_speed_max_diff_ms closes the gap where score.traction() fell back
+    # to 0.5. accel_lon_g_* replace the long_g=0 approximation used in hybrid
+    # guardrails for mid-corner.
+    "wheel_speed_max_diff_ms",
+    "accel_lon_g_min",
+    "accel_lon_g_max",
     # Static ride-height readouts (TRACK-INVARIANT). iRacing's setup
     # YAML stores `Chassis.LeftFront.RideHeight` etc. as the calculated
     # static ride height — a deterministic function of the garage
@@ -158,7 +169,8 @@ _GP_FAMILIES: frozenset[Family] = frozenset(
      # Torsion bars (cadillac front-only). Continuous turns + (treated-
      # as-continuous) OD diameter envelope. Future renderer work can map
      # the recommended OD to the nearest of the 14 legal diameters.
-     "torsion_bar"}
+     "torsion_bar",
+     "traction_control"}
 )
 
 # Per-phase columns the env feature vector pulls. Same 12 fields as
@@ -200,7 +212,7 @@ ENV_FEATURE_COUNT_V1: int = 5
 #      part of the input feature vector so the same fitter can score any
 #      corner on any track once the target's archetypes are extracted.
 ENV_FEATURE_SCHEMA_VERSION: int = 3
-ENV_FEATURE_SCHEMA_VERSION_PER_CAR: int = 5
+ENV_FEATURE_SCHEMA_VERSION_PER_CAR: int = 6
 
 # Per-corner archetype columns appended to every training row (and required
 # at predict time). Computed via polars window aggregation over
@@ -214,6 +226,14 @@ CORNER_ARCHETYPE_COLUMNS: tuple[str, ...] = (
     "corner_min_speed_ms",        # min speed (== apex_speed; kept for symmetry)
     "corner_duration_s",          # total time in corner (sum of phase durations)
     "corner_compression_demand_mms",  # peak damper velocity in compression phases
+    # P2.4: phase-level duration. The corner-level keys above all
+    # aggregate to (session, corner) so every phase row of the same
+    # corner carries identical values; the surrogate cannot learn
+    # within-corner phase asymmetry from those alone. Adding the
+    # per-phase duration lets the fit pick up "longer braking phase
+    # at this corner type means brake bias matters more" type
+    # interactions. Bumps ENV_FEATURE_SCHEMA_VERSION_PER_CAR.
+    "phase_duration_s",
 )
 
 
@@ -428,6 +448,12 @@ def fit(
         car_baselines=car_baselines,
         feature_schema_version=ENV_FEATURE_SCHEMA_VERSION,
         axle_grip_ceilings=axle_grip_ceilings,
+        static_rh_corpus=build_static_rh_corpus(
+            sid_to_param_value, sid_to_readouts,
+        ),
+        static_rh_kinematic=fit_static_rh_kinematic(
+            car_key, sid_to_param_value, sid_to_readouts,
+        ),
     )
 
     # Persist a row per fitter to the corpus accuracy log so `optimize
@@ -603,6 +629,59 @@ def _attach_dynamic_at_speed(
     return out
 
 
+_TRACK_BALANCE_WEIGHT_COLUMN: str = "_track_balance_weight"
+
+
+def _attach_track_balance_weights(
+    frame: pl.DataFrame,
+    *,
+    track_per_session: dict[str, str],
+) -> pl.DataFrame:
+    """Add a ``_track_balance_weight`` column = ``1 / sqrt(n_track_rows)``.
+
+    P2.3: The per-car v4 surrogate pools every session for the car
+    across every track. Without re-weighting, a Sebring-heavy corpus
+    (37 sessions) drowns Spa rows (11 sessions) at fit time and the
+    Forest's split criteria are dominated by Sebring's archetype +
+    setup distribution. Multiplying each row's contribution by
+    ``1 / sqrt(n_track_rows_in_joint)`` normalises Sebring back to
+    ``sqrt(11/37) ~= 0.55`` per-row weight relative to Spa, which is
+    enough to let Spa rows shape the fit without flattening Sebring
+    completely.
+
+    Rows whose ``session_id`` has no entry in ``track_per_session``
+    fall back to weight 1.0. Empty frames return unchanged.
+    """
+    if frame.height == 0 or "session_id" not in frame.columns:
+        return frame
+    if not track_per_session:
+        return frame.with_columns(
+            pl.lit(1.0, dtype=pl.Float64).alias(_TRACK_BALANCE_WEIGHT_COLUMN),
+        )
+    track_lookup = pl.DataFrame(
+        {
+            "session_id": list(track_per_session.keys()),
+            "_track": list(track_per_session.values()),
+        }
+    )
+    annotated = frame.join(track_lookup, on="session_id", how="left")
+    counts = (
+        annotated.filter(pl.col("_track").is_not_null())
+        .group_by("_track")
+        .agg(pl.len().alias("_n"))
+    )
+    annotated = annotated.join(counts, on="_track", how="left")
+    weight_expr = (
+        pl.when(pl.col("_n").is_not_null() & (pl.col("_n") > 0))
+        .then(1.0 / pl.col("_n").cast(pl.Float64).sqrt())
+        .otherwise(1.0)
+    )
+    annotated = annotated.with_columns(
+        weight_expr.cast(pl.Float64).alias(_TRACK_BALANCE_WEIGHT_COLUMN),
+    )
+    return annotated.drop(["_track", "_n"])
+
+
 def _attach_corner_archetypes(frame: pl.DataFrame) -> pl.DataFrame:
     """Add per-(session, corner) archetype columns to the training frame.
 
@@ -630,6 +709,11 @@ def _attach_corner_archetypes(frame: pl.DataFrame) -> pl.DataFrame:
     duration_per_phase = pl.col("t_end_s") - pl.col("t_start_s")
     compression_phases = {"braking", "trail_brake", "mid_corner"}
     cols = [
+        # P2.4: phase-level duration carried into the joint feature
+        # vector so the surrogate can learn within-corner phase
+        # asymmetry (e.g. extended braking phase changes brake bias
+        # sensitivity in the fit).
+        duration_per_phase.cast(pl.Float64).alias("phase_duration_s"),
         pl.col("speed_min_ms")
         .min()
         .over(["session_id", "corner_id"])
@@ -848,6 +932,18 @@ def fit_per_car(
     # buries the setup signal under archetype variance.
     joint = _attach_setup_readouts(joint, sid_to_readouts)
     joint = _attach_dynamic_at_speed(joint, sid_to_dynamic)
+    # P2.3 -- inverse-track-sample-count training weights. Per-track row
+    # counts in the joint frame can vary 5x+ across cars (e.g. BMW
+    # Sebring 37 sessions vs Spa 11). Without re-weighting, the Forest's
+    # split criteria are dominated by the over-represented track and
+    # under-sampled tracks inherit their setup philosophy regardless of
+    # archetype features. Weighting rows by 1/sqrt(n_track_rows) gently
+    # rebalances without zeroing out any track's contribution. Track is
+    # joined in via session_id; rows missing a track mapping default to
+    # weight 1.0 (defensive).
+    joint = _attach_track_balance_weights(
+        joint, track_per_session=track_models_used,
+    )
 
     # Per-car (v4) ALWAYS uses Forest. Justification: with sessions pooled
     # across tracks, the joint feature vector is ~35 dims of mixed-scale
@@ -894,6 +990,7 @@ def fit_per_car(
                     cv_seed=cv_seed,
                     k_folds=k_folds,
                     archetype_columns=arch_cols,
+                    weight_column=_TRACK_BALANCE_WEIGHT_COLUMN,
                 )
                 if rec is None:
                     continue
@@ -985,6 +1082,16 @@ def fit_per_car(
     from racingoptimizer.physics.bayes_retrofit import fit_all_parameters
     bayes_posteriors = fit_all_parameters(per_track_observed_frozen)
 
+    # ``per_track_residuals`` was retired in P0.1 of
+    # ``docs/accuracy-rebuild-2026-05-24/PLAN.md``. The earlier
+    # implementation computed ``track_median(actual) - global_median(actual)``
+    # and added it to every prediction at that track. That is not a
+    # residual: the surrogate is already trained on those rows, so the
+    # add-on double-counts the track bias and flattens the setup -> output
+    # gradient DE needs. Proximate cause of ``+1 click +/-0.000 score``
+    # in recent briefings. The slot is kept empty for pickle compat.
+    per_track_residuals: dict[str, dict[str, float]] = {}
+
     # Per-(car, axle) grip ceilings from training corpus
     # (physics-rebuild Day-10 model, wired into DE in post-rebuild
     # work). Returns `None` on any failure path -- the recommender
@@ -1013,7 +1120,14 @@ def fit_per_car(
         feature_schema_version=ENV_FEATURE_SCHEMA_VERSION_PER_CAR,
         per_track_parameter_observed=per_track_observed_frozen,
         bayes_posteriors=bayes_posteriors,
+        per_track_residuals=per_track_residuals,
         axle_grip_ceilings=axle_grip_ceilings,
+        static_rh_corpus=build_static_rh_corpus(
+            sid_to_param_value, sid_to_readouts,
+        ),
+        static_rh_kinematic=fit_static_rh_kinematic(
+            car_key, sid_to_param_value, sid_to_readouts,
+        ),
     )
 
     if fit_records_for_log:
@@ -1099,6 +1213,7 @@ def _fit_one_quadruple(
     cv_seed: int,
     k_folds: int,
     archetype_columns: tuple[str, ...] = (),
+    weight_column: str | None = None,
 ) -> FitRecord | None:
     """Fit one (corner_id, phase, output_channel) quadruple over the joint vector.
 
@@ -1106,6 +1221,12 @@ def _fit_one_quadruple(
     are appended to the input feature vector AFTER the env block, in the
     given order. The pickled ``feature_names`` records this so predict can
     rebuild the row in the same shape.
+
+    ``weight_column`` (P2.3): when set and present in ``sub``, the per-row
+    values are passed as ``sample_weight`` to the underlying fitter. Forest
+    honours it natively; ridge/GP silently ignore. Used to apply
+    inverse-track-sample-count weighting so a Sebring-heavy corpus doesn't
+    drown Spa rows.
     """
     if "data_quality_clean_frac" in sub.columns:
         sub = sub.filter(pl.col("data_quality_clean_frac") >= MIN_TRAINING_CLEAN_FRACTION)
@@ -1168,11 +1289,20 @@ def _fit_one_quadruple(
         seed=seed, cv_seed=cv_seed,
     )
 
+    sample_weight: np.ndarray | None = None
+    if weight_column is not None and weight_column in cleaned.columns:
+        weights_col = (
+            cleaned.select(weight_column).cast(pl.Float64).fill_null(1.0).to_numpy()
+        )
+        sample_weight = weights_col.reshape(-1)
+        if sample_weight.shape[0] != X.shape[0]:
+            sample_weight = None
+
     fitter = _make_fitter(family_kind, seed=seed)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ConvergenceWarning)
-            fitter.fit(X, y)
+            fitter.fit(X, y, sample_weight=sample_weight)
     except (np.linalg.LinAlgError, ValueError, RuntimeError):
         return None
     if not fitter.is_trained:

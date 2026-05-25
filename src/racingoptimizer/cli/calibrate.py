@@ -12,11 +12,13 @@ same value (e.g. front torsion bar OD never moved off 15.1 mm). This command:
   proposing changes.
 
 The output is read-only against the corpus -- no model retrain, no DE search.
-We just inspect ``model.per_track_parameter_observed[track]`` and the
-constraint envelope.
+Coverage is built live from ingested session setups (via ``setup_value``),
+not from a cached fit pickle, so a stint ingested with ``optimize learn``
+shows up on the next calibrate run.
 """
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 
@@ -49,6 +51,26 @@ _DEFAULT_TARGETS: int = 3
 # but no curvature; three is the threshold where the regression is
 # robust to a single noisy session.
 _COVERED_THRESHOLD: int = 3
+
+# Excluded from coverage tables and probe selection:
+# - unverified ontology json_paths (steal probe slots)
+# - tyre cold pressure: community GTP floor 152 kPa; recommend auto-pins it
+# - brake bias: driver preference, not a platform-calibration axis
+_CALIBRATE_EXCLUDED: frozenset[str] = frozenset({
+    "brake_duct_front",
+    "brake_duct_rear",
+    "throttle_brake_mapping",
+    "tyre_cold_pressure_kpa",
+    "brake_bias_pct",
+})
+
+
+def _calibrate_fittables(car_key: str, constraints: ConstraintsTable) -> list[str]:
+    return [
+        name
+        for name in fittable_parameters(car_key, constraints)
+        if name not in _CALIBRATE_EXCLUDED
+    ]
 
 
 def _coverage_pct(
@@ -236,15 +258,18 @@ def calibrate_cmd(
 
     constraints = load_constraints()
     onto = ontology_for(car_key)
-    fittables = fittable_parameters(car_key, constraints)
+    fittables = _calibrate_fittables(car_key, constraints)
 
     target_subset = _filter_to_target_track(catalog_sessions, track_slug)
     if target_subset.height == 0:
         target_subset = sessions_for_target
     most_recent_setup = _most_recent_setup_for(target_subset)
 
-    per_track = getattr(model, "per_track_parameter_observed", {}) or {}
-    track_observed = per_track.get(track_slug, {})
+    track_observed = _track_observed_from_catalog(
+        target_subset,
+        car_key=car_key,
+        fittables=fittables,
+    )
 
     rows = _build_coverage_rows(
         fittables=fittables,
@@ -380,6 +405,38 @@ def _maybe_save(
             f"\n[warning: could not write {output_file}: {exc}]",
             err=True,
         )
+
+
+def _track_observed_from_catalog(
+    sessions_df: pl.DataFrame,
+    *,
+    car_key: str,
+    fittables: list[str],
+) -> dict[str, tuple[float, ...]]:
+    """Distinct setup values per parameter on the target track's sessions."""
+    by_param: dict[str, set[float]] = {name: set() for name in fittables}
+    for row in sessions_df.iter_rows(named=True):
+        raw_setup = row.get("setup")
+        if not raw_setup:
+            continue
+        if isinstance(raw_setup, str):
+            try:
+                setup = json.loads(raw_setup)
+            except json.JSONDecodeError:
+                continue
+        elif isinstance(raw_setup, dict):
+            setup = raw_setup
+        else:
+            continue
+        for name in fittables:
+            val = setup_value(car_key, name, setup)
+            if val is not None:
+                by_param[name].add(float(val))
+    return {
+        name: tuple(sorted(vals))
+        for name, vals in by_param.items()
+        if vals
+    }
 
 
 def _build_coverage_rows(

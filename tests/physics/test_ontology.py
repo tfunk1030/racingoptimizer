@@ -203,3 +203,73 @@ def test_fittable_parameters_only_returns_bounded_user_settable() -> None:
 )
 def test_module_constants_match_ontology_for(car: str, module_dict: dict) -> None:
     assert ontology_for(car) is module_dict
+
+
+def test_acura_split_garage_parameters_resolve() -> None:
+    """Acura uses Systems.* diff/TC paths and Dampers.*Roll blocks."""
+    setup = {
+        "Chassis": {
+            "Front": {"ArbSize": "Soft"},
+            "Rear": {"ArbSize": "Medium"},
+            "LeftFront": {
+                "TorsionBarTurns": "0.085 Turns",
+                "TorsionBarOD": "15.51 mm",
+            },
+            "LeftRear": {
+                "TorsionBarTurns": "-0.120 Turns",
+                "TorsionBarOD": "14.34 mm",
+            },
+        },
+        "Dampers": {
+            "FrontRoll": {"LsDamping": "5 clicks", "HsDamping": "6 clicks"},
+            "RearRoll": {"LsDamping": "7 clicks", "HsDamping": "8 clicks"},
+        },
+        "Systems": {
+            "RearDiffSpec": {
+                "DiffRampAngles": "50/75",
+                "ClutchFrictionPlates": 4,
+            },
+            "TractionControl": {
+                "TractionControlGain": "4 (TC1)",
+                "TractionControlSlip": "5 (TC2)",
+            },
+        },
+    }
+    assert setup_value("acura", "arb_size_front", setup) == pytest.approx(1.0)
+    assert setup_value("acura", "arb_size_rear", setup) == pytest.approx(2.0)
+    disconnected = {
+        "Chassis": {
+            "Front": {"ArbSize": "Disconnected"},
+            "Rear": {"ArbSize": "Disconnected"},
+        },
+    }
+    assert setup_value("acura", "arb_size_front", disconnected) == pytest.approx(0.0)
+    assert setup_value("acura", "arb_size_rear", disconnected) == pytest.approx(0.0)
+    assert setup_value("acura", "torsion_bar_turns_fl", setup) == pytest.approx(0.085)
+    assert setup_value("acura", "torsion_bar_od_fl_mm", setup) == pytest.approx(15.51)
+    assert setup_value("acura", "diff_coast_drive_ramps", setup) == pytest.approx(2.0)
+    assert setup_value("acura", "diff_clutch_friction_plates", setup) == pytest.approx(4.0)
+    assert setup_value("acura", "damper_roll_lsc_front", setup) == pytest.approx(5.0)
+    assert setup_value("acura", "damper_roll_hsc_rear", setup) == pytest.approx(8.0)
+    assert setup_value("acura", "traction_control_gain", setup) == pytest.approx(4.0)
+    assert setup_value("acura", "traction_control_slip", setup) == pytest.approx(5.0)
+
+    table = load_constraints()
+    fittable = set(fittable_parameters("acura", table))
+    for name in (
+        "arb_size_front",
+        "arb_size_rear",
+        "torsion_bar_turns_fl",
+        "torsion_bar_od_fl_mm",
+        "torsion_bar_turns_rl",
+        "torsion_bar_od_rl_mm",
+        "diff_coast_drive_ramps",
+        "diff_clutch_friction_plates",
+        "damper_roll_lsc_front",
+        "damper_roll_hsc_front",
+        "damper_roll_lsc_rear",
+        "damper_roll_hsc_rear",
+        "traction_control_gain",
+        "traction_control_slip",
+    ):
+        assert name in fittable, name

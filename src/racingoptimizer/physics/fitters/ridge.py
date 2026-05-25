@@ -70,7 +70,17 @@ class RidgeFitter(FitterBase):
         self._x_std: np.ndarray | None = None
         self._residual_std: float = 0.0
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        sample_weight: np.ndarray | None = None,  # noqa: ARG002
+    ) -> None:
+        # P2.3: ridge channels (setup-readout / dynamic_*) are session-
+        # invariant so per-track resampling has no effect on the fit; we
+        # silently accept the kwarg to keep the orchestrator's call site
+        # uniform across families.
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64)
         if X.ndim == 1:

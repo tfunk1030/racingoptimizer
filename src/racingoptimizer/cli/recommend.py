@@ -47,6 +47,7 @@ from racingoptimizer.ingest.detect import (
     normalize_car_key,
     slugify_track,
 )
+from racingoptimizer.ingest.parser import _filename_recorded_at
 from racingoptimizer.ingest.paths import resolve_corpus_root
 
 CANONICAL_CARS = ("acura", "bmw", "cadillac", "ferrari", "porsche")
@@ -329,6 +330,22 @@ def recommend_cmd(
                 no_cache=no_cache,
             )
         )
+        # P3.3 -- thin-corpus refusal. When the per-car corpus is below
+        # the trust threshold (n_prod < _THIN_CORPUS_REFUSAL_N) OR the
+        # axle-grip-ceiling fit failed (so hybrid scoring silently
+        # collapses to surrogate-only), refuse to emit a DE-driven race
+        # setup. The `optimize calibrate` probes are still appropriate
+        # next step.
+        if _is_thin_corpus_for_recommend(model, catalog_sessions):
+            _emit_thin_corpus_refusal(
+                car_key=car_key,
+                track_slug=track_slug,
+                model=model,
+                catalog_sessions=catalog_sessions,
+                as_json=as_json,
+                output_file=output_file,
+            )
+            return
         sessions_for_fit = catalog_sessions  # env medians come from full corpus
         session_ids = sorted(catalog_sessions["session_id"].to_list())
         env = _env_from_overrides(
@@ -390,6 +407,11 @@ def recommend_cmd(
     )
     top_warnings.extend(
         _within_track_variance_warnings(model, track_slug, rec.parameters),
+    )
+    top_warnings.extend(
+        _unlearned_ibt_on_disk_warnings(
+            car_key, track_slug, catalog_sessions, root,
+        ),
     )
     if pin_info_messages:
         top_warnings = pin_info_messages + top_warnings
@@ -848,6 +870,74 @@ def _safe_sessions(car: str, *, corpus_root: Path) -> pl.DataFrame:
             err=True,
         )
         sys.exit(4)
+
+
+# Below this many production sessions, the per-car v4 surrogate is too
+# thin for the axle-grip-ceiling fit (which needs >= 100 mid-corner rows
+# across the corpus) and the recommender silently collapses to
+# surrogate-only scoring. P3.3 makes that collapse explicit.
+_THIN_CORPUS_REFUSAL_N: int = 20
+
+
+def _is_thin_corpus_for_recommend(model, catalog_sessions: pl.DataFrame) -> bool:
+    """Whether the per-car corpus is below the race-recommend trust bar.
+
+    True when EITHER the production session count for the car is below
+    ``_THIN_CORPUS_REFUSAL_N`` OR the model's per-axle grip ceilings
+    fit failed (so hybrid scoring silently collapses to surrogate-only
+    -- a state the user would otherwise not see).
+    """
+    n_prod = int(catalog_sessions.height) if catalog_sessions is not None else 0
+    if n_prod < _THIN_CORPUS_REFUSAL_N:
+        return True
+    axle_ceilings = getattr(model, "axle_grip_ceilings", None)
+    if axle_ceilings is None:
+        return True
+    return False
+
+
+def _thin_corpus_refusal_lines(car_key: str, track_slug: str, model, n_prod: int) -> list[str]:
+    has_axles = getattr(model, "axle_grip_ceilings", None) is not None
+    axle_phrase = "axle ceilings fit" if has_axles else "no axle ceilings fit"
+    return [
+        f"Corpus too thin for race recommend ({n_prod} production sessions, "
+        f"{axle_phrase}).",
+        f"Run `optimize calibrate {car_key} {track_slug}` instead -- "
+        "calibration probes will widen the corpus where DE has no "
+        "physics signal.",
+    ]
+
+
+def _emit_thin_corpus_refusal(
+    *,
+    car_key: str,
+    track_slug: str,
+    model,
+    catalog_sessions: pl.DataFrame,
+    as_json: bool,
+    output_file: Path | None,  # accepted for symmetry; refusal writes nothing
+) -> None:
+    n_prod = int(catalog_sessions.height) if catalog_sessions is not None else 0
+    lines = _thin_corpus_refusal_lines(car_key, track_slug, model, n_prod)
+    if as_json:
+        out = {
+            "car": car_key,
+            "track": track_slug,
+            "refused": True,
+            "reason": "thin_corpus",
+            "n_production_sessions": n_prod,
+            "axle_grip_ceilings_present": getattr(
+                model, "axle_grip_ceilings", None,
+            ) is not None,
+            "warnings": lines,
+        }
+        click.echo(json.dumps(out, indent=2, sort_keys=False))
+        return
+    banner = "\n".join(lines)
+    click.echo(banner)
+    # Suppress the auto-saved recommendations/<...>.txt file so a
+    # refusal doesn't leave a misleading "race recommend" artefact on
+    # disk. ``optimize calibrate`` writes its own file.
 
 
 def _match_track_slug(
@@ -1562,7 +1652,7 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
     this round step the briefing emits values like "anti_roll_bar_front:
     3.700" — a value the user cannot enter into the iRacing garage UI.
     """
-    from racingoptimizer.physics.ontology import ontology_for
+    from racingoptimizer.physics.ontology import ontology_for, snap_to_garage_step
 
     try:
         onto = ontology_for(model.car)
@@ -1572,10 +1662,26 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
     clamp_warnings: dict[str, str] = {}
     top_warnings: list[str] = []
     pinned = tuple(getattr(rec, "pinned_to_observed_median", ()) or ())
-    if pinned:
+    thin_track = set(getattr(rec, "pinned_within_track_thin", ()) or ())
+    if thin_track:
+        top_warnings.append(
+            "pinned at target track (fewer than 3 distinct values driven "
+            "here -- run `optimize calibrate` before trusting moves): "
+            + ", ".join(sorted(thin_track))
+        )
+    global_pinned = [p for p in pinned if p not in thin_track]
+    if global_pinned:
         top_warnings.append(
             "pinned to observed median (no per-session variation in training "
-            "corpus, no learnable response surface): " + ", ".join(pinned)
+            "corpus, no learnable response surface): " + ", ".join(global_pinned)
+        )
+    suppressed = tuple(
+        getattr(rec, "suppressed_below_sensitivity", ()) or ()
+    )
+    if suppressed:
+        top_warnings.append(
+            "held at past value (model cannot resolve +/-1 click on this "
+            "corpus -- below sensitivity floor): " + ", ".join(sorted(suppressed))
         )
     new_params: dict[str, tuple[float, Confidence]] = {}
     for name, (value, confidence) in rec.parameters.items():
@@ -1606,6 +1712,15 @@ def _post_clamp(rec, model, constraints_table: ConstraintsTable):
                     f"{int(lo)}..{int(hi)})"
                 )
             clamped_value = rounded
+        elif spec is not None:
+            snapped = snap_to_garage_step(clamped_value, spec)
+            if abs(snapped - clamped_value) > 1e-9:
+                clamp_warnings.setdefault(
+                    name,
+                    f"snapped to garage click from {clamped_value:.6g} "
+                    f"to {snapped:.6g}",
+                )
+            clamped_value = snapped
         if result.was_clamped and name not in clamp_warnings:
             clamp_warnings[name] = (
                 f"value clamped from {value:.3f} to {clamped_value:.3f} "
@@ -1620,7 +1735,7 @@ def _within_track_variance_warnings(
     track: str,
     parameters: dict,
 ) -> list[str]:
-    """Warn when a recommendation extrapolates with zero within-track variance."""
+    """Warn when a recommendation extrapolates beyond within-track evidence."""
     per_track = getattr(model, "per_track_parameter_observed", {}) or {}
     track_obs = per_track.get(track, {})
     warnings: list[str] = []
@@ -1628,10 +1743,7 @@ def _within_track_variance_warnings(
         observed = track_obs.get(name)
         if not observed:
             continue
-        unique = {float(v) for v in observed}
-        if len(unique) > 1:
-            continue
-        only = next(iter(unique))
+        unique = sorted({float(v) for v in observed})
         rec_val = float(value)
         spec_step = 1.0
         try:
@@ -1641,6 +1753,18 @@ def _within_track_variance_warnings(
                 spec_step = float(spec.step)
         except KeyError:
             pass
+        if len(unique) >= 3:
+            continue
+        if len(unique) == 2:
+            if unique[0] - spec_step * 0.5 <= rec_val <= unique[1] + spec_step * 0.5:
+                continue
+            warnings.append(
+                f"{name}: recommended {rec_val:.4g} but only "
+                f"{unique[0]:.4g}..{unique[1]:.4g} observed at {track} "
+                f"(thin within-track coverage) -- verify on track."
+            )
+            continue
+        only = unique[0]
         if abs(rec_val - only) <= spec_step * 0.5:
             continue
         warnings.append(
@@ -1649,6 +1773,59 @@ def _within_track_variance_warnings(
             "may be extrapolating; verify on track."
         )
     return warnings
+
+
+def _unlearned_ibt_on_disk_warnings(
+    car_key: str,
+    track_slug: str,
+    catalog_sessions: pl.DataFrame,
+    corpus_root: Path,
+) -> list[str]:
+    """Warn when `.ibt` files on disk are newer than the ingested corpus."""
+    ibt_dir = corpus_root.parent / "ibtfiles"
+    if not ibt_dir.is_dir():
+        return []
+    target_sessions = catalog_sessions.filter(pl.col("track") == track_slug)
+    ingested_names: set[str] = set()
+    max_recorded: str | None = None
+    if target_sessions.height > 0:
+        if "source_path" in target_sessions.columns:
+            for path in target_sessions["source_path"].to_list():
+                if path:
+                    ingested_names.add(Path(str(path)).name)
+        if "recorded_at" in target_sessions.columns:
+            recorded = [r for r in target_sessions["recorded_at"].to_list() if r]
+            if recorded:
+                max_recorded = max(recorded)
+    pending: list[str] = []
+    for ibt_path in sorted(ibt_dir.rglob("*.ibt")):
+        try:
+            file_car = detect_car_from_filename(ibt_path.name)
+        except UnknownCarError:
+            continue
+        if file_car != car_key:
+            continue
+        raw_track = detect_track_from_filename(ibt_path.name)
+        if raw_track is None:
+            continue
+        match, _ = _match_track_slug(track_slug, [raw_track])
+        if match != track_slug:
+            continue
+        if ibt_path.name in ingested_names:
+            continue
+        file_ts = _filename_recorded_at(ibt_path)
+        if max_recorded is not None and file_ts is not None and file_ts <= max_recorded:
+            continue
+        pending.append(ibt_path.name)
+    if not pending:
+        return []
+    shown = ", ".join(pending[:3])
+    extra = f" (+{len(pending) - 3} more)" if len(pending) > 3 else ""
+    return [
+        f"unlearned IBT file(s) on disk for {car_key} @ {track_slug}: "
+        f"{shown}{extra} -- run `optimize learn` before recommend so the "
+        f"past setup and coverage table reflect your latest stints."
+    ]
 
 
 def _static_ride_height_envelope_warnings(
@@ -1678,8 +1855,9 @@ def _static_ride_height_envelope_warnings(
         rh = float(value)
         if rh < lo or rh > hi:
             warnings.append(
-                f"Predicted {label} {rh:.1f} mm outside observation envelope "
-                f"({lo:.0f}-{hi:.0f} mm) -- verify platform inputs before running."
+                f"!! PLATFORM WARNING: Predicted {label} {rh:.1f} mm outside "
+                f"observed envelope ({lo:.0f}-{hi:.0f} mm). "
+                "Verify perch/pushrod/spring inputs in iRacing garage after applying [OPT] values."
             )
     return warnings
 
@@ -1937,8 +2115,8 @@ def _overall_regime(coverage: list[TrackCoverage]) -> str:
 
 def _status_notes() -> list[str]:
     return [
-        "constraints.md is missing verified ontology paths for: brake_ducts "
-        "and some per-car blocked garage leaves.",
+        "Some per-car garage leaves still lack verified optimizer mappings "
+        "(see garage_inventory.py and constraints.md).",
     ]
 
 

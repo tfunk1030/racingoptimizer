@@ -1,0 +1,55 @@
+========================================================================
+ bmw @ spa_2024_up -- calibration probe (N=16 sessions)
+ Coverage: 41/48 parameters with N>=3 distinct values  (85% explored, 3 pinned)
+========================================================================
+
+PARAMETER                            N  RANGE                      COVERAGE
+---------------------------------------------------------------------------
+throttle_brake_mapping               0  (none observed)                  0%
+arb_size_front                       1  1.000 (single)                   0%
+tyre_cold_pressure_kpa               1  152.0 kPa (single)               0%
+rear_wing_angle_deg                  2  15 .. 16 deg                    20%
+anti_roll_bar_front                  2  1.000 .. 2.000 click            25%
+arb_size_rear                        2  2.000 .. 3.000                  33%
+diff_clutch_friction_plates          2  4.000 .. 6.000 plates           50%
+brake_bias_pct                       3  46.000 .. 47.000 pct             5%
+camber_rl_deg                        3  -1.9 .. -1.7 deg                11%
+camber_rr_deg                        3  -1.9 .. -1.7 deg                11%
+camber_fl_deg                        3  -2.9 .. -2.5 deg                14%
+camber_fr_deg                        3  -2.9 .. -2.5 deg                14%
+damper_hsc_slope_fl                  3  9 .. 11 click                   18%
+damper_hsc_slope_rl                  3  9 .. 11 click                   18%
+damper_hsc_slope_rr                  3  9 .. 11 click                   18%
+damper_lsc_rr                        3  7 .. 9 click                    18%
+damper_lsr_rl                        3  7 .. 9 click                    18%
+damper_lsr_rr                        3  7 .. 9 click                    18%
+diff_coast_drive_ramps               3  0.000 .. 2.000                 100%
+toe_front_mm                         4  -1.0 .. -0.3 mm                 12%
+heave_spring_rate_n_per_mm           4  40 .. 160 N/mm                  13%
+toe_rl_mm                            4  -0.0 .. 1.0 mm                  20%
+damper_hsc_fr                        4  6 .. 9 click                    27%
+damper_hsc_slope_fr                  4  8 .. 11 click                   27%
+damper_hsr_fl                        4  5 .. 8 click                    27%
+damper_hsr_fr                        4  5 .. 8 click                    27%
+damper_lsc_rl                        4  6 .. 9 click                    27%
+damper_hsr_rl                        4  7 .. 11 click                   36%
+damper_hsr_rr                        4  7 .. 11 click                   36%
+damper_lsc_fl                        4  4 .. 8 click                    36%
+damper_lsc_fr                        4  4 .. 8 click                    36%
+torsion_bar_od_fl_mm                 4  14.340 .. 16.190 mm             43%
+fuel_level_l                         4  12 .. 58 L                      46%
+damper_hsc_fl                        5  5 .. 9 click                    36%
+damper_lsr_fl                        5  5 .. 9 click                    36%
+damper_lsr_fr                        5  5 .. 9 click                    36%
+damper_hsc_rr                        5  6 .. 11 click                   45%
+damper_hsc_rl                        5  5 .. 11 click                   55%
+anti_roll_bar_rear                   5  1.000 .. 5.000 click           100%
+spring_perch_offset_rear_mm          6  24.0 .. 41.5 mm                  9%
+rear_coil_spring_rate_n_per_mm       6  125 .. 180 N/mm                 31%
+torsion_bar_turns_fl                 7  0.090 .. 0.108 turns             4%
+third_perch_offset_rear_mm           7  40.0 .. 52.0 mm                  6%
+heave_perch_offset_front_mm          7  -29.5 .. -11.0 mm                9%
+diff_preload_nm                      7  10.000 .. 80.000 Nm             47%
+pushrod_length_offset_front_mm       8  -33.5 .. -26.0 mm                9%
+third_spring_rate_n_per_mm           8  330 .. 500 N/mm                 19%
+pushrod_length_offset_rear_mm       10  -35.5 .. 1.5 mm                 46%

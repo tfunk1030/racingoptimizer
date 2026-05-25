@@ -155,7 +155,17 @@ def test_guardrail_warnings_threads_aero_residual_correction(monkeypatch) -> Non
         SimpleNamespace(
             corner_id=1,
             phase="mid_corner",
-            archetype={"corner_apex_speed_ms": 40.0},
+            # Real-corner archetype: real corners on a GTP schedule
+            # always carry peak_lat_g and a meaningful entry/apex
+            # speed delta. ``is_real_corner_archetype`` (P0.4) skips
+            # entries that look like start/finish straights.
+            archetype={
+                "corner_apex_speed_ms": 35.0,
+                "corner_peak_lat_g": 1.8,
+                "corner_max_speed_ms": 65.0,
+                "corner_min_speed_ms": 33.0,
+                "corner_duration_s": 4.5,
+            },
         )
     ]
     warnings = guardrail_warnings_for_setup(

@@ -100,6 +100,12 @@ def classify_unmapped_path(path: tuple[str, ...]) -> tuple[Classification, str]:
     dotted = ".".join(path)
     last = path[-1].lower() if path else ""
 
+    # Brake ducts are now in ontology (2026 integration) — if a leaf matches
+    # a brake_duct pattern but didn't resolve via json_path, treat as known
+    # but pending exact path verification.
+    if "brake_duct" in dotted.lower() or "brakeduct" in dotted.lower():
+        return "blocked_user_input", "brake duct opening — ontology entry exists; exact json_path may need per-car tuning"
+
     if dotted == "UpdateCount":
         return "unsupported_non_setup", "setup blob metadata counter"
 
@@ -128,7 +134,7 @@ def classify_unmapped_path(path: tuple[str, ...]) -> tuple[Classification, str]:
         "perch",
         "pushrod",
         "torsion",
-        "brake",
+        "brake",  # broad; brake_duct_* are now partially mapped via ontology
         "diff",
         "fuel",
         "gear",

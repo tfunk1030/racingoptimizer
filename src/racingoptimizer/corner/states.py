@@ -182,6 +182,16 @@ _RIDE_HEIGHT_MEAN_COLUMNS: tuple[tuple[str, str], ...] = (
     ("RRrideHeight", "rr_ride_height_mean_mm"),
 )
 
+# Acura ARX-06 exposes heave + roll shock deflection instead of the
+# four-corner quad. Map onto the standard aliases so derived columns
+# (damper velocity/force, load-transfer asymmetry) materialise.
+_ACURA_SHOCK_DEFL_SOURCES: tuple[tuple[str, str], ...] = (
+    ("LFshockDefl", "HFshockDefl"),
+    ("RFshockDefl", "FROLLshockDefl"),
+    ("LRshockDefl", "TRshockDefl"),
+    ("RRshockDefl", "RROLLshockDefl"),
+)
+
 
 def segment_lap(
     lap_df: pl.DataFrame,
@@ -347,6 +357,18 @@ def _aggregate(
     if inner.height == 0:
         return _empty_frame(has)
 
+    # Acura: synthesise the four-corner shockDefl quad from heave/roll
+    # channels when the per-wheel set is absent.
+    if not has_shocks and (car or "").lower() == "acura":
+        acura_cols = {dst: src for dst, src in _ACURA_SHOCK_DEFL_SOURCES}
+        if all(src in cols for src in acura_cols.values()):
+            inner = inner.with_columns(
+                [pl.col(src).alias(dst) for dst, src in acura_cols.items()]
+            )
+            for dst in acura_cols:
+                has[dst] = True
+            has_shocks = True
+
     # Materialise per-sample damper velocity (mm/s) before group_by so the
     # diff stays within the lap. Raw shockDefl is in METERS; * 1000 -> mm/s.
     # The leading sample's diff is null; Polars aggregates ignore nulls.
@@ -503,6 +525,13 @@ def _aggregate(
         traction_util = ((wheel_max - wheel_min) / speed_floor).clip(0.0, 1.0)
         aggs.append(
             traction_util.mean().cast(pl.Float32).alias("traction_util_mean")
+        )
+        # Raw wheel speed differential (m/s) — expected by physics.score.traction()
+        # and used for wheelspin baselines / exit traction guardrails.
+        # Emitted as the mean of the per-sample (max-min) during the phase.
+        wheel_speed_max_diff = (wheel_max - wheel_min)
+        aggs.append(
+            wheel_speed_max_diff.mean().cast(pl.Float32).alias("wheel_speed_max_diff_ms")
         )
 
     # Spec section 6: aero-platform front/rear ride-height means + pitch.
@@ -683,6 +712,7 @@ def _output_columns(present: list[str]) -> list[str]:
         "understeer_angle_mean_rad",
         "load_transfer_asymmetry_mean",
         "traction_util_mean",
+        "wheel_speed_max_diff_ms",
         "lf_shock_defl_p99_mm",
         "rf_shock_defl_p99_mm",
         "lr_shock_defl_p99_mm",
@@ -778,6 +808,7 @@ def _empty_frame(has: dict[str, bool]) -> pl.DataFrame:
         schema["damper_force_mean_n"] = pl.Float32
     if has_wheel_speeds_e and has["Speed"]:
         schema["traction_util_mean"] = pl.Float32
+        schema["wheel_speed_max_diff_ms"] = pl.Float32
     if has_ride_heights_e:
         schema["aero_platform_front_rh_mean_mm"] = pl.Float32
         schema["aero_platform_rear_rh_mean_mm"] = pl.Float32

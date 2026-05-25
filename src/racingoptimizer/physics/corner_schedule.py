@@ -53,6 +53,44 @@ class CornerScheduleEntry:
     archetype: dict[str, float]
 
 
+# Minimum observed peak lat-G across the corner for the schedule entry
+# to count as a real corner. Real GTP corners apex above 1.0 g; the
+# start/finish straight and pit-out segments that occasionally leak in
+# as "corner 0" sit near zero. Chosen below the 0.5 threshold used
+# downstream in ``physics.score`` so legitimate slow corners still pass.
+_MIN_CORNER_PEAK_LAT_G: float = 0.40
+
+# Minimum slowdown delta (max - apex) before we'll call something a
+# corner. Straight slots have apex ~= max; real corners shed at least
+# ~5 m/s (~18 km/h) entering the apex.
+_MIN_CORNER_SLOWDOWN_MS: float = 5.0
+
+
+def is_real_corner_archetype(archetype: dict[str, float] | None) -> bool:
+    """True when the archetype's observed geometry is corner-like.
+
+    Filter for guardrail and recommend-time iteration: schedules
+    occasionally include a phantom slot (corner_id=0 in particular)
+    that corresponds to the start/finish straight or pit-out. Such
+    slots produce nonsense guardrail spam like
+    ``T0 mid_corner: physics-vs-surrogate divergence (front 0.34, rear 0.34)``
+    because the surrogate's predicted lat-G on straight-line features is
+    near zero and the empirical ceiling comparison is meaningless.
+
+    See ``docs/accuracy-rebuild-2026-05-24/PLAN.md`` P0.4.
+    """
+    if not archetype:
+        return False
+    peak = float(archetype.get("corner_peak_lat_g") or 0.0)
+    if peak < _MIN_CORNER_PEAK_LAT_G:
+        return False
+    apex = float(archetype.get("corner_apex_speed_ms") or 0.0)
+    vmax = float(archetype.get("corner_max_speed_ms") or 0.0)
+    if vmax > 0.0 and (vmax - apex) < _MIN_CORNER_SLOWDOWN_MS:
+        return False
+    return True
+
+
 def build_corner_schedule(
     session_ids: Iterable[str],
     *,
@@ -213,4 +251,5 @@ __all__ = [
     "ARCHETYPE_KEYS",
     "CornerScheduleEntry",
     "build_corner_schedule",
+    "is_real_corner_archetype",
 ]

@@ -100,6 +100,7 @@ _SHOCK_COLUMNS: tuple[str, ...] = (
     "lr_shock_defl_p99_mm",
     "rr_shock_defl_p99_mm",
 )
+_WHEELSPIN_COLUMNS: tuple[str, ...] = ("wheel_speed_max_diff_ms",)
 
 
 def derive_baselines(car: str, frame: pl.DataFrame | None) -> CarBaselines:
@@ -122,13 +123,16 @@ def derive_baselines(car: str, frame: pl.DataFrame | None) -> CarBaselines:
     yaw = _quantile_abs(frame, _YAW_COLUMNS)
     rh_var = _ride_height_variance_quantile(frame)
     shock = _quantile_abs(frame, _SHOCK_COLUMNS)
+    wheelspin = _quantile_abs(frame, _WHEELSPIN_COLUMNS)
 
     return CarBaselines(
         car=car_key,
         max_lateral_g=lat_g if lat_g is not None else defaults.max_lateral_g,
         understeer_scale_rad=us if us is not None else defaults.understeer_scale_rad,
         yaw_rate_scale_rad_s=yaw if yaw is not None else defaults.yaw_rate_scale_rad_s,
-        wheelspin_scale_ms=defaults.wheelspin_scale_ms,
+        wheelspin_scale_ms=(
+            wheelspin if wheelspin is not None else defaults.wheelspin_scale_ms
+        ),
         ride_height_variance_scale_mm=(
             rh_var if rh_var is not None else defaults.ride_height_variance_scale_mm
         ),

@@ -65,6 +65,29 @@ def test_calibrate_unknown_car_exits_2(tmp_corpus: Path) -> None:
     assert result.exit_code == 2
 
 
+def test_calibrate_excludes_unverified_brake_duct_and_throttle_map(
+    multi_lap_ibt: Path, tmp_corpus: Path,
+) -> None:
+    """Probe selection skips brake ducts and throttle map (unverified paths)."""
+    runner = CliRunner()
+    runner.invoke(main, ["learn", str(multi_lap_ibt), "--corpus-root", str(tmp_corpus)])
+    result = runner.invoke(
+        main,
+        [
+            "calibrate", "bmw", "sebring",
+            "--status",
+            "--corpus-root", str(tmp_corpus),
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, result.output
+    assert "brake_duct_front" not in result.output
+    assert "brake_duct_rear" not in result.output
+    assert "throttle_brake_mapping" not in result.output
+    assert "tyre_cold_pressure" not in result.output
+    assert "brake bias" not in result.output.lower()
+
+
 def test_calibrate_no_corpus_exits_2(tmp_corpus: Path) -> None:
     """Asking for a car with zero ingested sessions should exit 2 with a
     helpful message."""

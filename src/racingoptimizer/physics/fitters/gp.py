@@ -78,7 +78,18 @@ class GPFitter(FitterBase):
         self._x_mean: np.ndarray | None = None
         self._x_std: np.ndarray | None = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        sample_weight: np.ndarray | None = None,  # noqa: ARG002
+    ) -> None:
+        # P2.3: sklearn's GaussianProcessRegressor doesn't support
+        # ``sample_weight``. Silently accepting the kwarg keeps the
+        # orchestrator's call site uniform; per-track row weighting is
+        # applied via the Forest path (which is the dominant family
+        # for telemetry-driven channels in v4).
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64)
         if X.ndim == 1:

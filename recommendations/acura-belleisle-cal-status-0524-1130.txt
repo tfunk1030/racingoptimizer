@@ -1,0 +1,45 @@
+========================================================================
+ acura @ belleisle -- calibration probe (N=6 sessions)
+ Coverage: 13/38 parameters with N>=3 distinct values  (34% explored, 2 pinned)
+========================================================================
+
+PARAMETER                            N  RANGE                      COVERAGE
+---------------------------------------------------------------------------
+rear_wing_angle_deg                  1  10 deg (single)                  0%
+tyre_cold_pressure_kpa               1  152.0 kPa (single)               0%
+brake_bias_pct                       2  47.000 .. 48.000 pct             5%
+camber_rl_deg                        2  -1.9 .. -1.8 deg                 5%
+camber_rr_deg                        2  -1.9 .. -1.8 deg                 5%
+damper_hsr_fl                        2  3 .. 5 click                    18%
+damper_hsr_fr                        2  3 .. 5 click                    18%
+damper_hsr_rl                        2  3 .. 5 click                    18%
+damper_hsr_rr                        2  3 .. 5 click                    18%
+damper_lsc_rl                        2  5 .. 7 click                    18%
+damper_lsc_rr                        2  5 .. 7 click                    18%
+damper_lsr_rl                        2  3 .. 5 click                    18%
+damper_lsr_rr                        2  3 .. 5 click                    18%
+fuel_level_l                         2  29.5 .. 58.0 L                  29%
+damper_hsc_rl                        2  4 .. 8 click                    36%
+damper_hsc_rr                        2  4 .. 8 click                    36%
+damper_lsc_fl                        2  4 .. 8 click                    36%
+damper_lsc_fr                        2  4 .. 8 click                    36%
+damper_hsc_slope_fl                  2  5 .. 10 click                   45%
+damper_hsc_slope_fr                  2  5 .. 10 click                   45%
+damper_hsc_slope_rl                  2  5 .. 10 click                   45%
+damper_hsc_slope_rr                  2  5 .. 10 click                   45%
+damper_hsc_fl                        2  2 .. 9 click                    64%
+damper_hsc_fr                        2  2 .. 9 click                    64%
+anti_roll_bar_rear                   2  1.000 .. 5.000 click           100%
+heave_spring_rate_n_per_mm           3  160 .. 210 N/mm                 10%
+heave_perch_offset_front_mm          3  34.5 .. 57.5 mm                 12%
+third_spring_rate_n_per_mm           3  100.000 .. 210.000 N/mm         12%
+toe_front_mm                         3  -1.0 .. -0.0 mm                 17%
+damper_lsr_fl                        3  2 .. 5 click                    27%
+damper_lsr_fr                        3  2 .. 5 click                    27%
+diff_preload_nm                      3  40.000 .. 100.000 Nm            40%
+camber_fl_deg                        3  -2.8 .. -1.4 deg                48%
+camber_fr_deg                        3  -2.8 .. -1.4 deg                48%
+anti_roll_bar_front                  3  1.000 .. 3.000 click            50%
+pushrod_length_offset_front_mm       4  -37.500 .. -10.500 mm           34%
+pushrod_length_offset_rear_mm        4  -35.500 .. -5.500 mm            38%
+spring_perch_offset_rear_mm          4  33.000 .. 98.500 mm            100%

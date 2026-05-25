@@ -1,0 +1,198 @@
+========================================================================
+ acura @ daytona_2011_road -- race (58.0 L fuel)
+ Conditions: 19 C ambient / 21 C track  |  Confidence: sparse (median n=24)  |  Moved params: 0 sparse / 0 noisy of 0 changes
+ Track coverage: 0/52 parameters with 3+ distinct values (0% explored at daytona_2011_road)
+========================================================================
+
+OVERALL DIRECTION
+  No changes from past setup -- already optimal in the model's view.
+
+CHANGES (0 of 43 parameters moved)
+
+NOTES
+  Fuel level: pinned by user at 58.0 L
+  Tyre cold pressure: pinned by user at 152.0 kPa
+  Front ARB blade: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear ARB blade: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front ARB size: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear ARB size: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Brake bias: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front camber: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear camber: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Hsc Fl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Hsc Rl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Hsc Slope Fl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Hsc Slope Rl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Hsr Fl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Hsr Rl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Lsc Fl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Lsc Rl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Lsr Fl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Damper Lsr Rl: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front roll damper HSC: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear roll damper HSC: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front roll damper LSC: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear roll damper LSC: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Diff clutch plates: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Diff coast/drive ramps: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear diff preload: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Fuel level: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front heave perch: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front heave spring: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front pushrod offset: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear pushrod offset: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear wing: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear heave perch: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear third spring: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front toe: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front torsion bar OD: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear torsion bar OD: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Front torsion bar turns: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Rear torsion bar turns: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  TC1 gain: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  TC2 slip: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Tyre cold pressure: pinned at target track (fewer than 3 distinct values driven here -- run calibrate probes before trusting cross-track moves)
+  Brake Duct Front: pinned to observed median (no corpus variance on this parameter -- vary it in a session to unlock search)
+  Brake Duct Rear: pinned to observed median (no corpus variance on this parameter -- vary it in a session to unlock search)
+  Throttle Brake Mapping: pinned to observed median (no corpus variance on this parameter -- vary it in a session to unlock search)
+  Not searched (calculated readout or blocked in ontology): brake_duct_front, brake_duct_rear, corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg, rear_coil_spring_rate_n_per_mm, third_perch_offset_rear_mm, throttle_brake_mapping, toe_rl_mm
+  ! pinned at target track (fewer than 3 distinct values driven here -- run `optimize calibrate` before trusting moves): anti_roll_bar_front, anti_roll_bar_rear, arb_size_front, arb_size_rear, brake_bias_pct, camber_fl_deg, camber_rl_deg, damper_hsc_fl, damper_hsc_rl, damper_hsc_slope_fl, damper_hsc_slope_rl, damper_hsr_fl, damper_hsr_rl, damper_lsc_fl, damper_lsc_rl, damper_lsr_fl, damper_lsr_rl, damper_roll_hsc_front, damper_roll_hsc_rear, damper_roll_lsc_front, damper_roll_lsc_rear, diff_clutch_friction_plates, diff_coast_drive_ramps, diff_preload_nm, fuel_level_l, heave_perch_offset_front_mm, heave_spring_rate_n_per_mm, pushrod_length_offset_front_mm, pushrod_length_offset_rear_mm, rear_wing_angle_deg, spring_perch_offset_rear_mm, third_spring_rate_n_per_mm, toe_front_mm, torsion_bar_od_fl_mm, torsion_bar_od_rl_mm, torsion_bar_turns_fl, torsion_bar_turns_rl, traction_control_gain, traction_control_slip, tyre_cold_pressure_kpa
+  ! pinned to observed median (no per-session variation in training corpus, no learnable response surface): brake_duct_front, brake_duct_rear, throttle_brake_mapping
+  ! T0 braking: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.52, rear 0.65)
+  ! T0 exit: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.79, rear 0.71)
+  ! T0 mid_corner: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.82, rear 0.83)
+  ! T0 straight: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.48, rear 0.48)
+  ! T0 trail_brake: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.74, rear 0.91)
+
+================================================================
+FULL SETUP CARD -- acura @ daytona_2011_road
+================================================================
+Legend: [OPT] optimizer recommendation | [OPT pin] pinned to observed median | [OPT mirror] mirrored from per-axle parameter | [past] from your most recent session (optimizer held this value) | [readout] calculated by iRacing -- verify, don't enter | [predicted] readout the optimizer projects under the new inputs.
+
+-- TIRES & AERO ------------------------------------------------
+  [TireType]
+    Tire Type                                   Dry                [past]
+  [LeftFront]
+    Starting Pressure                     152.0 kPa                [OPT pin]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [LeftRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps OMI                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightFront]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [RightRearTire]
+    Starting Pressure                       152 kPa                [past]
+    Last Hot Pressure                       152 kPa                [readout]
+    Last Temps IMO                    35C, 35C, 35C                [readout]
+    Tread Remaining                100%, 100%, 100%                [readout]
+  [AeroSettings]
+    Rear Wing Angle                           8 deg                [OPT pin]
+  [AeroCalculator]
+    Front Rh At Speed                       50.0 mm                [readout]
+    Rear Rh At Speed                        64.0 mm                [readout]
+    Downforce Balance                        49.72%                [readout]
+    LD                                        2.943                [readout]
+
+-- CHASSIS -----------------------------------------------------
+  [Front]
+    Heave Spring                           360 N/mm                [OPT pin]
+    Heave Perch Offset                      49.0 mm                [OPT pin]
+    Heave Spring Defl                8.5 mm 50.6 mm                [readout]
+    Heave Damper Defl               5.1 mm 100.0 mm                [readout]
+    Arb Size                                   Soft                [OPT pin]
+    Arb Blades                           1.00 click                [OPT pin]
+    Toe In                                  -0.2 mm                [OPT pin]
+    Pushrod Length Delta                   -30.5 mm                [OPT pin]
+  [LeftFront]
+    Corner Weight                            2706 N                [readout]
+    Ride Height                             30.0 mm                [readout]
+    Torsion Bar Defl                         6.5 mm                [readout]
+    Torsion Bar Turns                   0.095 turns                [OPT]
+    Torsion Bar OD                         14.34 mm                [OPT pin]
+    Camber                                 -2.8 deg                [OPT pin]
+  [LeftRear]
+    Corner Weight                            3053 N                [readout]
+    Ride Height                             44.9 mm                [predicted]
+    Torsion Bar Defl                         0.6 mm                [readout]
+    Torsion Bar Turns                  -0.115 turns                [OPT]
+    Torsion Bar OD                         15.14 mm                [OPT pin]
+    Camber                                 -1.8 deg                [OPT pin]
+  [Rear]
+    Heave Spring                           170 N/mm                [OPT pin]
+    Heave Perch Offset                      42.5 mm                [OPT pin]
+    Heave Spring Defl               16.2 mm 78.2 mm                [readout]
+    Heave Damper Defl               0.9 mm 120.0 mm                [readout]
+    Arb Size                                   Soft                [OPT pin]
+    Arb Blades                           3.00 click                [OPT pin]
+    Toe In                                  -0.0 mm                [past]
+    Pushrod Length Delta                   -33.0 mm                [OPT pin]
+  [RightFront]
+    Corner Weight                            2706 N                [readout]
+    Ride Height                             30.0 mm                [readout]
+    Torsion Bar Defl                         6.5 mm                [readout]
+    Torsion Bar Turns                   0.095 turns                [OPT mirror]
+    Torsion Bar OD                         14.34 mm                [OPT mirror]
+    Camber                                 -2.8 deg                [OPT mirror]
+  [RightRear]
+    Corner Weight                            3049 N                [readout]
+    Ride Height                             44.9 mm                [predicted]
+    Torsion Bar Defl                         0.6 mm                [readout]
+    Torsion Bar Turns                  -0.115 turns                [OPT mirror]
+    Torsion Bar OD                         15.14 mm                [OPT mirror]
+    Camber                                 -1.8 deg                [OPT mirror]
+
+-- DAMPERS -----------------------------------------------------
+  [FrontHeave]
+    Ls Comp Damping                         3 click                [OPT]
+    Hs Comp Damping                         5 click                [OPT]
+    Hs Comp Damp Slope                     10 click                [OPT]
+    Ls Rbd Damping                          2 click                [OPT]
+    Hs Rbd Damping                          4 click                [OPT]
+  [FrontRoll]
+    Ls Damping                              2 click                [OPT pin]
+    Hs Damping                              4 click                [OPT pin]
+  [RearHeave]
+    Ls Comp Damping                         8 click                [OPT]
+    Hs Comp Damping                         9 click                [OPT]
+    Hs Comp Damp Slope                     10 click                [OPT]
+    Ls Rbd Damping                          5 click                [OPT]
+    Hs Rbd Damping                          7 click                [OPT]
+  [RearRoll]
+    Ls Damping                              9 click                [OPT pin]
+    Hs Damping                              8 click                [OPT pin]
+
+-- SYSTEMS -----------------------------------------------------
+  [Lighting]
+    Roof Id Light Color                      Purple                [past]
+  [BrakeSpec]
+    Pad Compound                             Medium                [past]
+    Front Master Cyl                        20.6 mm                [past]
+    Rear Master Cyl                         22.2 mm                [past]
+    Brake Pressure Bias                   47.00 pct                [OPT pin]
+    Brake Bias Migration                          0                [past]
+  [Fuel]
+    Fuel Level                               58.0 L                [OPT pin]
+    Fuel Low Warning                         10.0 L                [past]
+  [TractionControl]
+    Traction Control Gain                   5 click                [OPT pin]
+    Traction Control Slip                   5 click                [OPT pin]
+  [GearRatios]
+    Gear Stack                                 Long                [past]
+    Speed In First                       155.4 Km/h                [readout]
+    Speed In Second                      189.4 Km/h                [readout]
+    Speed In Third                       218.6 Km/h                [readout]
+    Speed In Fourth                      250.0 Km/h                [readout]
+    Speed In Fifth                       286.9 Km/h                [readout]
+    Speed In Sixth                       321.4 Km/h                [readout]
+    Speed In Seventh                     355.2 Km/h                [readout]
+  [RearDiffSpec]
+    Diff Ramp Angles                          40/65                [OPT pin]
+    Clutch Friction Plates                 4 plates                [OPT pin]
+    Preload                                20.00 Nm                [OPT pin]

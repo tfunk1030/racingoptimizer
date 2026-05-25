@@ -30,6 +30,7 @@ Family = Literal[
     "damper",
     "corner_weight",
     "brake_bias",
+    "brake_duct",
     "diff",
     "spring_rate",
     "perch_offset",
@@ -37,6 +38,7 @@ Family = Literal[
     "camber",
     "torsion_bar",
     "fuel",
+    "traction_control",
 ]
 
 
@@ -325,6 +327,18 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
             json_path=_BRAKE_BIAS, dtype=float, units="pct",
             family="brake_bias", fittable=True,
         ),
+        # Brake duct openings (front/rear). Bounds in constraints.md (0-100).
+        # Paths are provisional (based on brake bias siblings + IBT inspection).
+        # Verify/adjust json_path against live garage on a session with varied
+        # duct settings. Added 2026 as part of brake duct integration.
+        "brake_duct_front": ParameterSpec(
+            json_path=("BrakesDriveUnit", "BrakeDuctFront"), dtype=float, units="%",
+            family="brake_duct", fittable=True, user_settable=True, step=1.0,
+        ),
+        "brake_duct_rear": ParameterSpec(
+            json_path=("BrakesDriveUnit", "BrakeDuctRear"), dtype=float, units="%",
+            family="brake_duct", fittable=True, user_settable=True, step=1.0,
+        ),
         # Differential preload Nm (0..150 per `constraints.md`). Coast/
         # power ratios remain CE-gated (separate parameters that aren't
         # in this ontology yet — see `constraints.md` `### Differential`
@@ -509,6 +523,35 @@ _PORSCHE_DAMPERS = {
     if k not in ("damper_hsc_slope_fl", "damper_hsc_slope_fr")
 }
 
+# Acura/Porsche split-layout roll dampers use ``LsDamping`` / ``HsDamping``
+# (not the ``*CompDamping`` / ``*RbdDamping`` names on heave blocks).
+_ROLL_DAMPER_MODES: tuple[tuple[str, str], ...] = (
+    ("lsc", "LsDamping"),
+    ("hsc", "HsDamping"),
+)
+
+
+def _roll_damper_paths(
+    axle_to_path: tuple[tuple[str, tuple[str, ...]], ...],
+) -> dict[str, ParameterSpec]:
+    out: dict[str, ParameterSpec] = {}
+    for axle_code, parent_path in axle_to_path:
+        for suffix, field_name in _ROLL_DAMPER_MODES:
+            out[f"damper_roll_{suffix}_{axle_code}"] = ParameterSpec(
+                json_path=(*parent_path, field_name), dtype=float, units="click",
+                family="damper", fittable=True, is_discrete=True, step=1.0,
+            )
+    return out
+
+
+_ACURA_ROLL_DAMPERS = _roll_damper_paths(
+    (
+        ("front", ("Dampers", "FrontRoll")),
+        ("rear", ("Dampers", "RearRoll")),
+    )
+)
+_ACURA_DAMPERS = {**_SPLIT_DAMPERS, **_ACURA_ROLL_DAMPERS}
+
 
 def _build(
     damper_paths: dict[str, ParameterSpec],
@@ -530,23 +573,31 @@ _ACURA_OVERRIDES: dict[str, ParameterSpec] = {
     "heave_slider_mm": _ACURA_HEAVE_SLIDER,
     "third_spring_rate_n_per_mm": ParameterSpec(
         json_path=("Chassis", "Rear", "HeaveSpring"), dtype=float, units="N/mm",
-        family="spring_rate", fittable=True, user_settable=True,
+        family="spring_rate", fittable=True, user_settable=True, step=10.0,
     ),
     "spring_perch_offset_rear_mm": ParameterSpec(
         json_path=("Chassis", "Rear", "HeavePerchOffset"), dtype=float, units="mm",
-        family="perch_offset", fittable=True, user_settable=True,
+        family="perch_offset", fittable=True, user_settable=True, step=0.5,
     ),
     "pushrod_length_offset_front_mm": ParameterSpec(
         json_path=_PUSHROD_DELTA_F, dtype=float, units="mm",
-        family="pushrod", fittable=True, user_settable=True,
+        family="pushrod", fittable=True, user_settable=True, step=0.5,
     ),
     "pushrod_length_offset_rear_mm": ParameterSpec(
         json_path=_PUSHROD_DELTA_R, dtype=float, units="mm",
-        family="pushrod", fittable=True, user_settable=True,
+        family="pushrod", fittable=True, user_settable=True, step=0.5,
     ),
     "brake_bias_pct": ParameterSpec(
         json_path=("Systems", "BrakeSpec", "BrakePressureBias"),
         dtype=float, units="pct", family="brake_bias", fittable=True,
+    ),
+    "brake_duct_front": ParameterSpec(
+        json_path=("Systems", "BrakeDuctFront"), dtype=float, units="%",
+        family="brake_duct", fittable=True, user_settable=True, step=1.0,
+    ),
+    "brake_duct_rear": ParameterSpec(
+        json_path=("Systems", "BrakeDuctRear"), dtype=float, units="%",
+        family="brake_duct", fittable=True, user_settable=True, step=1.0,
     ),
     "diff_preload_nm": ParameterSpec(
         json_path=("Systems", "RearDiffSpec", "Preload"),
@@ -618,6 +669,12 @@ _DIFF_COAST_DRIVE_RAMP_CHOICES: tuple[str, ...] = ("40/65", "45/70", "50/75")
 # YAML (not a string label), so it uses ``discrete_values`` for the
 # render-time snap rather than ``choices``.
 _DIFF_CLUTCH_PLATES_VALUES: tuple[float, ...] = (2.0, 4.0, 6.0)
+# iRacing YAML spellings that differ from the canonical ``choices`` label
+# (case-insensitive). Acura/BMW ARB size stores ``Disconnected`` in IBT
+# headers while the garage UI reads ``Disconnect``.
+_CHOICE_LABEL_ALIASES: dict[str, str] = {
+    "disconnected": "disconnect",
+}
 
 
 _BMW_OVERRIDES: dict[str, ParameterSpec] = {
@@ -814,7 +871,77 @@ _PORSCHE_OVERRIDES: dict[str, ParameterSpec] = {
     ),
 }
 
-ACURA: dict[str, ParameterSpec] = _build(_SPLIT_DAMPERS, **_ACURA_OVERRIDES)
+# Acura shares BMW-style ARB size + diff categoricals but stores them under
+# ``Systems`` (not ``BrakesDriveUnit``) and uses ``DiffRampAngles`` for ramps.
+_ACURA_FITTABLE_OVERRIDES: dict[str, ParameterSpec] = {
+    # Acura ARX-06 shares BMW-style front heave + rear third springs;
+    # iRacing exposes both in 10 N/mm clicks (same as BMWBounds.md).
+    "heave_spring_rate_n_per_mm": ParameterSpec(
+        json_path=_HEAVE_SPRING_RATE_F, dtype=float, units="N/mm",
+        family="spring_rate", fittable=True, user_settable=True,
+        step=10.0,
+    ),
+    "torsion_bar_turns_fl": ParameterSpec(
+        json_path=("Chassis", "LeftFront", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.001,
+    ),
+    "torsion_bar_od_fl_mm": ParameterSpec(
+        json_path=("Chassis", "LeftFront", "TorsionBarOD"),
+        dtype=float, units="mm", family="torsion_bar",
+        fittable=True, user_settable=True,
+        discrete_values=_TORSION_BAR_OD_VALUES,
+    ),
+    "torsion_bar_turns_rl": ParameterSpec(
+        json_path=("Chassis", "LeftRear", "TorsionBarTurns"),
+        dtype=float, units="turns", family="torsion_bar",
+        fittable=True, user_settable=True, step=0.001,
+    ),
+    "torsion_bar_od_rl_mm": ParameterSpec(
+        json_path=("Chassis", "LeftRear", "TorsionBarOD"),
+        dtype=float, units="mm", family="torsion_bar",
+        fittable=True, user_settable=True,
+        discrete_values=_TORSION_BAR_OD_VALUES,
+    ),
+    "arb_size_front": ParameterSpec(
+        json_path=("Chassis", "Front", "ArbSize"),
+        dtype=float, units="", family="arb",
+        fittable=True, user_settable=True, is_discrete=True,
+        choices=_ARB_SIZE_CHOICES,
+    ),
+    "arb_size_rear": ParameterSpec(
+        json_path=("Chassis", "Rear", "ArbSize"),
+        dtype=float, units="", family="arb",
+        fittable=True, user_settable=True, is_discrete=True,
+        choices=_ARB_SIZE_CHOICES,
+    ),
+    "diff_coast_drive_ramps": ParameterSpec(
+        json_path=("Systems", "RearDiffSpec", "DiffRampAngles"),
+        dtype=float, units="", family="diff",
+        fittable=True, user_settable=True, is_discrete=True,
+        choices=_DIFF_COAST_DRIVE_RAMP_CHOICES,
+    ),
+    "diff_clutch_friction_plates": ParameterSpec(
+        json_path=("Systems", "RearDiffSpec", "ClutchFrictionPlates"),
+        dtype=float, units="plates", family="diff",
+        fittable=True, user_settable=True, is_discrete=True,
+        discrete_values=_DIFF_CLUTCH_PLATES_VALUES,
+    ),
+    "traction_control_gain": ParameterSpec(
+        json_path=("Systems", "TractionControl", "TractionControlGain"),
+        dtype=float, units="click", family="traction_control",
+        fittable=True, user_settable=True, is_discrete=True, step=1.0,
+    ),
+    "traction_control_slip": ParameterSpec(
+        json_path=("Systems", "TractionControl", "TractionControlSlip"),
+        dtype=float, units="click", family="traction_control",
+        fittable=True, user_settable=True, is_discrete=True, step=1.0,
+    ),
+}
+
+ACURA: dict[str, ParameterSpec] = _build(
+    _ACURA_DAMPERS, **_ACURA_OVERRIDES, **_ACURA_FITTABLE_OVERRIDES,
+)
 BMW: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_BMW_OVERRIDES)
 CADILLAC: dict[str, ParameterSpec] = _build(_INLINE_DAMPERS, **_CADILLAC_OVERRIDES)
 FERRARI: dict[str, ParameterSpec] = _build(_FERRARI_DAMPERS, **_FERRARI_OVERRIDES)
@@ -904,11 +1031,37 @@ def setup_value(car: str, parameter: str, setup_json: dict | str) -> float | Non
     raw = _walk(setup, spec.json_path)
     if spec.choices and isinstance(raw, str):
         raw_norm = raw.strip().lower()
+        raw_norm = _CHOICE_LABEL_ALIASES.get(raw_norm, raw_norm)
         for idx, label in enumerate(spec.choices):
             if label.strip().lower() == raw_norm:
                 return float(idx)
         return None
     return _scalar(raw)
+
+
+def garage_step_decimal_places(step: float | None) -> int:
+    """Decimal places implied by an iRacing garage click step."""
+    if step is None or step <= 0.0:
+        return 2
+    if step >= 1.0 and abs(step - round(step)) < 1e-9:
+        return 0
+    text = f"{step:.10f}".rstrip("0").rstrip(".")
+    if "." not in text:
+        return 0
+    return len(text.split(".", 1)[1])
+
+
+def snap_to_garage_step(value: float, spec: ParameterSpec) -> float:
+    """Snap a continuous optimizer value to the nearest legal garage click."""
+    if spec.discrete_values:
+        return min(spec.discrete_values, key=lambda c: abs(c - value))
+    if spec.is_discrete:
+        return float(round(value))
+    step = spec.step
+    if step is None or step <= 0.0:
+        return value
+    snapped = round(value / step) * step
+    return round(snapped, garage_step_decimal_places(step))
 
 
 __all__ = [
@@ -920,7 +1073,9 @@ __all__ = [
     "Family",
     "ParameterSpec",
     "fittable_parameters",
+    "garage_step_decimal_places",
     "ontology_for",
     "parameters",
     "setup_value",
+    "snap_to_garage_step",
 ]

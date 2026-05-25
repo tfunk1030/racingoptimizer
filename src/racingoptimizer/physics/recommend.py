@@ -20,6 +20,7 @@ tests/physics/test_score.py asserts this module contains no such reference.
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from statistics import median
 
 import numpy as np
@@ -29,12 +30,18 @@ from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import ConstraintsTable, clamp
 from racingoptimizer.context import EnvironmentFrame
 from racingoptimizer.corner import CornerPhaseKey, Phase
+from racingoptimizer.ingest import api as ingest_api
+from racingoptimizer.ingest.paths import resolve_corpus_root
 from racingoptimizer.physics.axle_grip import (
     AxleGripCeiling,
     compute_axle_grip_ratios,
 )
 from racingoptimizer.physics.model import PhysicsModel
-from racingoptimizer.physics.ontology import fittable_parameters
+from racingoptimizer.physics.ontology import (
+    fittable_parameters,
+    setup_value,
+    snap_to_garage_step,
+)
 from racingoptimizer.physics.recommendation import SetupRecommendation
 from racingoptimizer.physics.score import (
     _aero_surface_or_none,
@@ -44,7 +51,182 @@ from racingoptimizer.physics.score import (
     _score_breakdown_per_car,
     score_breakdown,
 )
+from racingoptimizer.physics.setup_symmetry import (
+    DE_SYMMETRY_MIRRORS,
+    DE_SYMMETRY_SLAVES,
+    apply_setup_symmetry,
+    static_rh_balance_penalty,
+    static_rh_platform_penalty,
+)
+from racingoptimizer.physics.static_rh_knn import (
+    _HARD_REJECT_OBJECTIVE,
+    TB_TURN_PARAMS,
+    cooptimize_tb_for_static_rh,
+    enforce_static_rh_feasible,
+    has_static_rh_physics,
+    physics_static_rh_readouts,
+    static_rh_de_infeasible_readouts,
+)
 from racingoptimizer.physics.weights import weight_corners
+
+# Match ``cli.calibrate._COVERED_THRESHOLD``: fewer than three distinct
+# values on the target track is not enough local evidence to trust
+# cross-track surrogate extrapolation during race recommend.
+_WITHIN_TRACK_COVERED_THRESHOLD: int = 3
+# Same floor as ``physics.fitter._compute_lap_time_weights`` — junk partial
+# laps on GTP tracks are always well below 60 s.
+_LAP_TIME_MIN_VALID_S: float = 60.0
+# P0.3 sensitivity floor: a move is "defensible" only if shifting the
+# parameter by one garage step changes the DE objective by at least
+# this much. Otherwise the surrogate cannot resolve +1 click from -1
+# click and the optimizer's chosen value is curve-fit to noise. The
+# briefing rounds sensitivity to three decimals (so 0.000 is shown for
+# anything below 0.0005); the floor sits an order of magnitude above
+# that. See docs/accuracy-rebuild-2026-05-24/PLAN.md P0.3.
+_SENSITIVITY_FLOOR: float = 0.005
+
+
+def _safe_score_total(
+    model: PhysicsModel,
+    setup: dict[str, float],
+    track: str,
+    env: EnvironmentFrame,
+    *,
+    schedule: list | None = None,
+    quali: bool = False,
+) -> float:
+    """Total score with narrow-exception swallow for the P0.3 probe."""
+    try:
+        return float(
+            model.score_setup(setup, track, env, schedule=schedule, quali=quali),
+        )
+    except (KeyError, ValueError, ZeroDivisionError):
+        return 0.0
+
+
+def _track_fastest_observed_value(
+    model: PhysicsModel,
+    track: str,
+    param: str,
+    candidates: tuple[float, ...],
+    *,
+    corpus_root: Path | str | None = None,
+) -> float | None:
+    """Pick the locally observed setup value tied to the fastest laps.
+
+    Used when a parameter has only two distinct values at the target
+    track: the surrogate may prefer the slower option (cross-track drag
+    bias) even though the user's lap times at this track say otherwise.
+    """
+    if len(candidates) < 2:
+        return None
+    root = resolve_corpus_root(Path(corpus_root) if corpus_root else None)
+    sessions_df = ingest_api.sessions(
+        car=model.car, track=track, valid_only=True, corpus_root=root,
+    )
+    if sessions_df.height == 0:
+        return None
+
+    cand_set = sorted({float(c) for c in candidates})
+    laps_by_value: dict[float, list[float]] = {c: [] for c in cand_set}
+
+    for row in sessions_df.iter_rows(named=True):
+        sid = row["session_id"]
+        val = setup_value(model.car, param, row["setup"])
+        if val is None:
+            continue
+        val_f = float(val)
+        nearest = min(cand_set, key=lambda c: abs(c - val_f))
+        if abs(nearest - val_f) > 0.51:
+            continue
+        try:
+            laps_df = ingest_api.laps(
+                session_id=sid, valid_only=True, corpus_root=root,
+            )
+        except Exception:
+            continue
+        times = [
+            float(t) for t in laps_df["lap_time_s"].to_list()
+            if t is not None and float(t) >= _LAP_TIME_MIN_VALID_S
+        ]
+        if not times:
+            continue
+        laps_by_value[nearest].append(median(times))
+
+    best_val: float | None = None
+    best_time = float("inf")
+    for val, session_medians in laps_by_value.items():
+        if not session_medians:
+            continue
+        track_med = float(median(session_medians))
+        if track_med < best_time:
+            best_time = track_med
+            best_val = val
+    return best_val
+
+
+def _apply_within_track_bounds(
+    *,
+    sub_bounds: tuple[float, float],
+    was_pinned: bool,
+    track_observed: tuple[float, ...],
+    bound: tuple[float, float],
+    reset_mode: bool,
+    track_best_value: float | None = None,
+) -> tuple[tuple[float, float], bool, bool]:
+    """Cap DE bounds to within-track evidence when local coverage is thin.
+
+    Returns ``(bounds, was_pinned, thin_track_pin)`` where ``thin_track_pin``
+    is True when the parameter was pinned specifically because the target
+    track has fewer than ``_WITHIN_TRACK_COVERED_THRESHOLD`` distinct values.
+
+    When exactly two values were observed locally and ``track_best_value``
+    identifies the faster lap-time option, pin to that value instead of
+    letting DE pick the slower cross-track-favoured extreme (e.g. wing 8
+    on Belle Isle when wing 10 produced the user's best laps).
+    """
+    if reset_mode or not track_observed:
+        return sub_bounds, was_pinned, False
+    unique = sorted({float(v) for v in track_observed})
+    n_distinct = len(unique)
+    if n_distinct >= _WITHIN_TRACK_COVERED_THRESHOLD:
+        return sub_bounds, was_pinned, False
+    lo, hi = bound
+    if n_distinct == 1:
+        v = unique[0]
+        return ((v, v), True, True)
+    if (
+        n_distinct == 2
+        and track_best_value is not None
+        and any(abs(float(track_best_value) - u) < 1e-6 for u in unique)
+    ):
+        v = float(track_best_value)
+        return ((v, v), True, True)
+    # n_distinct == 2: search only between the two locally observed values.
+    track_lo, track_hi = unique[0], unique[1]
+    capped_lo = max(sub_bounds[0], track_lo, lo)
+    capped_hi = min(sub_bounds[1], track_hi, hi)
+    if capped_hi <= capped_lo:
+        capped_lo, capped_hi = track_lo, track_hi
+    return ((capped_lo, capped_hi), was_pinned, False)
+
+
+def _kinematic_static_rh_ready(model: PhysicsModel) -> bool:
+    """Whether the model has a deterministic kinematic static-RH fit.
+
+    True when ``model.static_rh_kinematic`` carries at least one shipped
+    channel fit. Used to skip the legacy k-NN
+    ``enforce_static_rh_feasible`` corpus-blend repair (P0.2 / W2
+    cleanup): on a kinematic readout, blending toward a corpus session
+    *degrades* the prediction. Falls back to the legacy k-NN repair
+    only when the kinematic fit refused to ship (R^2 < 0.98 or the
+    corpus is too thin).
+    """
+    kinematic_fit = getattr(model, "static_rh_kinematic", None)
+    if kinematic_fit is None:
+        return False
+    channels = getattr(kinematic_fit, "channels", None)
+    return bool(channels)
 
 
 def recommend(
@@ -116,13 +298,20 @@ def recommend(
     #    (VISION §3 "no extrapolation") but it leaves good setups off the
     #    table at every well-driven track that hasn't seen full sweeps.
     global_observed: dict[str, set[float]] = {}
+    per_track = (
+        getattr(model, "per_track_parameter_observed", {}) or {}
+        if is_per_car
+        else {}
+    )
     if is_per_car:
-        per_track = getattr(model, "per_track_parameter_observed", {}) or {}
         for _track_params in per_track.values():
             for _name, _vals in (_track_params or {}).items():
                 if _vals:
                     global_observed.setdefault(_name, set()).update(_vals)
     weights = _cached_weights(model, track, schedule=schedule)
+    static_rh_corpus = getattr(model, "static_rh_corpus", ()) or ()
+    use_static_rh_physics = has_static_rh_physics(model)
+    tb_coopt_deferred: set[str] = set()
 
     fittable = [
         p for p in fittable_parameters(model.car, constraints)
@@ -135,6 +324,8 @@ def recommend(
     bounds: list[tuple[float, float]] = []
     init_values: list[float] = []
     pinned_constant: set[str] = set()
+    pinned_within_track_thin: set[str] = set()
+    track_observed_by_param = per_track.get(track, {}) or {}
     # Parameter -> warning when the model's observed median sat outside the
     # constraint bound. We populate this here (baseline-clamp time) and
     # again after DE (result-at-bound time); both are signals that the
@@ -142,6 +333,8 @@ def recommend(
     clamp_warnings: dict[str, str] = {}
     raw_baselines: dict[str, float] = {}
     for name in fittable:
+        if name in DE_SYMMETRY_SLAVES:
+            continue
         bound = constraints.bounds(model.car, name)
         if bound is None:
             continue
@@ -194,8 +387,33 @@ def recommend(
             explore_pct=explore_pct,
             reset_mode=reset_mode,
         )
-        if was_pinned:
+        track_vals = track_observed_by_param.get(name, ())
+        track_unique = sorted({float(v) for v in track_vals})
+        track_best: float | None = None
+        if len(track_unique) == 2:
+            track_best = _track_fastest_observed_value(
+                model, track, name, tuple(track_unique),
+            )
+        sub_bounds, was_pinned, thin_pin = _apply_within_track_bounds(
+            sub_bounds=sub_bounds,
+            was_pinned=was_pinned,
+            track_observed=tuple(track_vals),
+            bound=bound,
+            reset_mode=reset_mode,
+            track_best_value=track_best,
+        )
+        if thin_pin:
+            pinned_within_track_thin.add(name)
             pinned_constant.add(name)
+        elif was_pinned:
+            pinned_constant.add(name)
+        if use_static_rh_physics and name in TB_TURN_PARAMS:
+            tb_base = float(trust_baseline)
+            sub_bounds = (tb_base, tb_base)
+            was_pinned = True
+            tb_coopt_deferred.add(name)
+            if name in pinned_constant:
+                pinned_constant.discard(name)
         param_names.append(name)
         bounds.append(sub_bounds)
         init_values.append(trust_baseline)
@@ -257,7 +475,16 @@ def recommend(
         candidate = dict(full_baseline)
         for name, value in zip(param_names, x.tolist(), strict=True):
             candidate[name] = float(value)
-        clamped = _clamped_or_raise(model, candidate, strict=False)
+        clamped = apply_setup_symmetry(
+            _clamped_or_raise(model, candidate, strict=False),
+        )
+        predicted_rh = model.predict_setup_readouts(clamped, env)
+        if use_static_rh_physics:
+            rh_channels = physics_static_rh_readouts(model, clamped, env)
+            if static_rh_de_infeasible_readouts(rh_channels):
+                return _HARD_REJECT_OBJECTIVE
+        rh_penalty = static_rh_platform_penalty(predicted_rh)
+        rh_penalty += static_rh_balance_penalty(predicted_rh)
         if is_per_car:
             breakdown_inner = _score_breakdown_per_car(
                 model, clamped, env, aero, schedule, weights, baselines,
@@ -278,6 +505,7 @@ def recommend(
                 keys if not is_per_car else None,
             )
             score_sum -= penalty
+        score_sum -= rh_penalty
         return -score_sum
 
     # DE budget: per-car v4 with 47 fittable parameters × 70+ schedule
@@ -299,7 +527,6 @@ def recommend(
     )
 
     recommended = dict(full_baseline)
-    parameters: dict[str, tuple[float, Confidence]] = {}
     for name, value in zip(param_names, result.x.tolist(), strict=True):
         clamped = clamp(float(value), name, model.car, constraints)
         if clamped.was_clamped and abs(clamped.value - value) > 1e-9:
@@ -307,12 +534,6 @@ def recommend(
                 f"recommend produced out-of-bounds value for {name!r}: "
                 f"value={value!r} clamped_to={clamped.value!r}"
             )
-        # Detect bound-binding: if DE returned a value within ~1% of either
-        # bound AND the training baseline was outside the bound, the
-        # constraint is almost certainly suppressing exploration. Already
-        # warned at baseline-clamp time, but re-check here for the case
-        # where the baseline was inside the bound but DE still drifted to
-        # an edge — second-order signal that the constraint is too tight.
         if name not in clamp_warnings and name in raw_baselines:
             bound = constraints.bounds(model.car, name)
             if bound is not None:
@@ -338,6 +559,130 @@ def recommend(
                             f"the iRacing garage UI"
                         )
         recommended[name] = float(clamped.value)
+
+    recommended = apply_setup_symmetry(recommended)
+    # P0.2 (W2 cleanup): once the per-car kinematic linear fit ships,
+    # ``predict_setup_readouts`` returns geometrically-correct static
+    # RH for the four ``setup_static_*_ride_height_mm`` channels. The
+    # legacy k-NN bisection + corpus-blend repair was built to mask
+    # the surrogate's near-zero pushrod gradient -- on a kinematic
+    # readout, blending the recommended setup toward a corpus session
+    # would *degrade* it. Bypass ``enforce_static_rh_feasible`` when
+    # the kinematic fit is present; fall back to the legacy k-NN repair
+    # when the kinematic fit refused to ship (R^2 < 0.98 or the
+    # corpus is too thin).
+    if static_rh_corpus and not _kinematic_static_rh_ready(model):
+        recommended, still_bad = enforce_static_rh_feasible(
+            recommended,
+            static_rh_corpus,
+            car=model.car,
+            constraints=constraints,
+            model=model,
+            env=env,
+        )
+        if still_bad:
+            readouts = physics_static_rh_readouts(model, recommended, env)
+            lf = readouts.get("setup_static_lf_ride_height_mm")
+            rf = readouts.get("setup_static_rf_ride_height_mm")
+            clamp_warnings["_static_rh_platform"] = (
+                "Static ride height still outside legal 30-80 mm after "
+                f"platform repair (physics-predicted LF={lf}, RF={rf} mm). "
+                "Verify perch/pushrod/heave in garage before applying."
+            )
+    if use_static_rh_physics:
+        recommended, tb_ok = cooptimize_tb_for_static_rh(
+            recommended,
+            model,
+            env,
+            constraints=constraints,
+        )
+        if tb_coopt_deferred:
+            clamp_warnings.setdefault(
+                "_static_rh_tb_coopt",
+                "Torsion bar turns trimmed post-search to match physics "
+                "static ride height for the recommended perch/pushrod/heave "
+                "platform (DE holds TB fixed until this pass).",
+            )
+        if not tb_ok and tb_coopt_deferred:
+            readouts = physics_static_rh_readouts(model, recommended, env)
+            lf = readouts.get("setup_static_lf_ride_height_mm")
+            lr = readouts.get("setup_static_lr_ride_height_mm")
+            clamp_warnings["_static_rh_tb_coopt"] = (
+                "Could not trim torsion bar turns to physics static RH "
+                f"targets (predicted LF={lf}, LR={lr} mm after TB pass). "
+                "Verify TB turns manually against garage Ride Height."
+            )
+
+    # P0.3 -- sensitivity floor on emitted moves.
+    # DE returns a value for every fittable parameter; on a noisy
+    # surrogate (today's regime per `holdout_accuracy_latest.json`)
+    # many of those moves cannot be defended against the past setup.
+    # Probe each moved parameter at +/- 1 garage step under the same
+    # scoring path the DE objective used. If neither side moves the
+    # score by ``_SENSITIVITY_FLOOR``, revert to the training baseline
+    # and surface the parameter under NOTES so the user sees why no
+    # move was emitted.
+    #
+    # Probes use a frozen ``recommended_snapshot`` -- mutating
+    # ``recommended`` mid-loop would make each parameter's probe see
+    # earlier suppression decisions in the baseline setup, producing
+    # order-dependent results. Decisions are collected here, then
+    # applied to ``recommended`` after the loop.
+    suppressed_below_sensitivity: set[str] = set()
+    recommended_snapshot = dict(recommended)
+    base_score = _safe_score_total(
+        model, recommended_snapshot, track, env, schedule=schedule, quali=quali,
+    )
+    onto_view = model.ontology
+    for name in list(param_names):
+        if name in pinned_constant or name in tb_coopt_deferred:
+            continue
+        baseline_val = full_baseline.get(name)
+        if baseline_val is None:
+            continue
+        rec_val = recommended_snapshot.get(name)
+        if rec_val is None:
+            continue
+        spec_s = onto_view.get(name)
+        if spec_s is None:
+            continue
+        step_s = float(spec_s.step) if spec_s.step else 0.0
+        if step_s <= 0.0:
+            continue
+        if abs(float(rec_val) - float(baseline_val)) < step_s * 0.5:
+            continue
+        plus_setup = dict(recommended_snapshot)
+        plus_setup[name] = float(
+            clamp(float(rec_val) + step_s, name, model.car, constraints).value,
+        )
+        minus_setup = dict(recommended_snapshot)
+        minus_setup[name] = float(
+            clamp(float(rec_val) - step_s, name, model.car, constraints).value,
+        )
+        plus_setup = apply_setup_symmetry(plus_setup)
+        minus_setup = apply_setup_symmetry(minus_setup)
+        plus_score = _safe_score_total(
+            model, plus_setup, track, env, schedule=schedule, quali=quali,
+        )
+        minus_score = _safe_score_total(
+            model, minus_setup, track, env, schedule=schedule, quali=quali,
+        )
+        if (
+            abs(plus_score - base_score) < _SENSITIVITY_FLOOR
+            and abs(minus_score - base_score) < _SENSITIVITY_FLOOR
+        ):
+            suppressed_below_sensitivity.add(name)
+    for name in suppressed_below_sensitivity:
+        recommended[name] = float(full_baseline[name])
+
+    parameters: dict[str, tuple[float, Confidence]] = {}
+    for name in param_names:
+        clamped = clamp(recommended[name], name, model.car, constraints)
+        val = float(clamped.value)
+        spec = model.ontology.get(name)
+        if spec is not None:
+            val = snap_to_garage_step(val, spec)
+            recommended[name] = val
         confidence = _parameter_confidence(model, name)
         if reset_mode and confidence.regime in ("dense", "confident"):
             # Reset mode searches outside corpus density on purpose;
@@ -360,8 +705,11 @@ def recommend(
                     observed_values=observed,
                     step=step,
                 )
-        parameters[name] = (float(clamped.value), confidence)
+        parameters[name] = (val, confidence)
 
+    for slave, master in DE_SYMMETRY_MIRRORS.items():
+        if master in parameters and slave not in parameters:
+            parameters[slave] = parameters[master]
     _fill_untrained_baselines(parameters, model, full_baseline)
     breakdown = score_breakdown(
         model, recommended, track, env, weights=weights, schedule=schedule,
@@ -376,6 +724,8 @@ def recommend(
         untrained_parameters=tuple(model.untrained_parameters),
         aero_correction_available=bool(model.aero_correction_available),
         pinned_to_observed_median=tuple(sorted(pinned_constant)),
+        pinned_within_track_thin=tuple(sorted(pinned_within_track_thin)),
+        suppressed_below_sensitivity=tuple(sorted(suppressed_below_sensitivity)),
         clamp_warnings=dict(clamp_warnings),
     )
 
@@ -888,13 +1238,9 @@ def _baseline_recommendation(
 # that corner -- enough to push DE away from physically-anomalous
 # setups without dominating the surrogate's relative ranking.
 #
-# Long-G approximation: the corner aggregator emits `accel_lat_g_max`
-# but not `accel_long_g_*` (TARGET_OUTPUT_CHANNELS in fitter.py). For
-# the guardrail check we approximate long_g = 0 in mid-corner (steady-
-# state cornering). The axle force decomposition under-allocates rear
-# Fz vs reality (no aft weight transfer in the approximation), so the
-# rear ratio is slightly INFLATED -- a SAFE failure mode (more likely
-# to flag than miss a violation).
+# Long-G: `accel_lon_g_*` are now trained (Initiative 1 quick win).
+# In --surrogate-only legacy guardrail path we still approximate long_g=0
+# in mid-corner for safety (rear margin slightly inflated = safe to flag).
 # --------------------------------------------------------------------------
 
 # Additive penalty subtracted per (corner, phase) entry that exceeds
@@ -937,6 +1283,10 @@ def _axle_guardrail_penalty(
         iterator = [(int(c), str(p), None) for c, p in keys]
     else:
         return 0.0
+    from racingoptimizer.physics.corner_schedule import (
+        is_real_corner_archetype,
+    )
+
     for corner_id, phase_str, archetype in iterator:
         # Restrict to mid-corner: that's where the long-G ~ 0
         # approximation holds and where setup-driven peak lat-G is
@@ -944,6 +1294,14 @@ def _axle_guardrail_penalty(
         # exit) are driver-dominated and the empirical ceiling is
         # less directly comparable.
         if phase_str.strip().lower() != "mid_corner":
+            continue
+        # P0.4: skip phantom slots (start/finish straight, pit-out)
+        # whose archetype is not corner-like. Required for v4 path
+        # where the schedule carries archetype dicts; v3 keys path
+        # has no archetype to filter on, so accept everything there.
+        if archetype is not None and not is_real_corner_archetype(
+            archetype if isinstance(archetype, dict) else None,
+        ):
             continue
         try:
             phase = Phase(phase_str)

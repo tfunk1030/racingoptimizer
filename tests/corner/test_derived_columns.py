@@ -107,6 +107,23 @@ def test_load_transfer_asymmetry_omitted_without_full_quad() -> None:
     assert "damper_velocity_p99_mms" not in out.columns
 
 
+def test_acura_heave_roll_shock_defl_aliases_derived_columns() -> None:
+    """Acura IBTs expose HF/TR/FROLL/RROLL shockDefl instead of LF/RF/LR/RR."""
+    n = 8
+    cols = _base_frame(n)
+    cols["HFshockDefl"] = np.linspace(0.025, 0.035, n, dtype=np.float64)
+    cols["FROLLshockDefl"] = np.full(n, 0.010, dtype=np.float64)
+    cols["TRshockDefl"] = np.full(n, 0.020, dtype=np.float64)
+    cols["RROLLshockDefl"] = np.full(n, 0.015, dtype=np.float64)
+    out = _aggregate(
+        pl.DataFrame(cols), session_id=SID, lap_index=LAP, car="acura",
+    )
+    assert out["lf_shock_defl_p99_mm"][0] == pytest.approx(35.0, abs=0.1)
+    assert out["damper_velocity_p99_mms"][0] > 0.0
+    assert out["damper_force_p99_n"][0] > 0.0
+    assert "load_transfer_asymmetry_mean" in out.columns
+
+
 # ---------------------------------------------------------------------------
 # 2. traction_util_mean
 #    formula: (max(*Speed) - min(*Speed)) / max(Speed, 1e-6), clipped [0, 1]
@@ -155,6 +172,29 @@ def test_traction_util_clipped_at_one() -> None:
     )
     # Raw ratio 5.0; clip pins to 1.0.
     assert out["traction_util_mean"][0] == pytest.approx(1.0, abs=1e-6)
+
+
+def test_wheel_speed_max_diff_ms_raw_meters_per_second() -> None:
+    """wheel_speed_max_diff_ms is the raw (max - min) wheel speed in m/s.
+
+    This is the value expected by physics.score.traction() (divided by
+    wheelspin_scale_ms from baselines). It is *not* the normalized
+    traction_util_mean.
+    """
+    n = 6
+    out = _aggregate_one(
+        {
+            "Speed": np.full(n, 100.0, dtype=np.float64),
+            "LFspeed": np.full(n, 110.0, dtype=np.float64),  # max
+            "RFspeed": np.full(n, 100.0, dtype=np.float64),
+            "LRspeed": np.full(n, 100.0, dtype=np.float64),
+            "RRspeed": np.full(n,  95.0, dtype=np.float64),  # min
+        }
+    )
+    # (110 - 95) = 15 m/s raw differential
+    assert out["wheel_speed_max_diff_ms"][0] == pytest.approx(15.0, abs=1e-6)
+    # traction_util_mean should still be 0.15 (normalized)
+    assert out["traction_util_mean"][0] == pytest.approx(0.15, abs=1e-6)
 
 
 # ---------------------------------------------------------------------------

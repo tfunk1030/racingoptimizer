@@ -2,6 +2,21 @@
 
 Date: 2026-05-08. The 14-day physics-rebuild is complete.
 
+> **Post-rebuild accuracy drift (2026-05-09 → 2026-05-24).** Work that
+> landed after this document marks "BUILD COMPLETE" — hybrid blend
+> wiring, axle guardrails in DE, static-RH co-optimization, and a
+> `per_track_residuals` correction layer — has revealed and in one case
+> introduced accuracy regressions that block the "physics-based and
+> calibrated" goal. The current plan to close them is
+> `docs/accuracy-rebuild-2026-05-24/PLAN.md`. Notable post-rebuild
+> findings: (1) `per_track_residuals` is `track_median − global_median`
+> not a real residual, and it flattens setup→output gradient in DE;
+> (2) the held-out gate criteria currently pass models that are worse
+> than the channel mean on grip-balance channels; (3) static garage RH
+> is being predicted by a surrogate where deterministic kinematic
+> geometry would give R² > 0.98. See the plan for the file:line
+> evidence and the order of operations.
+
 ## What shipped
 
 ### Week 1 — empirical fixes (Modes 1-4)

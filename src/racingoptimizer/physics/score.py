@@ -191,7 +191,10 @@ def _wind_aero_scale(env: EnvironmentFrame) -> float:
     correction. A proper directional decomposition needs per-corner car
     heading (still pending — `physics/wind.py` documents this as Stage
     5 polish). As a load-bearing first integration we apply the
-    *magnitude*-based downforce scale: any wind reduces effective L/D
+    *magnitude*-based downforce scale (fallback when no car heading available).
+    # Initiative 3 (directional wind quick win): when car_heading_deg is
+    # present on the state/env, the full decompose + modifier from wind.py
+    # is used instead.
     relative to still air because tailwind reduces local airspeed and
     crosswind shears flow over the underbody. This reads ``WindVel``
     (already on every EnvironmentFrame) so the score actually reflects
@@ -853,7 +856,8 @@ def _corner_phase_objective_value(
     if not hybrid:
         return surrogate_score * corner_weight
 
-    ceilings = getattr(model, "axle_grip_ceilings", None) or {}
+    ceilings_raw = getattr(model, "axle_grip_ceilings", None)
+    ceilings = ceilings_raw if isinstance(ceilings_raw, dict) else {}
     front_ceil = ceilings.get("front")
     rear_ceil = ceilings.get("rear")
     if front_ceil is None or rear_ceil is None:
@@ -933,7 +937,8 @@ def guardrail_warnings_for_setup(
     """Collect physics guardrail violations for the recommended setup."""
     if not schedule:
         return []
-    ceilings = getattr(model, "axle_grip_ceilings", None) or {}
+    ceilings_raw = getattr(model, "axle_grip_ceilings", None)
+    ceilings = ceilings_raw if isinstance(ceilings_raw, dict) else {}
     if not ceilings.get("front") or not ceilings.get("rear"):
         return []
 
@@ -941,6 +946,9 @@ def guardrail_warnings_for_setup(
     from racingoptimizer.physics.axle_grip import (
         axle_grip_margin,
         compute_axle_grip_ratios,
+    )
+    from racingoptimizer.physics.corner_schedule import (
+        is_real_corner_archetype,
     )
     from racingoptimizer.physics.evaluator import (
         evaluate_corner_phase,
@@ -950,10 +958,22 @@ def guardrail_warnings_for_setup(
     aero = _aero_surface_or_none(model)
     aero_correction = getattr(model, "aero_residual_correction", None)
     warnings: list[str] = []
+    # P0.4 -- collapse warnings per corner. The DE objective evaluates
+    # each (corner, phase) but a single corner triggering across all
+    # five phases produces noisy NOTES output ("T0 braking ...", "T0
+    # exit ...", "T0 mid_corner ...", ...). Keep only the worst phase
+    # per corner so the user sees one diagnostic line per corner.
+    by_corner: dict[int, tuple[str, float, float, float]] = {}
     seen: set[str] = set()
     for entry in schedule:
         corner_id = int(entry.corner_id)
         phase_str = str(entry.phase)
+        # P0.4: drop phantom corner slots (start/finish straight,
+        # pit-out) whose archetype isn't corner-like. These produce
+        # nonsense ``T0 ... physics-vs-surrogate divergence`` lines
+        # in the NOTES block.
+        if not is_real_corner_archetype(getattr(entry, "archetype", None)):
+            continue
         try:
             phase = Phase(phase_str)
         except ValueError:
@@ -1007,10 +1027,19 @@ def guardrail_warnings_for_setup(
         )
         if not guard.flagged or not guard.reason:
             continue
-        msg = (
-            f"T{corner_id} {phase_str}: {guard.reason} "
-            f"(front margin {front_margin:.2f}, rear {rear_margin:.2f})"
-        )
+        severity = max(front_margin, rear_margin)
+        existing = by_corner.get(corner_id)
+        if existing is None or severity > existing[3]:
+            by_corner[corner_id] = (
+                f"T{corner_id} {phase_str}: {guard.reason} "
+                f"(front margin {front_margin:.2f}, rear {rear_margin:.2f})",
+                front_margin,
+                rear_margin,
+                severity,
+            )
+
+    for corner_id in sorted(by_corner):
+        msg = by_corner[corner_id][0]
         if msg in seen:
             continue
         seen.add(msg)

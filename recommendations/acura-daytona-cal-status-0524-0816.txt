@@ -1,0 +1,48 @@
+========================================================================
+ acura @ daytona_2011_road -- calibration probe (N=1 sessions)
+ Coverage: 0/41 parameters with N>=3 distinct values  (0% explored, 41 pinned)
+========================================================================
+
+PARAMETER                            N  RANGE                      COVERAGE
+---------------------------------------------------------------------------
+brake_duct_front                     0  (none observed)                  0%
+brake_duct_rear                      0  (none observed)                  0%
+throttle_brake_mapping               0  (none observed)                  0%
+anti_roll_bar_front                  1  1.000 click (single)             0%
+anti_roll_bar_rear                   1  3.000 click (single)             0%
+brake_bias_pct                       1  47.000 pct (single)              0%
+camber_fl_deg                        1  -2.8 deg (single)                0%
+camber_fr_deg                        1  -2.8 deg (single)                0%
+camber_rl_deg                        1  -1.8 deg (single)                0%
+camber_rr_deg                        1  -1.8 deg (single)                0%
+damper_hsc_fl                        1  5 click (single)                 0%
+damper_hsc_fr                        1  5 click (single)                 0%
+damper_hsc_rl                        1  9 click (single)                 0%
+damper_hsc_rr                        1  9 click (single)                 0%
+damper_hsc_slope_fl                  1  10 click (single)                0%
+damper_hsc_slope_fr                  1  10 click (single)                0%
+damper_hsc_slope_rl                  1  10 click (single)                0%
+damper_hsc_slope_rr                  1  10 click (single)                0%
+damper_hsr_fl                        1  4 click (single)                 0%
+damper_hsr_fr                        1  4 click (single)                 0%
+damper_hsr_rl                        1  7 click (single)                 0%
+damper_hsr_rr                        1  7 click (single)                 0%
+damper_lsc_fl                        1  3 click (single)                 0%
+damper_lsc_fr                        1  3 click (single)                 0%
+damper_lsc_rl                        1  8 click (single)                 0%
+damper_lsc_rr                        1  8 click (single)                 0%
+damper_lsr_fl                        1  2 click (single)                 0%
+damper_lsr_fr                        1  2 click (single)                 0%
+damper_lsr_rl                        1  5 click (single)                 0%
+damper_lsr_rr                        1  5 click (single)                 0%
+diff_preload_nm                      1  20.000 Nm (single)               0%
+fuel_level_l                         1  58.0 L (single)                  0%
+heave_perch_offset_front_mm          1  49.0 mm (single)                 0%
+heave_spring_rate_n_per_mm           1  360 N/mm (single)                0%
+pushrod_length_offset_front_mm       1  -30.500 mm (single)              0%
+pushrod_length_offset_rear_mm        1  -33.000 mm (single)              0%
+rear_wing_angle_deg                  1  8 deg (single)                   0%
+spring_perch_offset_rear_mm          1  42.500 mm (single)               0%
+third_spring_rate_n_per_mm           1  170.000 N/mm (single)            0%
+toe_front_mm                         1  -0.2 mm (single)                 0%
+tyre_cold_pressure_kpa               1  152.0 kPa (single)               0%

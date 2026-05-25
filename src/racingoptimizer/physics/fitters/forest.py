@@ -36,11 +36,24 @@ class ForestFitter(FitterBase):
         self._max_depth = max_depth
         self._rf: RandomForestRegressor | None = None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+    def fit(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        *,
+        sample_weight: np.ndarray | None = None,
+    ) -> None:
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64)
         if X.ndim == 1:
             X = X.reshape(-1, 1)
+        sw = (
+            np.asarray(sample_weight, dtype=np.float64)
+            if sample_weight is not None
+            else None
+        )
+        if sw is not None and sw.shape[0] != X.shape[0]:
+            sw = None  # defensive: drop weights rather than crash on shape mismatch
 
         for n_est in (self._n_estimators, max(self._n_estimators // 2, 10)):
             try:
@@ -50,7 +63,10 @@ class ForestFitter(FitterBase):
                     random_state=self._random_state,
                     n_jobs=1,
                 )
-                rf.fit(X, y)
+                if sw is not None:
+                    rf.fit(X, y, sample_weight=sw)
+                else:
+                    rf.fit(X, y)
                 # Pickle round-trip canonicalizes the fitted estimator so
                 # subsequent `pickle.dumps` calls are byte-identical (spec
                 # §12). See `GPFitter.fit` for the dtype-singleton rationale.

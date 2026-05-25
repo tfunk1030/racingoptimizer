@@ -167,6 +167,21 @@ class PhysicsModel:
         default_factory=dict
     )
 
+    # Lightweight per-track additive residual correction (cross-track
+    # de-confounding). Populated only by fit_per_car (v4). For each track,
+    # we compute the mean (actual - pooled_per_car_prediction) per channel
+    # across that track's corner-phase rows. During v4 prediction for a
+    # known target track we add the track-specific residual to the base
+    # surrogate output. This counters the case where a high-sample track
+    # (e.g. Sebring) drags the pooled model's predictions for a low-sample
+    # track (e.g. Spa) on parameters that have real track-specific behavior.
+    # Only applied for parameters/channels that show meaningful per-track
+    # structure; keeps the core per-car surrogate as the primary model.
+    # Structure: track -> channel -> residual (float)
+    per_track_residuals: dict[str, dict[str, float]] = field(
+        default_factory=dict
+    )
+
     # Per-(car, axle) grip ceilings fitted from the training corpus during
     # `fit_per_car` (physics-rebuild Day-10 model, wired into DE in
     # post-rebuild work). Used by `physics/recommend.py` to apply an
@@ -184,6 +199,20 @@ class PhysicsModel:
     # (pre-Day-11 residual-correction wiring) and on fits where insufficient
     # clean samples prevent a stable correction fit.
     aero_residual_correction: AeroResidualCorrection | None = None
+
+    # Per-session (platform setup → static garage RH) lookup for k-NN
+    # readout prediction and DE feasibility. Populated by fit/fit_per_car;
+    # empty on legacy pickles (falls back to forest readout fitters only).
+    static_rh_corpus: tuple = field(default_factory=tuple)
+
+    # Per-car deterministic linear fit for the four
+    # ``setup_static_*_ride_height_mm`` channels (P0.2 of
+    # ``docs/accuracy-rebuild-2026-05-24/PLAN.md``). When this fit ships
+    # (R^2 >= 0.98 per channel), ``predict_setup_readouts`` returns the
+    # kinematic value for those channels and bypasses the noisy Ridge/
+    # Forest surrogate. ``None`` on legacy pickles or when the corpus is
+    # too thin for a stable fit.
+    static_rh_kinematic: object | None = None
 
     @property
     def resolved_baselines(self) -> CarBaselines:
@@ -227,8 +256,13 @@ class PhysicsModel:
         slot_values.setdefault("parameter_observed_std", {})
         slot_values.setdefault("per_track_parameter_observed", {})
         slot_values.setdefault("bayes_posteriors", {})
+        slot_values.setdefault("per_track_residuals", {})
         slot_values.setdefault("axle_grip_ceilings", None)
         slot_values.setdefault("aero_residual_correction", None)
+        slot_values.setdefault("static_rh_corpus", ())
+        slot_values.setdefault("static_rh_kinematic", None)
+        _repair_legacy_slot_shift(slot_values)
+        _validate_pickle_slots(slot_values)
         for name, value in slot_values.items():
             object.__setattr__(self, name, value)
 
@@ -306,19 +340,35 @@ class PhysicsModel:
                 continue
             by_channel.setdefault(channel, record)
 
+        # P0.2 -- per-car deterministic kinematic fit for the four
+        # ``setup_static_*_ride_height_mm`` channels. When the fit
+        # shipped (R^2 >= 0.98 per channel) we take its prediction as
+        # the source of truth and skip the surrogate path for those
+        # channels. The surrogate fit is still computed during training
+        # so legacy paths keep functioning; we just stop reading it for
+        # the channels the kinematic fit owns.
+        out: dict[str, float] = {}
+        kinematic = getattr(self, "static_rh_kinematic", None)
+        if kinematic is not None:
+            from racingoptimizer.physics.static_rh_kinematic import (
+                predict_static_rh_kinematic,
+            )
+            kinematic_readouts = predict_static_rh_kinematic(kinematic, setup)
+            out.update(kinematic_readouts)
+            for channel in kinematic_readouts:
+                by_channel.pop(channel, None)
+
         if not by_channel:
-            return {}
+            return out
 
         schema = int(self.feature_schema_version)
         if schema < 3:
             # Legacy per-parameter sum models don't carry joint feature
             # rows; the readout was never trained as a single fitter.
-            return {}
+            return out
 
         env_features = _env_to_array(env)
         archetype: dict[str, float] = {}
-
-        out: dict[str, float] = {}
         for channel, record in by_channel.items():
             if schema >= 4:
                 row = _assemble_feature_row_v4(
@@ -335,6 +385,7 @@ class PhysicsModel:
             except (UntrainedError, ValueError):
                 continue
             out[channel] = float(mu[0])
+
         return out
 
     def predict(
@@ -353,7 +404,9 @@ class PhysicsModel:
                     "corner_duration_s) — schedule must come from the target "
                     "TrackModel, not the trained sessions."
                 )
-            return self._predict_v4(setup, env, corner_phase_key, corner_archetype)
+            return self._predict_v4(
+                setup, env, corner_phase_key, corner_archetype,
+            )
         if int(self.feature_schema_version) >= 3:
             return self._predict_v3(setup, env, corner_phase_key)
         return self._predict_legacy(setup, env, corner_phase_key)
@@ -480,6 +533,14 @@ class PhysicsModel:
                 continue
             mean_value = float(mu[0])
             posterior_std = float(sigma[0]) if sigma.size else 0.0
+
+            # Note: ``per_track_residuals`` (added 2026-05-24) was retired
+            # in P0.1 of ``docs/accuracy-rebuild-2026-05-24/PLAN.md`` -- it
+            # added ``track_median(actual) - global_median(actual)``, not
+            # a real residual, which double-counted track bias (the
+            # surrogate is already trained on those rows) and flattened
+            # the setup -> output gradient that DE needs. The slot is
+            # kept on PhysicsModel for pickle compat but no longer read.
 
             bracket_std = max(float(record.cv_residual_std), posterior_std)
             confidence = Confidence.derive(
@@ -725,6 +786,130 @@ def _assemble_feature_row_v4(
             continue
         row[i] = 0.0
     return row
+
+
+def _repair_legacy_slot_shift(slot_values: dict[str, object]) -> None:
+    """Fix pickles saved before ``per_track_residuals`` was append-only.
+
+    Pre-v7 pickles serialised a positional slot list whose tail was one
+    entry short: ``axle_grip_ceilings`` landed in ``per_track_residuals``,
+    ``aero_residual_correction`` landed in ``axle_grip_ceilings``, and the
+    real aero correction slot was empty. Detect the mis-typed values and
+    restore them in-place so hybrid scoring and guardrails work again
+    without forcing an immediate refit on every stale cache file.
+    """
+    ptr = slot_values.get("per_track_residuals")
+    axle = slot_values.get("axle_grip_ceilings")
+    aero = slot_values.get("aero_residual_correction")
+
+    if isinstance(axle, AeroResidualCorrection) and aero is None:
+        slot_values["aero_residual_correction"] = axle
+        slot_values["axle_grip_ceilings"] = None
+        axle = None
+
+    if isinstance(ptr, dict) and ptr:
+        sample = next(iter(ptr.values()))
+        if isinstance(sample, AxleGripCeiling):
+            slot_values["axle_grip_ceilings"] = ptr
+            slot_values["per_track_residuals"] = {}
+
+
+# P1.4 -- slot type-safety on pickle revive.
+#
+# Pre-2026-05-24 pickles surfaced a silent slot-shift bug: somebody
+# inserted a field in the middle of ``PhysicsModel.__slots__`` and
+# every later slot's positional value shifted by one, so
+# ``axle_grip_ceilings`` landed inside ``per_track_residuals`` (a
+# ``dict[str, AxleGripCeiling]``) and ``aero_residual_correction``
+# landed inside ``axle_grip_ceilings`` (an ``AeroResidualCorrection``).
+# Hybrid scoring read ``axle_grip_ceilings.get("front")`` and hit an
+# ``AttributeError`` -- except a defensive ``isinstance(..., dict)``
+# guard in ``physics/score.py`` swallowed it and silently disabled
+# guardrails. No regression test asserted the slot types, so the
+# corruption went undetected until a stale pickle was inspected.
+#
+# This helper runs after ``_repair_legacy_slot_shift`` and refuses to
+# revive a pickle whose slot types are still wrong. The error names
+# the slot and tells the user how to recover (refit, or run with
+# ``--no-cache``). Repair is intentionally NOT attempted here -- if
+# the shift is novel, repairing in silence would re-create the
+# original "silently broken" failure mode.
+_SLOT_EXPECTED_TYPES: dict[str, tuple[type, ...]] = {
+    # Always dict/dict-of-dict, never an object instance:
+    "parameter_observed_std": (dict,),
+    "per_track_parameter_observed": (dict,),
+    "bayes_posteriors": (dict,),
+    "per_track_residuals": (dict,),
+    "track_models_used": (dict,),
+    "fitters": (dict,),
+    "ontology": (dict,),
+    "baseline_setup": (dict,),
+    # Always tuple:
+    "session_ids": (tuple,),
+    "untrained_parameters": (tuple,),
+    "static_rh_corpus": (tuple,),
+    # Always int/bool:
+    "feature_schema_version": (int,),
+    "seed": (int,),
+    "aero_correction_available": (bool, int),
+}
+
+
+def _validate_pickle_slots(slot_values: dict[str, object]) -> None:
+    """Type-check pickle slots before they are assigned to a PhysicsModel.
+
+    Raises ``TypeError`` if any slot carries a value whose type cannot
+    plausibly belong to that slot. Designed to detect future
+    slot-shift accidents (see ``_repair_legacy_slot_shift``) rather
+    than silently letting wrong-typed values flow into production
+    scoring paths.
+    """
+    for slot_name, allowed_types in _SLOT_EXPECTED_TYPES.items():
+        if slot_name not in slot_values:
+            continue
+        value = slot_values[slot_name]
+        if not isinstance(value, allowed_types):
+            raise TypeError(
+                f"PhysicsModel pickle revive: slot {slot_name!r} has "
+                f"type {type(value).__name__!r} but expected "
+                f"{[t.__name__ for t in allowed_types]!r}. This is "
+                "almost certainly slot-shift corruption from inserting "
+                "a field in the middle of __slots__ (see comment in "
+                "model.py near the slot decl). Recover with "
+                "`optimize <car> <track> --no-cache` to force a refit, "
+                "and bump FITTERS_LAYOUT_VERSION to invalidate other "
+                "stale pickles. See docs/accuracy-rebuild-2026-05-24/"
+                "PLAN.md P1.4."
+            )
+    # The two optional-object slots: validate explicitly because their
+    # allowed types include None.
+    axle = slot_values.get("axle_grip_ceilings")
+    if axle is not None and not isinstance(axle, dict):
+        raise TypeError(
+            f"PhysicsModel pickle revive: slot 'axle_grip_ceilings' has "
+            f"type {type(axle).__name__!r} but expected 'dict' or 'NoneType'. "
+            "Recover with `optimize <car> <track> --no-cache`."
+        )
+    aero = slot_values.get("aero_residual_correction")
+    if aero is not None and not isinstance(aero, AeroResidualCorrection):
+        raise TypeError(
+            f"PhysicsModel pickle revive: slot 'aero_residual_correction' "
+            f"has type {type(aero).__name__!r} but expected "
+            "'AeroResidualCorrection' or 'NoneType'. Recover with "
+            "`optimize <car> <track> --no-cache`."
+        )
+    rh = slot_values.get("static_rh_kinematic")
+    if rh is not None:
+        from racingoptimizer.physics.static_rh_kinematic import (
+            StaticRhKinematic,
+        )
+        if not isinstance(rh, StaticRhKinematic):
+            raise TypeError(
+                f"PhysicsModel pickle revive: slot 'static_rh_kinematic' "
+                f"has type {type(rh).__name__!r} but expected "
+                "'StaticRhKinematic' or 'NoneType'. Recover with "
+                "`optimize <car> <track> --no-cache`."
+            )
 
 
 __all__ = [

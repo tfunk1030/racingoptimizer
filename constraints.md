@@ -190,6 +190,32 @@ damper transitions from low-speed to high-speed compression behaviour.
 | RL | 0 | 11 |
 | RR | 0 | 11 |
 
+### Damper — Roll Low Speed Compression
+Roll-axis dampers on Acura/Porsche split ``Dampers.FrontRoll`` /
+``Dampers.RearRoll`` blocks (``LsDamping`` field, not ``LsCompDamping``).
+| corner | min | max |
+| --- | --- | --- |
+| front | 0 | 11 |
+| rear | 0 | 11 |
+
+### Damper — Roll High Speed Compression
+| corner | min | max |
+| --- | --- | --- |
+| front | 0 | 11 |
+| rear | 0 | 11 |
+
+### Traction control gain (TC1)
+iRacing TC1 click index extracted from strings like ``4 (TC1)``.
+| min | max |
+| --- | --- |
+| 1 | 12 |
+
+### Traction control slip (TC2)
+iRacing TC2 click index extracted from strings like ``4 (TC2)``.
+| min | max |
+| --- | --- |
+| 1 | 12 |
+
 ### Torsion bar turns
 Per-side preload turn count on the front torsion bars. Cadillac and BMW
 M Hybrid V8 expose this control on the front axle per BMWBounds.md /

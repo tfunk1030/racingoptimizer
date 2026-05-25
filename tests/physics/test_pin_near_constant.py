@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from racingoptimizer.physics.recommend import (
     _NEAR_CONSTANT_FRACTION,
+    _apply_within_track_bounds,
     _pin_or_trust_bounds,
     _trust_bounds,
 )
@@ -384,3 +385,55 @@ def test_full_recommend_pins_near_constant_param(bmw_model_session) -> None:
 
     # And the recommendation must mention which parameters were pinned.
     assert len(rec.pinned_to_observed_median) > 0
+
+
+def test_apply_within_track_bounds_pins_single_value() -> None:
+    bounds, pinned, thin = _apply_within_track_bounds(
+        sub_bounds=(100.0, 200.0),
+        was_pinned=False,
+        track_observed=(10.0,),
+        bound=(0.0, 300.0),
+        reset_mode=False,
+    )
+    assert bounds == (10.0, 10.0)
+    assert pinned is True
+    assert thin is True
+
+
+def test_apply_within_track_bounds_caps_to_two_local_values() -> None:
+    bounds, pinned, thin = _apply_within_track_bounds(
+        sub_bounds=(50.0, 250.0),
+        was_pinned=False,
+        track_observed=(160.0, 180.0),
+        bound=(0.0, 900.0),
+        reset_mode=False,
+    )
+    assert bounds == (160.0, 180.0)
+    assert pinned is False
+    assert thin is False
+
+
+def test_apply_within_track_bounds_pins_faster_of_two_local_values() -> None:
+    bounds, pinned, thin = _apply_within_track_bounds(
+        sub_bounds=(6.0, 12.0),
+        was_pinned=False,
+        track_observed=(8.0, 10.0),
+        bound=(6.0, 10.0),
+        reset_mode=False,
+        track_best_value=10.0,
+    )
+    assert bounds == (10.0, 10.0)
+    assert pinned is True
+    assert thin is True
+
+
+def test_apply_within_track_bounds_skips_when_three_or_more() -> None:
+    bounds, pinned, thin = _apply_within_track_bounds(
+        sub_bounds=(50.0, 250.0),
+        was_pinned=False,
+        track_observed=(160.0, 180.0, 210.0),
+        bound=(0.0, 900.0),
+        reset_mode=False,
+    )
+    assert bounds == (50.0, 250.0)
+    assert thin is False

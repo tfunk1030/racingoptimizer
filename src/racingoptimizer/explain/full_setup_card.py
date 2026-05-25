@@ -35,7 +35,11 @@ import json
 import re
 from typing import Any
 
-from racingoptimizer.physics.ontology import ParameterSpec, ontology_for
+from racingoptimizer.physics.ontology import (
+    ParameterSpec,
+    garage_step_decimal_places,
+    ontology_for,
+)
 from racingoptimizer.physics.recommendation import SetupRecommendation
 
 # Pulls a leading signed float out of YAML strings like "30 N/mm" or "-22.5 mm".
@@ -138,6 +142,14 @@ _MIRRORED_LEAVES: dict[tuple[str, ...], tuple[tuple[str, ...], str]] = {
     ("Chassis", "RightRear", "ToeIn"): (
         ("Chassis", "LeftRear", "ToeIn"),
         "toe_rl_mm",
+    ),
+    ("Chassis", "RightFront", "Camber"): (
+        ("Chassis", "LeftFront", "Camber"),
+        "camber_fl_deg",
+    ),
+    ("Chassis", "RightRear", "Camber"): (
+        ("Chassis", "LeftRear", "Camber"),
+        "camber_rl_deg",
     ),
     # Damper mirrors -- 5 modes x 2 axles = 10 entries. Front and rear
     # right-side dampers all pull from their left-side counterparts.
@@ -291,12 +303,8 @@ def _format_opt_value(
             body = f"{snapped:.2f}"
         return f"{body} {units}".rstrip()
     snapped = _round_to_step(value, spec_step)
-    if spec_step is None or spec_step >= 1.0:
-        body = f"{snapped:.0f}"
-    elif spec_step >= 0.1:
-        body = f"{snapped:.1f}"
-    else:
-        body = f"{snapped:.2f}"
+    decimals = garage_step_decimal_places(spec_step)
+    body = f"{snapped:.{decimals}f}"
     return f"{body} {units}".rstrip()
 
 
@@ -403,7 +411,7 @@ def render_full_setup_card(
     lines.append(
         "Legend: [OPT] optimizer recommendation | [OPT pin] pinned to "
         "observed median | [OPT mirror] mirrored from per-axle parameter "
-        "| [past] from your most recent session (no bounds yet) | "
+        "| [past] from your most recent session (optimizer held this value) | "
         "[readout] calculated by iRacing -- verify, don't enter | "
         "[predicted] readout the optimizer projects under the new inputs."
     )

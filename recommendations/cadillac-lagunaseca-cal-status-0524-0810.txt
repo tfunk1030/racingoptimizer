@@ -1,0 +1,51 @@
+========================================================================
+ cadillac @ lagunaseca -- calibration probe (N=14 sessions)
+ Coverage: 28/44 parameters with N>=3 distinct values  (64% explored, 6 pinned)
+========================================================================
+
+PARAMETER                            N  RANGE                      COVERAGE
+---------------------------------------------------------------------------
+anti_roll_bar_front                  1  1.000 click (single)             0%
+damper_hsc_slope_rl                  1  11 click (single)                0%
+damper_hsc_slope_rr                  1  11 click (single)                0%
+rear_wing_angle_deg                  1  17 deg (single)                  0%
+throttle_brake_mapping               1  12 click (single)                0%
+tyre_cold_pressure_kpa               1  152.0 kPa (single)               0%
+heave_spring_rate_n_per_mm           2  30 .. 50 N/mm                    3%
+camber_fl_deg                        2  -2.9 .. -2.8 deg                 3%
+camber_fr_deg                        2  -2.9 .. -2.8 deg                 3%
+camber_rl_deg                        2  -1.9 .. -1.8 deg                 5%
+camber_rr_deg                        2  -1.9 .. -1.8 deg                 5%
+damper_lsr_fl                        2  4 .. 5 click                     9%
+damper_lsr_fr                        2  4 .. 5 click                     9%
+torsion_bar_od_fl_mm                 2  14.760 .. 15.510 mm             17%
+damper_hsc_slope_fl                  2  5 .. 11 click                   55%
+damper_hsc_slope_fr                  2  5 .. 11 click                   55%
+brake_bias_pct                       3  47.000 .. 48.500 pct             8%
+damper_hsr_fl                        3  5 .. 8 click                    27%
+damper_hsr_fr                        3  5 .. 8 click                    27%
+damper_hsr_rl                        3  5 .. 8 click                    27%
+damper_hsr_rr                        3  5 .. 8 click                    27%
+damper_hsc_fl                        3  5 .. 9 click                    36%
+damper_hsc_fr                        3  5 .. 9 click                    36%
+damper_lsc_fl                        3  4 .. 8 click                    36%
+damper_lsc_fr                        3  4 .. 8 click                    36%
+damper_lsc_rl                        3  4 .. 8 click                    36%
+damper_lsc_rr                        3  4 .. 8 click                    36%
+damper_hsc_rl                        3  5 .. 10 click                   45%
+damper_hsc_rr                        3  5 .. 10 click                   45%
+fuel_level_l                         3  6 .. 58 L                       52%
+damper_lsr_rl                        3  4 .. 10 click                   55%
+damper_lsr_rr                        3  4 .. 10 click                   55%
+anti_roll_bar_rear                   3  1.000 .. 5.000 click           100%
+third_perch_offset_rear_mm           4  39.5 .. 52.0 mm                  6%
+toe_rl_mm                            4  -0.1 .. 0.4 mm                  10%
+torsion_bar_turns_fl                 5  0.093 .. 0.103 turns             2%
+spring_perch_offset_rear_mm          5  30.0 .. 44.5 mm                  7%
+toe_front_mm                         5  -0.8 .. -0.1 mm                 12%
+rear_coil_spring_rate_n_per_mm       5  140 .. 180 N/mm                 23%
+third_spring_rate_n_per_mm           5  320 .. 540 N/mm                 24%
+diff_preload_nm                      5  0.000 .. 90.000 Nm              60%
+heave_perch_offset_front_mm          6  -28.0 .. -17.5 mm                5%
+pushrod_length_offset_rear_mm        6  -35.0 .. 1.0 mm                 45%
+pushrod_length_offset_front_mm       7  -34.0 .. -26.5 mm                9%

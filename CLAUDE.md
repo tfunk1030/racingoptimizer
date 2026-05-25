@@ -6,6 +6,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `racingoptimizer` is the `optimize` Python CLI for iRacing GTP setup recommendations (VISION.md §8). All six VISION slices (A–F) plus three cross-cutting modules are merged. End-user walkthrough is in `GETTING_STARTED.md`; design spec is `VISION.md` (read it first); per-clause audit is `docs/VISION_COMPLIANCE.md`.
 
+## Known accuracy gap (2026-05-24) — READ BEFORE TRUSTING RECOMMENDATIONS
+
+The post-physics-rebuild work (2026-05-09 → 2026-05-24) wired hybrid scoring, axle ceilings, static-RH co-optimization, garage symmetry, snap-to-step, and a per-track residual correction. Several of those changes broke the "physics-based and calibrated" claim. The current plan is in `docs/accuracy-rebuild-2026-05-24/PLAN.md`.
+
+**Closed in W1-W4 (2026-05-24):** P0.1, P0.2, P0.3, P0.4, P1.1, P1.4, P2.3, P2.4, P3.1, P3.2, P3.3. The legacy k-NN static-RH repair is bypassed when the kinematic fit ships (W2 cleanup).
+
+- **P0.1 — `per_track_residuals` retired.** The slot is preserved on `PhysicsModel` for pickle compat but the predict path no longer reads it and `fit_per_car` no longer computes it. `FITTERS_LAYOUT_VERSION = 10` invalidates every pre-2026-05-24 pickle so they refit clean.
+- **P0.2 — Deterministic kinematic static-RH fit ships.** `physics/static_rh_kinematic.py` is a per-car closed-form ridge-regularised OLS gated on R² ≥ 0.98 across the four `setup_static_*_ride_height_mm` channels. Wired into `PhysicsModel.predict_setup_readouts` (kinematic wins for those four channels; surrogate fallback for everything else). Slot validated by `_validate_pickle_slots`. `physics/recommend.py::_kinematic_static_rh_ready` skips the legacy k-NN `enforce_static_rh_feasible` repair when the kinematic fit shipped (would degrade an already-correct prediction); falls back to the legacy k-NN path when kinematic refused (R² < 0.98 or thin corpus).
+- **P0.3 — Sensitivity floor enforced.** `physics/recommend.py` probes every moved parameter at ±1 garage step against an order-independent `recommended_snapshot`; moves below `_SENSITIVITY_FLOOR = 0.005` on both sides are reverted to `model.baseline_setup` and surfaced under NOTES via `SetupRecommendation.suppressed_below_sensitivity`. The narrative renderer excludes suppressed params from the "moved" block so they appear only in NOTES.
+- **P0.4 — Phantom corner-0 + per-corner dedupe.** `physics/corner_schedule.is_real_corner_archetype` (peak lat-G ≥ 0.40 and max−apex slowdown ≥ 5 m/s) gates both `_axle_guardrail_penalty` and `guardrail_warnings_for_setup`. The latter additionally collapses per-(corner, phase) hits to one summary line per corner.
+- **P1.1 — Per-channel held-out gate.** `scripts/holdout_accuracy_gate.py::_PER_CHANNEL_THRESHOLDS` carries the per-channel pass criteria from PLAN §3 P1.1 (peak lat/long G 0.30 / 0.5; understeer 0.10 rad / 0.5; wheel RH 3.0 mm / 0.5; static RH 1.0 mm / 0.2; damper force p99 = 30 % of channel std / 0.5). `main()` returns 1 on ANY car failing ANY non-driver-input channel; the aggregate gate stays informational. JSON output gains `per_channel_pass` + `per_channel_failed` keys per car.
+- **P1.4 — Slot type-safety.** `_validate_pickle_slots` invoked from `__setstate__` after `_repair_legacy_slot_shift`. Refuses revives with wrong-typed slots and points the user at `--no-cache`.
+- **P2.3 — Inverse-track-sample-count training weights.** `physics/fitter.py::_attach_track_balance_weights` adds a `_track_balance_weight = 1 / sqrt(n_track_rows)` column piped through to the Forest fitter via `sample_weight`. Ridge / GP silently ignore the kwarg (their channels are session-invariant).
+- **P2.4 — `phase_duration_s` injected at fit time.** `CORNER_ARCHETYPE_COLUMNS` extended with the per-phase duration so the surrogate can learn within-corner phase asymmetry. `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` bumped 5 → 6.
+- **P3.1 — Briefing header carries channel-level error budget.** `explain/narrative.py::_render_error_budget_block` loads `holdout_accuracy_latest.json` and renders one line per `_HEADER_ERROR_BUDGET_CHANNELS` entry. Falls back to the legacy `Confidence: <regime> (median n=N)` line when no row matches.
+- **P3.2 — Watch-most picker normalisation.** `_dominant_impact_corner` and `_telemetry_why` divide each impact's `|score_delta|` by the corner's pre-filter spread in the candidate pool, so a long corner with broad-impact loses to a corner with concentrated impact.
+- **P3.3 — Thin-corpus refusal banner.** `cli/recommend.py::_is_thin_corpus_for_recommend` (n_prod < 20 OR `axle_grip_ceilings is None`) gates `recommend_cmd`; refusal emits a banner pointing at `optimize calibrate <car> <track>` and returns before DE.
+
+**Still open (deferred from W4):**
+
+- **P1.2** — script + helpers ship; the per-pair LOSO refit (~2.5 hr per car-track) is a placeholder, populated offline.
+- **P1.3** — `tests/physics/test_hybrid_heldout_ab.py` gates non-regression invariants. CI YAML flip + per-car asymmetric "hybrid doesn't lose" assertion still pending.
+- **P2.1** — curb / off-line row masking deferred (needs `TrackModel.bump_map` API addition; bigger than W3 budget).
+- **P2.2** — per-track mixed-effects model skipped in favour of P2.3.
+
+Full plan and prioritized fixes: `docs/accuracy-rebuild-2026-05-24/PLAN.md`.
+
 ## Commands
 
 ```bash
@@ -226,8 +253,8 @@ Cache files at `corpus/models/<car>__per-car__<digest>.pickle` (or `<car>__<trac
 1. `session_ids` — adding a session = new training data
 2. `ontology` fingerprint — `(name, family, fittable, user_settable, json_path)` per spec. **The `json_path` is critical** — without it, a leaf-path correction (e.g. moving `fuel_level_l` from `Chassis.Fuel` to `BrakesDriveUnit.Fuel`) silently reuses the OLD pickle that trained against the wrong YAML field, masking the fix.
 3. `constraints.md` content hash — bounds are baked into the pickle at fit time; editing them must invalidate the cache so DE doesn't search against stale bounds.
-4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`, **currently 3** as of 2026-05-08 Day 4) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`), OR when PhysicsModel gains a new field that production paths read (forces refit so the field populates rather than default-empty).
-5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4).
+4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`, **currently 10** as of 2026-05-24) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`), OR when PhysicsModel gains a new field that production paths read (forces refit so the field populates rather than default-empty).
+5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4); bumped to 6 on 2026-05-24 with P2.4's `phase_duration_s` injection at fit time.
 
 Editing `constraints.md` invalidates EVERY per-car cache (constraint content hash is a cache-key ingredient). Next recommend per car triggers a ~15-min refit. Plan constraint edits in batches.
 
@@ -308,7 +335,7 @@ Specs live under `docs/superpowers/specs/`; plans under `docs/superpowers/plans/
 - Per-corner damper bounds with per-car-override fan-out (Ferrari overrides global 0–11 to 0–40)
 - Per-corner torsion bar turns + OD (BMW/Cadillac front; Ferrari all 4)
 
-Still `<TODO: from iRacing UI>`: brake duct openings only. Corner weights are
+Brake duct openings now have provisional ontology entries (2026 integration, paths to be verified on a duct-swept session). Still `<TODO: from iRacing UI>` for some cars: exact json_path tuning + full per-car coverage. Corner weights are
 **calculated readouts** (`fittable=False`, `user_settable=False` in ontology;
 `constraints.md` carries observation envelopes for validation only). Slice E's
 `fit` gracefully degrades — lists CE-gated unbounded parameters in
@@ -332,6 +359,20 @@ Default output path: `recommendations/<car>-<short-track>-<mode>[-<fuel>L]-<MMDD
 
 **Known regressions / gaps:**
 
+- **`per_track_residuals` flattens setup gradient — FIXED 2026-05-24 (P0.1).** Predict path no longer reads it; fitter no longer computes it; cache key bumped to `FITTERS_LAYOUT_VERSION=10` so pre-2026-05-24 pickles refit clean.
+- **Sensitivity floor enforced — FIXED 2026-05-24 (P0.3).** Moves below `_SENSITIVITY_FLOOR = 0.005` on ±1 step are reverted to baseline and listed in `SetupRecommendation.suppressed_below_sensitivity`; narrative renderer excludes them from the "moved" block.
+- **Phantom corner 0 + 5-line spam — FIXED 2026-05-24 (P0.4).** `is_real_corner_archetype` gates both guardrail paths; `guardrail_warnings_for_setup` dedupes per corner.
+- **Slot-shift type corruption — FIXED 2026-05-24 (P1.4).** `_validate_pickle_slots` refuses pickles with wrong slot types; existing `_repair_legacy_slot_shift` continues to rescue the 2026-05-08 case.
+- **Static RH `[predicted]` — FIXED 2026-05-24 (P0.2 + W2 cleanup).** Per-car kinematic linear fit (`physics/static_rh_kinematic.py`) gated on R² ≥ 0.98 ships for the four `setup_static_*_ride_height_mm` channels; `physics/recommend.py::_kinematic_static_rh_ready` skips the legacy k-NN repair when the fit is present. Falls back to k-NN when R² < 0.98 / corpus too thin.
+- **Held-out per-channel gate — FIXED 2026-05-24 (P1.1).** `scripts/holdout_accuracy_gate.py::_PER_CHANNEL_THRESHOLDS` carries per-channel pass criteria; gate hard-fails on ANY car failing ANY non-driver-input channel.
+- **Watch-most picker — FIXED 2026-05-24 (P3.2).** `_dominant_impact_corner` and `_telemetry_why` divide each impact's `|score_delta|` by the corner's pre-filter spread in the candidate pool, so a long broad-impact corner loses to a corner with concentrated impact.
+- **Thin-corpus refusal banner — FIXED 2026-05-24 (P3.3).** `_is_thin_corpus_for_recommend` (n_prod < 20 OR axle_grip_ceilings is None) gates `recommend_cmd`; refusal points the user at `optimize calibrate <car> <track>`.
+- **Inverse-track-sample-count training weights — FIXED 2026-05-24 (P2.3).** Forest fitter honours `sample_weight = 1 / sqrt(n_track_rows)` so a Sebring-heavy corpus doesn't drown Spa rows.
+- **Corner archetype `phase_duration_s` at fit time — FIXED 2026-05-24 (P2.4).** `CORNER_ARCHETYPE_COLUMNS` extended; `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` 5 → 6.
+- **Briefing header per-channel error budget — FIXED 2026-05-24 (P3.1).** `_render_error_budget_block` reads `holdout_accuracy_latest.json` and renders per-channel `mean_abs` lines; falls back to the legacy `Confidence: ...` line on missing rows.
+- **Lap-time Spearman gate (PARTIAL — P1.2).** `scripts/lap_time_correlation_gate.py` ships with helpers + qualifying-pair filter; the per-pair LOSO refit is a placeholder (~2.5 hr/car-track to populate offline).
+- **Hybrid vs surrogate-only A/B in CI (PARTIAL — P1.3).** `tests/physics/test_hybrid_heldout_ab.py` gates non-regression invariants (key-set match, finite totals, 50 % relative-delta bound). CI YAML flip + per-car asymmetric "hybrid doesn't lose" assertion still pending.
+- **Curb / off-line row masking (DEFERRED — P2.1).** Needs `TrackModel.bump_map` API addition; deferred to next pass.
 - `optimize <car> <track> --json` emits valid JSON to stdout; pin/fuel/reset/static-RH warnings populate the `warnings` array (stderr save line still present unless `--output-file -`).
 - Brake duct openings still `<TODO>` in `constraints.md`.
 - Wind decomposition uses tailwind-worst-case magnitude only; per-corner directional headwind/crosswind correction needs heading data the corner schedule doesn't carry yet (deferred per `physics/wind.py` docstring).
@@ -339,7 +380,6 @@ Default output path: `recommendations/<car>-<short-track>-<mode>[-<fuel>L]-<MMDD
 - Driver-input output channels (throttle, brake, damper velocity) plateau at fit_quality ~0.50 (signal == noise). Structural ceiling — the model can't fully resolve channels that depend more on driver input than setup.
 - BMW corpus is Sebring-dominated (37/53 sessions). Spa-specific predictions (11 sessions) are weaker than Sebring's by design.
 - Evaluator Spearman gate (~0.19 mean on corpus) below PLAN target 0.35 — product posture is guardrailed surrogate, not lap-time physics predictor.
-- Held-out hybrid vs `--surrogate-only` A/B (H1–H5) not yet in CI.
 
 ## Project automations (`.claude/`)
 

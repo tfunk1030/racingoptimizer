@@ -23,6 +23,16 @@ class SetupRecommendation:
     # these in the briefing so the user understands why no exploration
     # happened on those clicks. Empty tuple means nothing was pinned.
     pinned_to_observed_median: tuple[str, ...] = field(default_factory=tuple)
+    # Parameters pinned because the target track has fewer than three
+    # distinct observed values — DE is not allowed to extrapolate beyond
+    # the local envelope (matches calibrate ``_COVERED_THRESHOLD``).
+    pinned_within_track_thin: tuple[str, ...] = field(default_factory=tuple)
+    # Parameters where DE's chosen move could not be resolved by the
+    # surrogate at +/- 1 garage click (``|score_delta| < epsilon`` on
+    # both sides). Reverted to the training baseline so the briefing
+    # doesn't ship cosmetic moves the model cannot defend. See
+    # ``docs/accuracy-rebuild-2026-05-24/PLAN.md`` P0.3.
+    suppressed_below_sensitivity: tuple[str, ...] = field(default_factory=tuple)
     # Parameter -> human-readable warning when the recommendation came out
     # at a constraint bound AND the model's training baseline was outside
     # the bound (i.e. the constraint floor/ceiling silently dragged the

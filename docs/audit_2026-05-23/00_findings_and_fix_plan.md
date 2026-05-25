@@ -1,5 +1,12 @@
 # Full audit findings and fix plan — 2026-05-23
 
+> **Superseded for post-audit items by `docs/accuracy-rebuild-2026-05-24/PLAN.md`.**
+> Working-tree changes that landed 2026-05-24 (hybrid blend wiring,
+> static-RH co-optimization, `per_track_residuals`) altered or
+> introduced several issues this audit could not see. See the 2026-05-24
+> plan's "Relationship to prior audit" section for the closed/open/new
+> matrix. This document remains accurate as the 2026-05-23 snapshot.
+
 Audit goal: physics-based iRacing GTP setup optimizer that recommends per-click
 setups from telemetry — **fully accurate, completely built, correlated, and
 calibrated**.

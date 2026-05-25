@@ -55,6 +55,11 @@ def test_damper_forces_are_targets() -> None:
     assert "damper_force_p99_n" in TARGET_OUTPUT_CHANNELS
     assert "damper_force_mean_n" in TARGET_OUTPUT_CHANNELS
 
+    # New in Initiative 1 (telemetry completeness quick win)
+    assert "wheel_speed_max_diff_ms" in TARGET_OUTPUT_CHANNELS
+    assert "accel_lon_g_min" in TARGET_OUTPUT_CHANNELS
+    assert "accel_lon_g_max" in TARGET_OUTPUT_CHANNELS
+
 
 def test_handling_state_channels_are_targets() -> None:
     for ch in (

@@ -1,0 +1,55 @@
+========================================================================
+ bmw @ sebring_international -- calibration probe (N=37 sessions)
+ Coverage: 38/48 parameters with N>=3 distinct values  (79% explored, 4 pinned)
+========================================================================
+
+PARAMETER                            N  RANGE                      COVERAGE
+---------------------------------------------------------------------------
+throttle_brake_mapping               0  (none observed)                  0%
+arb_size_front                       1  1.000 (single)                   0%
+rear_wing_angle_deg                  1  17 deg (single)                  0%
+tyre_cold_pressure_kpa               1  152.0 kPa (single)               0%
+damper_hsc_slope_rl                  2  10 .. 11 click                   9%
+damper_hsc_slope_rr                  2  10 .. 11 click                   9%
+damper_lsc_rl                        2  5 .. 6 click                     9%
+damper_lsc_rr                        2  5 .. 6 click                     9%
+anti_roll_bar_front                  2  1.000 .. 2.000 click            25%
+diff_clutch_friction_plates          2  4.000 .. 6.000 plates           50%
+toe_rl_mm                            3  0.0 .. 0.3 mm                    6%
+spring_perch_offset_rear_mm          3  28.0 .. 41.5 mm                  7%
+torsion_bar_od_fl_mm                 3  13.900 .. 15.140 mm             29%
+damper_lsr_rl                        3  5 .. 9 click                    36%
+damper_lsr_rr                        3  5 .. 9 click                    36%
+arb_size_rear                        3  1.000 .. 3.000                  67%
+diff_coast_drive_ramps               3  0.000 .. 2.000                 100%
+brake_bias_pct                       4  45.750 .. 46.500 pct             4%
+camber_rl_deg                        4  -1.9 .. -1.6 deg                16%
+camber_rr_deg                        4  -1.9 .. -1.6 deg                16%
+damper_hsc_fl                        4  4 .. 9 click                    45%
+damper_hsr_fl                        4  5 .. 10 click                   45%
+damper_hsr_fr                        4  5 .. 10 click                   45%
+damper_hsr_rl                        4  6 .. 11 click                   45%
+damper_hsr_rr                        4  6 .. 11 click                   45%
+damper_hsc_slope_fl                  4  5 .. 11 click                   55%
+damper_hsc_slope_fr                  4  5 .. 11 click                   55%
+heave_spring_rate_n_per_mm           5  30 .. 80 N/mm                    6%
+toe_front_mm                         5  -1.0 .. -0.4 mm                 10%
+damper_lsc_fl                        5  6 .. 10 click                   36%
+damper_lsc_fr                        5  6 .. 10 click                   36%
+damper_lsr_fl                        5  5 .. 9 click                    36%
+damper_lsr_fr                        5  5 .. 9 click                    36%
+damper_hsc_fr                        5  4 .. 9 click                    45%
+anti_roll_bar_rear                   5  1.000 .. 5.000 click           100%
+diff_preload_nm                      6  10.000 .. 40.000 Nm             20%
+damper_hsc_rl                        7  3 .. 11 click                   73%
+damper_hsc_rr                        7  3 .. 11 click                   73%
+torsion_bar_turns_fl                 8  0.091 .. 0.102 turns             2%
+pushrod_length_offset_front_mm       8  -28.0 .. -22.5 mm                7%
+rear_coil_spring_rate_n_per_mm       8  130 .. 180 N/mm                 29%
+fuel_level_l                         8  10 .. 89 L                      80%
+third_perch_offset_rear_mm           9  36.0 .. 45.5 mm                  5%
+camber_fl_deg                        9  -2.9 .. -1.9 deg                34%
+camber_fr_deg                        9  -2.9 .. -1.9 deg                34%
+third_spring_rate_n_per_mm          11  320 .. 540 N/mm                 24%
+heave_perch_offset_front_mm         14  -31.5 .. -6.5 mm                12%
+pushrod_length_offset_rear_mm       16  -40.0 .. -16.5 mm               29%

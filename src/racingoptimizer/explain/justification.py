@@ -19,6 +19,7 @@ from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import clamp
 from racingoptimizer.corner import Phase
 from racingoptimizer.physics.ontology import ontology_for
+from racingoptimizer.physics.setup_symmetry import DE_SYMMETRY_SLAVES
 
 if TYPE_CHECKING:
     from racingoptimizer.physics import PhysicsModel, SetupRecommendation
@@ -107,6 +108,8 @@ def build_justifications(
 
     out: list[SetupJustification] = []
     for parameter, (value, confidence) in rec.parameters.items():
+        if parameter in DE_SYMMETRY_SLAVES:
+            continue
         helped, hurt = _split_impacts(
             parameter, value, model, rec, setup, schedule=schedule,
         )
