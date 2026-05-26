@@ -214,6 +214,18 @@ class PhysicsModel:
     # too thin for a stable fit.
     static_rh_kinematic: object | None = None
 
+    # Per-(channel, track) closed-form Bayes random-intercepts on the
+    # surrogate's training residuals (P2.2 of accuracy-rebuild-2026-05-24).
+    # Empirical-Bayes partial pooling toward zero: low-sample tracks
+    # shrink to no-correction, high-sample tracks with systematic
+    # divergence retain a real intercept. Applied additively at predict
+    # time so the surrogate's setup gradient is preserved -- only the
+    # per-track level shifts. Empty dict on legacy pickles and on cars
+    # whose corpus has too few tracks for partial pooling (the predict
+    # path falls back to surrogate-only via ``predict_correction``'s
+    # ``None``/missing-key returning ``(0.0, 0.0)``).
+    track_random_intercepts: dict = field(default_factory=dict)
+
     @property
     def resolved_baselines(self) -> CarBaselines:
         """Return `car_baselines` if set, else the per-car cold-start default.
@@ -261,6 +273,7 @@ class PhysicsModel:
         slot_values.setdefault("aero_residual_correction", None)
         slot_values.setdefault("static_rh_corpus", ())
         slot_values.setdefault("static_rh_kinematic", None)
+        slot_values.setdefault("track_random_intercepts", {})
         _repair_legacy_slot_shift(slot_values)
         _validate_pickle_slots(slot_values)
         for name, value in slot_values.items():
@@ -395,7 +408,17 @@ class PhysicsModel:
         corner_phase_key: CornerPhaseKey,
         *,
         corner_archetype: dict[str, float] | None = None,
+        track: str | None = None,
     ) -> CornerPhaseStateWithConfidence:
+        """Predict per-channel corner-phase state under ``setup`` + ``env``.
+
+        ``track`` (optional) selects the per-track random-intercept
+        correction (P2.2). When supplied AND the model carries a fit for
+        ``(channel, track)``, the surrogate's prediction is shifted by
+        the partial-pooled residual mean and the CI is widened by the
+        intercept's posterior std. Defaulting to ``None`` preserves the
+        legacy behaviour exactly (no correction, no CI widening).
+        """
         if int(self.feature_schema_version) >= 4:
             if corner_archetype is None:
                 raise ValueError(
@@ -405,7 +428,7 @@ class PhysicsModel:
                     "TrackModel, not the trained sessions."
                 )
             return self._predict_v4(
-                setup, env, corner_phase_key, corner_archetype,
+                setup, env, corner_phase_key, corner_archetype, track=track,
             )
         if int(self.feature_schema_version) >= 3:
             return self._predict_v3(setup, env, corner_phase_key)
@@ -487,6 +510,8 @@ class PhysicsModel:
         env: EnvironmentFrame,
         corner_phase_key: CornerPhaseKey,
         corner_archetype: dict[str, float],
+        *,
+        track: str | None = None,
     ) -> CornerPhaseStateWithConfidence:
         """Predict for a target corner using the per-car fitters keyed by (phase, channel).
 
@@ -495,6 +520,10 @@ class PhysicsModel:
         bridge that lets a Laguna-trained Cadillac fitter score a Spa corner:
         the (phase, channel) fitter's input row is reconstructed in the
         trained order with the target corner's archetype values plugged in.
+
+        ``track`` selects the per-track random-intercept correction
+        (P2.2). When None or absent from the fit, the surrogate's
+        prediction passes through unchanged.
         """
         phase = (
             corner_phase_key.phase.value
@@ -541,8 +570,33 @@ class PhysicsModel:
             # surrogate is already trained on those rows) and flattened
             # the setup -> output gradient that DE needs. The slot is
             # kept on PhysicsModel for pickle compat but no longer read.
+            #
+            # P2.2 replaces it with a proper random-intercept correction:
+            # alpha_t fit by closed-form empirical Bayes on the
+            # surrogate's training residuals, partial-pooled toward zero
+            # so low-sample tracks shrink to no-correction. Applied
+            # additively here -- the setup gradient (d mu / d setup) is
+            # unchanged because alpha_t does not depend on setup.
+            from racingoptimizer.physics.track_random_intercepts import (
+                predict_correction,
+            )
+            intercept_value, intercept_std = predict_correction(
+                getattr(self, "track_random_intercepts", None),
+                channel,
+                track,
+            )
+            mean_value = mean_value + intercept_value
 
-            bracket_std = max(float(record.cv_residual_std), posterior_std)
+            # Compose CI std: surrogate uncertainty (cv_residual or
+            # posterior) AND intercept uncertainty add in quadrature
+            # because they are independent sources of error.
+            surrogate_std = max(float(record.cv_residual_std), posterior_std)
+            if intercept_std > 0.0:
+                bracket_std = float(
+                    (surrogate_std ** 2 + intercept_std ** 2) ** 0.5
+                )
+            else:
+                bracket_std = surrogate_std
             confidence = Confidence.derive(
                 value=mean_value,
                 n_samples=int(record.n_samples),
@@ -840,6 +894,7 @@ _SLOT_EXPECTED_TYPES: dict[str, tuple[type, ...]] = {
     "per_track_parameter_observed": (dict,),
     "bayes_posteriors": (dict,),
     "per_track_residuals": (dict,),
+    "track_random_intercepts": (dict,),
     "track_models_used": (dict,),
     "fitters": (dict,),
     "ontology": (dict,),

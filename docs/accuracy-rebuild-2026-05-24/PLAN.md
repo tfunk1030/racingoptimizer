@@ -657,39 +657,72 @@ payload with the same warnings. Tests:
 boundary, missing axle ceilings, banner content, axle-ceilings-present
 phrasing, text-mode banner, JSON-mode payload).
 
-### 4c. Items deferred from W2-W4 (with reasons)
+### 4c. W5 closure of W2-W4 deferred items (2026-05-25)
 
-**P2.1 — curb / off-line row masking before fit.** DEFERRED.
-The plan's primary signal is "median per-sample track position falls
-inside a curb bin", which requires threading per-corner-phase curb
-membership from `TrackModel.bump_map` through
-`corner.states._aggregate`. That is a `TrackModel` API addition and
-bigger than the W3 budget, and the secondary
-`damper_velocity_p99_mms`-only signal would mark legitimate kerb-rich
-corners as dirty. Per the plan: "DON'T half-implement". Picked up in
-the next pass.
+**P1.2 -- real LOSO orchestration.** SHIPPED.
+`scripts/lap_time_correlation_gate.py::_compute_loso_pairs_for_track`
+now implements the actual leave-one-session-out loop: for each session
+in a qualifying `(car, track)` pair, fit per-car on the remaining
+sessions, score the held session's observed setup at the target track
++ averaged env from its corner-phase rows, and pair the score against
+the held session's median lap time (negated so positive Spearman ==
+faster-is-better). The heavy lift (~2.5 hr per 10-session pair) is
+intended to run offline; CI consumes the JSON. Empty-catalog
+environments still short-circuit cleanly via the existing
+`_build_pair_sessions_from_catalog` empty-dict return.
 
-**P2.2 — per-track random intercepts.** Skipped in favour of P2.3
-(cheap inverse-track-sample-count weights). The plan explicitly
-documents P2.3 as "the cheap version of P2.2; choose this over P2.2
-unless you have time and confidence to do the full random-intercepts
-model". P2.3 ships; P2.2 remains in `physics/bayes_retrofit.py`'s
-math base for a future upgrade.
+**P1.3 -- CI YAML flip + per-car asymmetric assertion.** SHIPPED.
+`tests/physics/test_hybrid_heldout_ab.py` now carries an asymmetric
+"hybrid total >= surrogate total * (1 - 0.20)" assertion (alongside
+the existing 50 % symmetric bound). Catches hybrid specifically
+falling below surrogate by more than 20 % on a driver-validated setup
+-- the failure mode where guardrail penalties fire too aggressively
+against real-world driving. `.github/workflows/ci.yml`'s
+`calibration-weekly` job invokes both `test_hybrid_heldout_ab.py` and
+`lap_time_correlation_gate.py` so the gates run on the cron schedule
+(daily would be wasteful given the slow-test cost).
 
-**P1.2 -- LOSO orchestration.** The script ships with the
-gating + math + qualifying-pair logic and a placeholder LOSO loop.
-The actual per-pair refit (~2.5 hr per car-track on this corpus)
-runs offline; CI consumes the JSON the placeholder writes. Future
-work: thread the LOSO refit + score sampling so the script populates
-`pair_to_results` with real `(score, -lap_time)` tuples.
+**P2.1 -- curb / off-line row masking before fit.** SHIPPED.
+`corner_phase_states` now accepts a `track_model=` kwarg;
+`_attach_cleanliness_masks` pulls per-sample `curb_mask` /
+`off_track_mask` from the supplied `TrackModel` and the aggregator
+emits `curb_frac_mean` + `off_track_frac_mean` per (corner, phase)
+row. `physics/fitter.py::_collect_training_frames` lazily builds a
+`TrackModel` per unique track in the session list (catalog-driven),
+threads it through corner_phase_states, then filters
+`curb_frac_mean > 0.5` (the plan's "median sample on a curb" cutoff)
+and `off_track_frac_mean > 0.0` (any off-track sample). Cold-start
+TrackModels return zero masks, so cold-start tracks pass through
+untouched -- the filter is a quality improvement on compounding
+corpora, not a correctness gate.
+`ENV_FEATURE_SCHEMA_VERSION_PER_CAR` bumped 6 -> 7 so old pickles
+refit clean. Tests:
+`tests/corner/test_curb_mask_threading.py` (6 tests: mask emission,
+exception handling, padding, truncation, aggregator integration,
+legacy-no-mask path), `tests/physics/test_curb_row_masking.py` (5
+tests: filter mechanics + threshold constants).
 
-**P1.3 -- CI YAML flip + per-car wins assertion.** The
-existing `tests/physics/test_hybrid_heldout_ab.py` gates
-non-regression invariants (key-set match, finite totals, 50 %
-relative-delta bound). The "hybrid wins" semantic isn't well-defined
-at the observed setup, so a stronger asymmetric guard plus a
-GitHub Actions YAML flip is W4+ scope. Per the plan task: "DO NOT
-touch the GitHub Actions YAML."
+**P2.2 -- per-track random intercepts.** SHIPPED.
+`physics/track_random_intercepts.py` ports the conjugate-Gaussian
+random-intercepts math from `bayes_retrofit.py` and centres the prior
+on zero (residuals already have the surrogate's mean removed).
+`fit_per_car` populates `PhysicsModel.track_random_intercepts` with
+`(channel, track) -> TrackIntercept` posteriors via
+`_fit_track_random_intercepts` (in-sample residuals + closed-form
+empirical-Bayes shrinkage; pruned to tracks with >= 10 residuals per
+channel). `_predict_v4` applies the intercept additively to the
+surrogate mu when the caller threads a target track via the new
+`predict(..., track=...)` kwarg. The setup gradient (d mu / d setup)
+is preserved because alpha_t does not depend on setup; only the
+per-track level shifts. CI widens in quadrature by intercept_std.
+`FITTERS_LAYOUT_VERSION` bumped 10 -> 11. Tests:
+`tests/physics/test_track_random_intercepts.py` (7 tests: maths
+contracts), `tests/physics/test_predict_v4_track_intercept.py` (5
+tests: predict-side wiring -- no-intercepts pass-through, on-track
+application, None-track suppression, missing-track fallback, CI
+quadrature widening), `tests/physics/test_track_independence.py`
+updated to allow track_random_intercepts mutation while continuing to
+ban per_track_residuals reintroduction.
 
 ---
 

@@ -58,7 +58,14 @@ from racingoptimizer.physics.fitters.ridge import RidgeFitter
 #        with static_rh_kinematic=None (predict_setup_readouts falls
 #        through to the surrogate); bumping the cache key forces a
 #        refit so new models carry the kinematic fit.
-FITTERS_LAYOUT_VERSION: int = 10
+#  11 -- 2026-05-25 P2.2: PhysicsModel.track_random_intercepts field
+#        added. Closed-form Bayes random-intercepts on the surrogate's
+#        training residuals, partial-pooled toward zero. Pickles from
+#        <=10 revive with track_random_intercepts={} (predict_correction
+#        returns (0, 0) and the surrogate's output passes through
+#        unchanged); bumping the cache key forces a refit so new models
+#        carry the random-intercept fit.
+FITTERS_LAYOUT_VERSION: int = 11
 
 __all__ = [
     "FITTERS_LAYOUT_VERSION",

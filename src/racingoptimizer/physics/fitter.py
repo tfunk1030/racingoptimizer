@@ -212,7 +212,17 @@ ENV_FEATURE_COUNT_V1: int = 5
 #      part of the input feature vector so the same fitter can score any
 #      corner on any track once the target's archetypes are extracted.
 ENV_FEATURE_SCHEMA_VERSION: int = 3
-ENV_FEATURE_SCHEMA_VERSION_PER_CAR: int = 6
+ENV_FEATURE_SCHEMA_VERSION_PER_CAR: int = 7
+
+# P2.1 cleanliness thresholds. A corner-phase row is dropped from the
+# training frame when its mean curb-or-off-track fraction exceeds these
+# bounds. Curb threshold is 0.5 (half the phase samples on a persistent
+# curb bin -- the median sample lies inside a curb, the plan's primary
+# signal). Off-track threshold is stricter (>0 = ANY off-track sample
+# observed during the phase) because the off-track detector is already
+# dilated and a single trigger flags a meaningful excursion.
+_CURB_DIRTY_FRACTION: float = 0.5
+_OFF_TRACK_DIRTY_FRACTION: float = 0.0
 
 # Per-corner archetype columns appended to every training row (and required
 # at predict time). Computed via polars window aggregation over
@@ -498,15 +508,73 @@ def _decode_setup(blob: str | None) -> dict:
 
 
 def _collect_training_frames(session_ids: list[str], root: Path) -> pl.DataFrame:
-    """Pull every valid lap's per-(corner, phase) frame and stack them."""
+    """Pull every valid lap's per-(corner, phase) frame and stack them.
+
+    P2.1 wiring: for each unique track represented in ``session_ids``,
+    lazily build a ``TrackModel`` (cached) and thread it into
+    ``corner_phase_states`` so the per-(corner, phase) rows carry
+    ``curb_frac_mean`` and ``off_track_frac_mean``. After concatenation,
+    rows where the fraction exceeds the dirty thresholds are dropped
+    from the training frame -- the physics fit no longer learns off
+    samples where the driver was on a kerb or off-line.
+
+    Cold-start tracks (insufficient sessions to build a real TrackModel)
+    skip the masking automatically: the cold-start ``TrackModel`` returns
+    zero masks, so every sample is "clean" and no rows get dropped.
+    Same fallback for any track-build failure -- the dirty-row filter is
+    a quality improvement, not a correctness gate.
+    """
+    # Lazy TrackModel cache keyed by track slug.
+    track_models: dict[str, object | None] = {}
+    sid_to_track: dict[str, str | None] = {}
+
+    # First pass: build the (session_id -> track) lookup and group by
+    # track so each TrackModel is built once on its full session list.
+    sessions_by_track: dict[str, list[str]] = {}
+    try:
+        with cat.open_catalog(catalog_path(root)) as conn:
+            for sid in session_ids:
+                sess = cat.get_session(conn, sid)
+                if sess is None:
+                    sid_to_track[sid] = None
+                    continue
+                track = sess.track
+                sid_to_track[sid] = track
+                if track:
+                    sessions_by_track.setdefault(track, []).append(sid)
+    except Exception:
+        # If the catalog walk fails, fall back to the legacy no-mask
+        # path; ``track_models`` stays empty and corner_phase_states
+        # gets no track_model below.
+        sid_to_track = {sid: None for sid in session_ids}
+
+    def _get_tm(track: str | None) -> object | None:
+        if not track:
+            return None
+        if track in track_models:
+            return track_models[track]
+        try:
+            from racingoptimizer.track.builder import build_track_model
+            tm: object | None = build_track_model(
+                track, sessions_by_track.get(track, []),
+                corpus_root=root,
+            )
+        except Exception:
+            tm = None
+        track_models[track] = tm
+        return tm
+
     frames: list[pl.DataFrame] = []
     for sid in session_ids:
         laps_df = ingest_api.laps(session_id=sid, valid_only=True, corpus_root=root)
         if laps_df.height == 0:
             continue
+        tm = _get_tm(sid_to_track.get(sid))
         for lap_idx in laps_df["lap_index"].to_list():
             try:
-                cps = corner_phase_states(sid, int(lap_idx), corpus_root=root)
+                cps = corner_phase_states(
+                    sid, int(lap_idx), corpus_root=root, track_model=tm,
+                )
             except (KeyError, ValueError, FileNotFoundError):
                 continue
             if cps.height == 0:
@@ -514,7 +582,22 @@ def _collect_training_frames(session_ids: list[str], root: Path) -> pl.DataFrame
             frames.append(cps)
     if not frames:
         return pl.DataFrame()
-    return pl.concat(frames, how="diagonal_relaxed")
+
+    stacked = pl.concat(frames, how="diagonal_relaxed")
+    # P2.1: drop dirty rows. Columns are absent when no TrackModel was
+    # threaded (cold-start corpus, catalog miss, build failure) -- the
+    # frame passes through unchanged in that case.
+    if "curb_frac_mean" in stacked.columns:
+        stacked = stacked.filter(
+            pl.col("curb_frac_mean").is_null()
+            | (pl.col("curb_frac_mean") <= _CURB_DIRTY_FRACTION)
+        )
+    if "off_track_frac_mean" in stacked.columns:
+        stacked = stacked.filter(
+            pl.col("off_track_frac_mean").is_null()
+            | (pl.col("off_track_frac_mean") <= _OFF_TRACK_DIRTY_FRACTION)
+        )
+    return stacked
 
 
 _READOUT_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
@@ -680,6 +763,108 @@ def _attach_track_balance_weights(
         weight_expr.cast(pl.Float64).alias(_TRACK_BALANCE_WEIGHT_COLUMN),
     )
     return annotated.drop(["_track", "_n"])
+
+
+def _fit_track_random_intercepts(
+    joint: pl.DataFrame,
+    fitters: dict[tuple, FitRecord],
+    track_per_session: dict[str, str],
+    *,
+    min_residual_samples_per_track: int = 10,
+) -> dict[tuple[str, str], object]:
+    """Fit per-(channel, track) closed-form Bayes random intercepts.
+
+    P2.2 of the accuracy-rebuild plan. For each trained (phase, channel)
+    fitter, predict on the training frame, group residuals by track,
+    and fit a one-way random-intercept model that partial-pools each
+    track's intercept toward zero by empirical-Bayes shrinkage.
+
+    Returns ``{(channel, track): TrackIntercept}``; applied additively
+    in ``PhysicsModel._predict_v4`` per channel + target track.
+
+    Honest-residual caveat: residuals are computed in-sample because the
+    fitter is already trained. In-sample residuals underestimate true
+    out-of-fold residuals, so the magnitude of fitted intercepts is
+    biased toward zero -- this is *conservative*. The shrinkage in the
+    Bayes posterior compounds the conservatism: when in-sample residuals
+    don't separate tracks, ``shrinkage -> 1.0`` and the intercept goes
+    to zero (no correction). The recommender consumes the result as an
+    *optional* additive shift; a zero intercept is identical to the
+    no-correction baseline.
+    """
+    from racingoptimizer.physics.track_random_intercepts import fit_all_channels
+
+    if joint.height == 0 or not fitters or not track_per_session:
+        return {}
+    if "session_id" not in joint.columns or "phase" not in joint.columns:
+        return {}
+
+    # session_id -> track
+    track_lookup = pl.DataFrame(
+        {
+            "session_id": list(track_per_session.keys()),
+            "_track": list(track_per_session.values()),
+        }
+    )
+    annotated = joint.join(track_lookup, on="session_id", how="left")
+
+    per_channel_per_track: dict[str, dict[str, list[float]]] = {}
+
+    for key, record in fitters.items():
+        if not isinstance(key, tuple) or len(key) != 2:
+            continue
+        phase_str, channel = key
+        if channel not in annotated.columns:
+            continue
+        if not record.fitter.is_trained:
+            continue
+        feature_names = record.feature_names
+        if not feature_names:
+            continue
+
+        sub = annotated.filter(
+            (pl.col("phase") == str(phase_str))
+            & pl.col(channel).is_not_null()
+            & pl.col("_track").is_not_null()
+        )
+        if sub.height < 3:
+            continue
+
+        missing = [c for c in feature_names if c not in sub.columns]
+        if missing:
+            continue
+        feats = sub.select(list(feature_names)).cast(pl.Float64).fill_null(0.0).to_numpy()
+        try:
+            mu, _sigma = record.fitter.predict(feats)
+        except (ValueError, np.linalg.LinAlgError):
+            continue
+        actuals = sub[channel].cast(pl.Float64).to_numpy()
+        residuals = (actuals - mu).astype(float)
+        tracks = sub["_track"].to_list()
+
+        bucket = per_channel_per_track.setdefault(channel, {})
+        for resid, track in zip(residuals, tracks, strict=True):
+            if track is None:
+                continue
+            if not np.isfinite(resid):
+                continue
+            bucket.setdefault(track, []).append(float(resid))
+
+    # Drop tracks with too few residuals per channel; partial pooling
+    # below ``min_residual_samples_per_track`` is dominated by noise and
+    # the recommender is better off with no correction (intercept=0).
+    pruned: dict[str, dict[str, list[float]]] = {}
+    for channel, by_track in per_channel_per_track.items():
+        kept = {
+            track: vals for track, vals in by_track.items()
+            if len(vals) >= min_residual_samples_per_track
+        }
+        if kept:
+            pruned[channel] = kept
+
+    if not pruned:
+        return {}
+    return dict(fit_all_channels(pruned))
 
 
 def _attach_corner_archetypes(frame: pl.DataFrame) -> pl.DataFrame:
@@ -1092,6 +1277,25 @@ def fit_per_car(
     # in recent briefings. The slot is kept empty for pickle compat.
     per_track_residuals: dict[str, dict[str, float]] = {}
 
+    # P2.2 -- closed-form Bayes random intercepts on the surrogate's
+    # training residuals, partial-pooled toward zero. Applied additively
+    # in ``_predict_v4`` to the surrogate mu (setup gradient is preserved
+    # because alpha_t does not depend on setup). Failure is graceful:
+    # empty dict when no track has enough residual samples; the recommender
+    # falls back to surrogate-only via ``predict_correction``'s (0, 0).
+    try:
+        track_random_intercepts = _fit_track_random_intercepts(
+            joint, fitters, track_models_used,
+        )
+    except Exception as exc:  # noqa: BLE001 -- defensive: fit is optional
+        warnings.warn(
+            f"track_random_intercepts fit failed for {car_key}: "
+            f"{type(exc).__name__}: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        track_random_intercepts = {}
+
     # Per-(car, axle) grip ceilings from training corpus
     # (physics-rebuild Day-10 model, wired into DE in post-rebuild
     # work). Returns `None` on any failure path -- the recommender
@@ -1128,6 +1332,7 @@ def fit_per_car(
         static_rh_kinematic=fit_static_rh_kinematic(
             car_key, sid_to_param_value, sid_to_readouts,
         ),
+        track_random_intercepts=track_random_intercepts,
     )
 
     if fit_records_for_log:

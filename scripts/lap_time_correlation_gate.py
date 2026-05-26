@@ -158,6 +158,212 @@ def _build_pair_sessions_from_catalog() -> dict[tuple[str, str], list[str]]:
     return dict(out)
 
 
+def _compute_loso_pairs_for_track(
+    car: str,
+    track: str,
+    session_ids: list[str],
+    corpus_root: Path,
+) -> list[tuple[float, float]]:
+    """Per-(car, track) LOSO loop: ``(score, -median_lap_time)`` per session.
+
+    For each session in ``session_ids``: fit a per-car model with that
+    session held out, score the held session's observed setup on the
+    target track, and pair the score against the held session's median
+    lap time. Lap-time is negated so a positive Spearman against score
+    means "higher score correlates with faster laps".
+
+    Returns the list of pairs; sessions that fail any step (missing
+    catalog row, no laps, surrogate fit failure, empty schedule) are
+    skipped silently -- the Spearman helper drops non-finite pairs
+    downstream and ``_min_tracks``/``_min_samples`` filter takes care of
+    pairs with too few survivors.
+
+    Heavy -- a 10-session pair runs ~10x the per-car fit cost. Designed
+    to be invoked offline on a workstation, then the JSON is committed
+    so CI consumes pre-computed results. In CI environments without a
+    corpus, ``_build_pair_sessions_from_catalog`` returns an empty dict
+    so this function is never called.
+    """
+    # Lazy imports: the orchestration touches the full ingest +
+    # corner-phase + physics-fitter stack, which is a heavy import
+    # graph. Keep the helpers at module scope (above) cheap to import
+    # so the unit tests don't pay this cost.
+    import math
+    import statistics
+
+    from racingoptimizer.context import EnvironmentFrame
+    from racingoptimizer.corner.states import corner_phase_states
+    from racingoptimizer.ingest import catalog as cat
+    from racingoptimizer.ingest.api import catalog_path
+    from racingoptimizer.ingest.api import laps as ingest_laps
+    from racingoptimizer.physics.corner_schedule import build_corner_schedule
+    from racingoptimizer.physics.fitter import fit_per_car
+    from racingoptimizer.physics.ontology import setup_value
+    from racingoptimizer.physics.score import score_breakdown
+
+    def _safe_float(value, default: float) -> float:
+        if value is None:
+            return default
+        try:
+            f = float(value)
+        except (TypeError, ValueError):
+            return default
+        return f if math.isfinite(f) else default
+
+    def _env_from_rows(rows: list[dict]) -> EnvironmentFrame:
+        def med(*keys: str, default: float) -> float:
+            vals: list[float] = []
+            for r in rows:
+                for k in keys:
+                    v = r.get(k)
+                    if v is None:
+                        continue
+                    try:
+                        fv = float(v)
+                    except (TypeError, ValueError):
+                        continue
+                    if math.isfinite(fv):
+                        vals.append(fv)
+                        break
+            if not vals:
+                return default
+            return statistics.median(vals)
+
+        return EnvironmentFrame(
+            air_temp_c=med("air_temp_c_mean", default=25.0),
+            air_density=med(
+                "air_density_kg_m3_mean", "air_density_mean", default=1.18,
+            ),
+            air_pressure_mbar=med(
+                "air_pressure_mbar_mean", "air_pressure_pa_mean",
+                default=1013.25,
+            ),
+            relative_humidity=med("relative_humidity_mean", default=0.5),
+            wind_vel_ms=med("wind_vel_ms_mean", default=0.0),
+            wind_dir_deg=med(
+                "wind_dir_deg_mean", "wind_dir_rad_mean", default=0.0,
+            ),
+            fog_level=med("fog_level_mean", default=0.0),
+            track_temp_c=med(
+                "track_temp_crew_c_mean", "track_temp_c_mean", default=30.0,
+            ),
+            track_wetness=med("track_wetness_mean", default=0.0),
+            weather_declared_wet=bool(
+                med("weather_declared_wet_mean", default=0.0) > 0.5
+            ),
+            precip_type=int(med("precip_type_mean", default=-1.0)),
+            skies=int(med("skies_mean", default=-1.0)),
+        )
+
+    out: list[tuple[float, float]] = []
+    for held_sid in session_ids:
+        rest = [s for s in session_ids if s != held_sid]
+        # Must leave enough training material for a stable per-car fit
+        # AND must keep at least 5 sessions of cross-track variety so
+        # the surrogate doesn't degenerate to a constant per-track fit.
+        if len(rest) < 5:
+            continue
+
+        # 1. Catalog lookup: held session must exist and be valid.
+        try:
+            with cat.open_catalog(catalog_path(corpus_root)) as conn:
+                held = cat.get_session(conn, held_sid)
+        except Exception:
+            continue
+        if held is None or not held.valid:
+            continue
+
+        # 2. Held session's observed setup blob -> bounded vector.
+        try:
+            model = fit_per_car(
+                car=car, session_ids=rest, corpus_root=corpus_root,
+                k_folds=5 if len(rest) >= 3 else 2,
+            )
+        except Exception:
+            continue
+
+        observed_setup = dict(model.baseline_setup)
+        if held.setup:
+            try:
+                blob = json.loads(held.setup)
+            except (json.JSONDecodeError, TypeError):
+                blob = {}
+            for name in model.baseline_setup:
+                v = setup_value(car, name, blob)
+                if v is None:
+                    continue
+                try:
+                    observed_setup[name] = float(v)
+                except (TypeError, ValueError):
+                    continue
+
+        # 3. Load held session laps + median lap time.
+        try:
+            laps_df = ingest_laps(
+                session_id=held_sid, valid_only=True, corpus_root=corpus_root,
+            )
+        except Exception:
+            continue
+        if laps_df.height == 0:
+            continue
+        lap_time_col = None
+        for cand in ("lap_time_s", "lap_time", "time_s"):
+            if cand in laps_df.columns:
+                lap_time_col = cand
+                break
+        if lap_time_col is None:
+            continue
+        lap_times = [
+            float(t) for t in laps_df[lap_time_col].to_list()
+            if t is not None and math.isfinite(float(t))
+        ]
+        if not lap_times:
+            continue
+        median_lap_time = statistics.median(lap_times)
+
+        # 4. Corner-phase rows for the held session -> env + schedule.
+        all_rows: list[dict] = []
+        for lap_idx in laps_df["lap_index"].to_list():
+            try:
+                cps = corner_phase_states(
+                    held_sid, int(lap_idx), corpus_root=corpus_root,
+                )
+            except Exception:
+                continue
+            if cps.height == 0:
+                continue
+            all_rows.extend(cps.to_dicts())
+        if not all_rows:
+            continue
+
+        env = _env_from_rows(all_rows)
+        try:
+            schedule = build_corner_schedule(
+                [held_sid], corpus_root=corpus_root,
+            )
+        except Exception:
+            continue
+        if not schedule:
+            continue
+
+        # 5. Score the held setup on the target track.
+        try:
+            breakdown = score_breakdown(
+                model, observed_setup, track, env,
+                schedule=schedule, hybrid=True,
+            )
+        except Exception:
+            continue
+        if not breakdown:
+            continue
+        score_total = float(sum(breakdown.values()))
+        if not math.isfinite(score_total):
+            continue
+
+        out.append((score_total, -float(median_lap_time)))
+    return out
+
+
 def main() -> int:
     print("=" * 72)
     print("Lap-time correlation gate (P1.2)")
@@ -172,28 +378,34 @@ def main() -> int:
         )
         return 0
 
-    # Heavy lift -- LOSO refit per session per pair -- intentionally
-    # not implemented here: the per-car fit is ~15 min/session, so a
-    # 10-session pair is 2.5 hr per car-track and CI cannot run this
-    # synchronously. The script structure is in place; future
-    # implementation populates ``pair_to_pairs[(car, track)]`` with
-    # ``(score, neg_lap_time)`` tuples. Run from a workstation:
-    #
-    #   uv run python scripts/lap_time_correlation_gate.py
-    #
-    # CI consumes the JSON written below.
+    # Resolve the catalog root once so the heavy LOSO loop doesn't
+    # re-walk the env each session.
+    try:
+        from racingoptimizer.ingest.api import resolve_corpus_root
+        root = Path(resolve_corpus_root(None))
+    except Exception as exc:
+        print(f"  ERROR: cannot resolve corpus root: {exc}")
+        return 1
+
     pair_to_results: dict[tuple[str, str], list[tuple[float, float]]] = {}
-    for pair in qualifying:
-        # Placeholder: populated by the LOSO orchestration in a future
-        # session (see DEFER note in PLAN.md 4a). We leave the script
-        # callable so the unit-tested helpers don't bit-rot.
-        pair_to_results[pair] = []
+    for car, track in qualifying:
+        sids = pair_sessions[(car, track)]
+        print(f"\n[{car} @ {track}] LOSO over {len(sids)} sessions...")
+        try:
+            pairs = _compute_loso_pairs_for_track(car, track, sids, root)
+        except Exception as exc:
+            print(f"  ERROR: LOSO loop raised {type(exc).__name__}: {exc}")
+            pairs = []
+        pair_to_results[(car, track)] = pairs
 
     payload: list[dict] = []
     overall_pass = True
     for (car, track), pairs in pair_to_results.items():
         rho = _spearman_correlation(pairs)
         ok, why = _evaluate_pair_score(rho)
+        # A pair that produced zero LOSO results is treated as
+        # "insufficient_data", which fails the gate but in a different
+        # way than "rho < target" -- distinguish those in the JSON.
         if not ok:
             overall_pass = False
         payload.append(
@@ -207,7 +419,7 @@ def main() -> int:
                 "reason": why,
             }
         )
-        print(f"  {car} @ {track}: {why}")
+        print(f"  {car} @ {track}: {why} (n_loso_pairs={len(pairs)})")
 
     out_path = Path("docs/physics-rebuild/lap_time_correlation_latest.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)

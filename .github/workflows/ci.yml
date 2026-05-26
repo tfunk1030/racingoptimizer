@@ -56,5 +56,11 @@ jobs:
       - name: Holdout H1-H5 accuracy gate
         run: uv run python scripts/holdout_accuracy_gate.py
 
+      - name: Hybrid vs surrogate-only A/B (P1.3)
+        run: uv run pytest -q tests/physics/test_hybrid_heldout_ab.py
+
+      - name: Lap-time Spearman correlation gate (P1.2)
+        run: uv run python scripts/lap_time_correlation_gate.py
+
       - name: Verify held-out integrity
         run: bash scripts/verify_holdout.sh
