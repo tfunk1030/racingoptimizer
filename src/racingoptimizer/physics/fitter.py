@@ -212,7 +212,16 @@ ENV_FEATURE_COUNT_V1: int = 5
 #      part of the input feature vector so the same fitter can score any
 #      corner on any track once the target's archetypes are extracted.
 ENV_FEATURE_SCHEMA_VERSION: int = 3
-ENV_FEATURE_SCHEMA_VERSION_PER_CAR: int = 7
+ENV_FEATURE_SCHEMA_VERSION_PER_CAR: int = 8
+
+# W6 P4 -- driver-input control variables per (corner, phase). Isolates
+# setup signal from driver noise on grip-balance channels. Already emitted
+# by ``corner.states``; appended to the per-car Forest feature vector.
+DRIVER_CONTROL_COLUMNS: tuple[str, ...] = (
+    "steering_mean_rad",
+    "brake_mean",
+    "throttle_mean",
+)
 
 # P2.1 cleanliness thresholds. A corner-phase row is dropped from the
 # training frame when its mean curb-or-off-track fraction exceeds these
@@ -1111,6 +1120,12 @@ def fit_per_car(
 
     joint = _attach_setup_columns(training, sid_to_param_value, available_params)
     joint = _attach_corner_archetypes(joint)
+    aero_surface = _load_aero_surface(car_key)
+    from racingoptimizer.physics.aero_fit_features import attach_aero_map_features
+
+    joint = attach_aero_map_features(
+        joint, car_key, setups, aero_surface,
+    )
     # Setup-readout target columns (static RH + aero calc) — track-invariant
     # so the fitters learn the clean setup→equilibrium chain. Particularly
     # important for the per-car path because cross-track pooling otherwise
@@ -1166,6 +1181,15 @@ def fit_per_car(
                     () if channel_family == "ridge"
                     else CORNER_ARCHETYPE_COLUMNS
                 )
+                from racingoptimizer.physics.aero_fit_features import (
+                    aero_fit_column_names,
+                )
+
+                augment_cols = (
+                    ()
+                    if channel_family == "ridge"
+                    else DRIVER_CONTROL_COLUMNS + aero_fit_column_names()
+                )
                 rec = _fit_one_quadruple(
                     sub=sub,
                     parameters=available_params,
@@ -1175,6 +1199,7 @@ def fit_per_car(
                     cv_seed=cv_seed,
                     k_folds=k_folds,
                     archetype_columns=arch_cols,
+                    augment_columns=augment_cols,
                     weight_column=_TRACK_BALANCE_WEIGHT_COLUMN,
                 )
                 if rec is None:
@@ -1191,7 +1216,6 @@ def fit_per_car(
             f"need more sessions on this car"
         )
 
-    aero_surface = _load_aero_surface(car_key)
     aero_available = aero_surface is not None
     aero_residual_correction = _fit_aero_residual_correction(
         car_key, joint, aero_surface=aero_surface,
@@ -1418,6 +1442,7 @@ def _fit_one_quadruple(
     cv_seed: int,
     k_folds: int,
     archetype_columns: tuple[str, ...] = (),
+    augment_columns: tuple[str, ...] = (),
     weight_column: str | None = None,
 ) -> FitRecord | None:
     """Fit one (corner_id, phase, output_channel) quadruple over the joint vector.
@@ -1439,6 +1464,7 @@ def _fit_one_quadruple(
         [output_channel]
         + [p for p in parameters if p in sub.columns]
         + [a for a in archetype_columns if a in sub.columns]
+        + [a for a in augment_columns if a in sub.columns]
     )
     cleaned = sub.drop_nulls(drop_cols)
     if cleaned.height < 3:
@@ -1484,9 +1510,17 @@ def _fit_one_quadruple(
     else:
         arch_block = np.zeros((cleaned.height, 0), dtype=np.float64)
 
-    X = np.concatenate([param_block, env_block, arch_block], axis=1)
+    aug_cols = [a for a in augment_columns if a in cleaned.columns]
+    if aug_cols:
+        aug_block = (
+            cleaned.select(aug_cols).cast(pl.Float64).fill_null(0.0).to_numpy()
+        )
+    else:
+        aug_block = np.zeros((cleaned.height, 0), dtype=np.float64)
+
+    X = np.concatenate([param_block, env_block, arch_block, aug_block], axis=1)
     feature_names: tuple[str, ...] = (
-        tuple(param_cols) + tuple(env_cols) + tuple(arch_cols)
+        tuple(param_cols) + tuple(env_cols) + tuple(arch_cols) + tuple(aug_cols)
     )
 
     cv_residual_std = _kfold_residual_std(

@@ -657,6 +657,99 @@ payload with the same warnings. Tests:
 boundary, missing axle ceilings, banner content, axle-ceilings-present
 phrasing, text-mode banner, JSON-mode payload).
 
+### 4b-followup. Garage-step snap fix (2026-05-25)
+
+**Symptom.** Post-W5 recommendations on Acura at Belleisle rendered
+`Brake Pressure Bias 47.59 pct` and `Preload 82.09 Nm` -- values the
+iRacing garage UI cannot accept (brake bias clicks at 0.5 %, diff
+preload at 5 Nm).
+
+**Cause.** `_common_ce_gated()` in `physics/ontology.py` and the Acura
+override block defined `brake_bias_pct` and `diff_preload_nm` without
+`step=`. Only Ferrari's per-car override carried the step. With no
+step, `snap_to_garage_step` returned the continuous DE value unchanged.
+
+**Fix.** Added `step=0.5` to every `brake_bias_pct` and `step=5.0` to
+every `diff_preload_nm` ontology entry across BMW / Cadillac / Acura /
+Porsche (Ferrari was already correct). Cache key per `CLAUDE.md` is
+`(name, family, fittable, user_settable, json_path)` -- `step` is
+NOT in the fingerprint, so this does NOT invalidate stale pickles.
+The fix takes effect on the next render via `_post_clamp`'s
+`snap_to_garage_step`.
+
+**Test.** `tests/physics/test_garage_step_snap.py` extended with two
+parametrised tests covering all five GTPs:
+``test_brake_bias_snaps_to_half_percent`` and
+``test_diff_preload_snaps_to_5nm``. 14 tests in the file all pass.
+
+### 4d. Post-W5 held-out gate baseline (2026-05-25)
+
+First measurement of the post-W5 model against the per-channel gate.
+Run: `uv run python scripts/holdout_accuracy_gate.py`, output
+persisted at `docs/physics-rebuild/holdout_accuracy_latest.json`
+(mtime 2026-05-25 21:05).
+
+**Aggregate gate (informational): 5/5 pass. Per-channel gate
+(P1.1, gating): 0/5 pass.** Every car fails the same 8-9 channels:
+`accel_lat_g_max`, `accel_lon_g_min/max`, all four dynamic
+`*_ride_height_mean_mm`, `understeer_angle_mean_rad`, and (most cars)
+`damper_force_p99_n`.
+
+**What moved (pre-W5 → post-W5).** Cadillac
+`understeer_angle_mean_rad` normed = 2.24 → 1.11 (HALVED). That is
+the random-intercepts model (P2.2) doing its job on a track-bias
+problem the surrogate could not see. Acura `steering_max_rad`
+1.18 → 1.02 (modest). Otherwise: most channels are flat or modestly
+worse, and coverage DROPPED on `accel_lat_g_max` across every car
+(BMW 0.84 → 0.67, Cadillac 0.88 → 0.67, Porsche 0.63 → 0.54).
+
+**Why coverage is down.** P2.2 fits intercepts on **in-sample**
+residuals. In-sample residuals systematically underestimate the
+out-of-fold residual variance, so the fitted `intercept_std` is
+biased downward (over-confident). For channels with no real
+surrogate bias (lat-G is noisy, not biased), the intercept
+introduces a confident shift that the CI doesn't widen enough to
+absorb. Cadillac understeer worked anyway because the bias was so
+large (normed=2.24) that even a partially-shrunk in-sample
+intercept moved it; lat-G didn't. The fix is cross-validated
+residuals (LOSO refit per channel) -- a tractable W6 item.
+
+**Predictor-space ceiling.** `accel_lat_g_max` sits at
+normed >= 0.96 on every car regardless of corpus size. No amount
+of regularisation, weighting, or partial pooling will overcome this
+-- the predictor space is missing the aero-map link
+(`downforce(predicted_RH, wing)`) and the driver-input control
+variables (steering mean, brake-release derivative). Both are W6
+items below; the static-RH success in P0.2 (R^2 > 0.98 once the
+predictor space was complete) is the proof point.
+
+**One localised bug.** Cadillac `wheel_speed_max_diff_ms`
+normed = 3.25 on 85 samples (3.25x worse than predicting the
+channel mean). The other four cars all sit at normed <= 1.0 on
+this channel. Likely a unit / aggregation issue in
+`corner/states.py::_aggregate` specific to Laguna Seca's Corkscrew
+or to Cadillac's wheel-speed channel set. Worth a 1-day
+investigation in W6.
+
+### 4e. W6 items (2026-05-25)
+
+| # | Item | Status | Receipt |
+|---|---|---|---|
+| 1 | Cadillac `wheel_speed_max_diff_ms` aggregation | **Investigated** | Raw IBT wheel speeds are m/s (max ~75 m/s); holdout session mean diff 1.54 m/s matches corpus. No unit bug in `corner/states.py`. The 3.25 normed residual is dominated by surrogate misprediction, worsened by the holdout-gate archetype bug (below). Re-run gate after #3/#6. |
+| 2 | Cross-validated random intercepts | **PARTIAL** | `predict_correction` inflates `intercept_std` by 2x (`_INTERCEPT_STD_OOF_INFLATION`) to absorb in-sample bias. Full LOSO residual refit deferred (2-day budget). |
+| 3 | Aero-map link as fit-time feature | **SHIPPED** | `physics/aero_fit_features.py` appends `aero_map_ld_ratio` + `aero_map_balance_pct` to Forest features at fit (telemetry RH) and predict (static-RH readouts). `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` 7 -> 8; `FITTERS_LAYOUT_VERSION` 11 -> 12. |
+| 4 | Driver-mean control variables | **SHIPPED** | `DRIVER_CONTROL_COLUMNS` (`steering_mean_rad`, `brake_mean`, `throttle_mean`) appended to Forest augment block in `_fit_one_quadruple`. |
+| 5 | Per-channel evaluator weight shift | **DEFERRED** | Hybrid score is phase-composite, not per-channel; defer until post-W6 gate shows lat-G still starved. |
+| 6 | Holdout gate archetype + track threading | **SHIPPED** | Gate now runs `_attach_corner_archetypes` on held-out rows and passes `track=` into `predict`. Fixes legacy `apex_speed_ms` keys that zeroed every archetype feature during gate scoring. |
+
+Tests: `tests/physics/test_aero_fit_features.py`,
+`tests/physics/test_w6_augment_columns.py`. Narrative: Acura briefings
+print peak-downforce RH targets from `aero_targets_for()`.
+
+**Next:** re-run `uv run python scripts/holdout_accuracy_gate.py` on a
+refit corpus (pickle v12) to measure whether #3/#4/#6 move grip-balance
+channels below P1.1 thresholds.
+
 ### 4c. W5 closure of W2-W4 deferred items (2026-05-25)
 
 **P1.2 -- real LOSO orchestration.** SHIPPED.

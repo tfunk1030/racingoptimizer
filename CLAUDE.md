@@ -426,6 +426,8 @@ Both forms route to the same `recommend_cmd`. The end-user-facing walkthrough li
 
 BMW M Hybrid V8, Porsche 963, Cadillac V-Series.R, Acura ARX-06, Ferrari 499P. Each has its own suspension architecture and garage parameter set — do not assume a unified setup schema across cars.
 
+**Per-car driver/engineering setup specs** live under `docs/cars/`. Today only `acura_arx06.md` is captured: front RH ~15 mm + rear RH ~40 mm peak-downforce targets at mid-corner / at speed, rake-driven aero balance (more rake → oversteer), preferred balance-lever order (rear wing → rear pushrod → ARB → diff). When this spec exists for a car, the recommendation briefing and the `setup-justifier` subagent should use its vocabulary (rake, downforce trim, entry stability, on-/off-throttle rotation) and must not contradict its targets. Structured as `physics/aero_targets.aero_targets_for(car)` for code consumers; returns `None` for the four cars whose spec hasn't been captured — callers MUST defer to the surrogate rather than invent defaults.
+
 ## When to override the optimizer
 
 The score function is per-corner-phase utilization, NOT lap time (VISION §6). For most parameters this correlates well with stopwatch pace. Three known disconnects:

@@ -914,6 +914,15 @@ def render_narrative(
     fuel_str = f" ({fuel_l[0]:.1f} L fuel)" if fuel_l else ""
     mode = "quali (3-lap stint)" if quali else "race"
     lines.append(f" {model.car} @ {track_label} -- {mode}{fuel_str}")
+    from racingoptimizer.physics.aero_targets import aero_targets_for
+
+    targets = aero_targets_for(model.car)
+    if targets is not None:
+        lines.append(
+            f" Aero targets (at speed): front ~{targets.front_rh_target_mm:.0f} mm, "
+            f"rear ~{targets.rear_rh_target_mm:.0f} mm peak downforce "
+            "(see docs/cars/acura_arx06.md)."
+        )
     rolled = _rollup_regime(justifications)
     n_med = _median_n_samples(justifications)
     sparse_moved = sum(

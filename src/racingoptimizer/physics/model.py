@@ -409,6 +409,7 @@ class PhysicsModel:
         *,
         corner_archetype: dict[str, float] | None = None,
         track: str | None = None,
+        context_features: dict[str, float] | None = None,
     ) -> CornerPhaseStateWithConfidence:
         """Predict per-channel corner-phase state under ``setup`` + ``env``.
 
@@ -428,7 +429,12 @@ class PhysicsModel:
                     "TrackModel, not the trained sessions."
                 )
             return self._predict_v4(
-                setup, env, corner_phase_key, corner_archetype, track=track,
+                setup,
+                env,
+                corner_phase_key,
+                corner_archetype,
+                track=track,
+                context_features=context_features,
             )
         if int(self.feature_schema_version) >= 3:
             return self._predict_v3(setup, env, corner_phase_key)
@@ -512,6 +518,7 @@ class PhysicsModel:
         corner_archetype: dict[str, float],
         *,
         track: str | None = None,
+        context_features: dict[str, float] | None = None,
     ) -> CornerPhaseStateWithConfidence:
         """Predict for a target corner using the per-car fitters keyed by (phase, channel).
 
@@ -543,6 +550,24 @@ class PhysicsModel:
             channels[channel] = record
 
         env_features = _env_to_array(env)
+        from racingoptimizer.physics.aero_fit_features import (
+            aero_map_features_for_predict,
+        )
+        from racingoptimizer.physics.fitter import _load_aero_surface
+
+        static_readouts = self.predict_setup_readouts(setup, env)
+        aero_surface = _load_aero_surface(self.car)
+        extra_features = aero_map_features_for_predict(
+            car=self.car,
+            setup=setup,
+            aero_surface=aero_surface,
+            air_density=float(env.air_density),
+            static_readouts=static_readouts,
+        )
+        if context_features:
+            for name, value in context_features.items():
+                if value is not None:
+                    extra_features[name] = float(value)
         states: dict[str, Confidence] = {}
         untrained: list[str] = []
 
@@ -554,6 +579,7 @@ class PhysicsModel:
                 self.baseline_setup,
                 env_features,
                 corner_archetype,
+                extra_features=extra_features,
             )
             try:
                 mu, sigma = record.fitter.predict(x_row.reshape(1, -1))
@@ -813,6 +839,8 @@ def _assemble_feature_row_v4(
     baseline: dict[str, float],
     env_features: np.ndarray,
     corner_archetype: dict[str, float],
+    *,
+    extra_features: dict[str, float] | None = None,
 ) -> np.ndarray:
     """Build the per-car (v4) joint feature row.
 
@@ -824,8 +852,12 @@ def _assemble_feature_row_v4(
     from racingoptimizer.physics.fitter import _ENV_COLUMNS
 
     env_index = {name: idx for idx, name in enumerate(_ENV_COLUMNS)}
+    extras = extra_features or {}
     row = np.empty(len(feature_names), dtype=np.float64)
     for i, name in enumerate(feature_names):
+        if name in extras and extras[name] is not None:
+            row[i] = float(extras[name])
+            continue
         if name in corner_archetype and corner_archetype[name] is not None:
             row[i] = float(corner_archetype[name])
             continue

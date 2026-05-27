@@ -1,0 +1,167 @@
+========================================================================
+ bmw @ belleisle -- race (58.0 L fuel)
+ Conditions: 21 C ambient / 31 C track  |  Confidence: sparse (median n=1794)  |  Moved params: 0 sparse / 0 noisy of 4 changes
+========================================================================
+
+OVERALL DIRECTION
+  Less negative camber; softer platform; softer ARBs.
+
+CHANGES (4 of 38 parameters moved)
+
+-- PLATFORM (springs / perches / pushrods / torsion bars) --
+Rear coil spring: 180 -> 160 N/mm  (softens)
+  Why:    At T18 mid-corner, predicted rear-left shock peak compression was 29.1 mm under the past setup.
+  Effect: More rear compliance; smoother throttle pickup; better low-speed traction off slow corners.
+  Trade:  Rear platform settles deeper on power; bottoming risk on long throttle commits; rotation can feel lazy on entry.
+  Watch most: T18 mid-corner
+  Sensitivity: +1 click -0.000 score, -1 click +0.000 score
+
+-- BALANCE (ARBs / camber / toe) --
+Front camber: -4.0 -> -2.3 deg  (less negative)
+  Why:    At T18 mid-corner, predicted peak lateral G was 1.80 g under the past setup.
+  Effect: Less aggressive front camber: more contact patch on straights; faster tire warm-up; less wear.
+  Trade:  Less peak mid-corner front grip; more understeer.
+  Watch most: T18 mid-corner
+  Sensitivity: +1 click -0.000 score, -1 click +0.000 score
+
+Rear camber: -3.0 -> -1.7 deg  (less negative)
+  Why:    At T18 mid-corner, predicted peak lateral G was 1.80 g under the past setup.
+  Effect: Less aggressive rear camber: more straight-line traction; less wear.
+  Trade:  Less peak rear cornering grip; rear can lose grip on power exit.
+  Watch most: T18 mid-corner
+  Sensitivity: +1 click -0.001 score, -1 click -0.000 score
+
+Rear ARB blade: 4.0 -> 3.0 click  (softens)
+  Why:    At T18 mid-corner, predicted peak lateral G was 1.81 g under the past setup.
+  Effect: Softer rear anti-roll: more rear mechanical grip; better throttle traction.
+  Trade:  Lazier rotation; understeer can creep in on entry.
+  Watch most: T18 mid-corner
+  Sensitivity: +1 click -0.000 score, -1 click +0.000 score
+
+NOTES
+  Tyre cold pressure: pinned by user at 152.0 kPa
+  Front ARB size: pinned to observed median (no corpus variance on this parameter -- vary it in a session to unlock search)
+  Brake Duct Front: pinned to observed median (no corpus variance on this parameter -- vary it in a session to unlock search)
+  Brake Duct Rear: pinned to observed median (no corpus variance on this parameter -- vary it in a session to unlock search)
+  Throttle Brake Mapping: pinned to observed median (no corpus variance on this parameter -- vary it in a session to unlock search)
+  Damper Hsc Fl: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Damper Hsc Rl: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Damper Hsc Slope Fl: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Damper Hsr Fl: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Damper Hsr Rl: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Damper Lsc Fl: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Damper Lsr Rl: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Rear diff preload: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Fuel level: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Front heave perch: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Front heave spring: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Rear pushrod offset: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Rear wing: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Rear spring perch: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Rear third perch: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Rear third spring: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Front toe: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Rear toe: held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor)
+  Not searched (calculated readout or blocked in ontology): brake_duct_front, brake_duct_rear, corner_weight_fl_kg, corner_weight_fr_kg, corner_weight_rl_kg, corner_weight_rr_kg, throttle_brake_mapping
+  ! pinned to observed median (no per-session variation in training corpus, no learnable response surface): arb_size_front, brake_duct_front, brake_duct_rear, throttle_brake_mapping
+  ! held at past value (model cannot resolve +/-1 click on this corpus -- below sensitivity floor): damper_hsc_fl, damper_hsc_rl, damper_hsc_slope_fl, damper_hsr_fl, damper_hsr_rl, damper_lsc_fl, damper_lsr_rl, diff_preload_nm, fuel_level_l, heave_perch_offset_front_mm, heave_spring_rate_n_per_mm, pushrod_length_offset_rear_mm, rear_wing_angle_deg, spring_perch_offset_rear_mm, third_perch_offset_rear_mm, third_spring_rate_n_per_mm, toe_front_mm, toe_rl_mm
+  ! T0 straight: axle utilization > 1.0 (exceeds empirical grip ceiling); aero balance score 0.31 (>= 17% off target for bmw); physics-vs-surrogate divergence (headroom score 0.00) (front margin 1.10, rear 1.09)
+  ! T1 mid_corner: physics-vs-surrogate divergence (headroom score 0.00) (front margin 0.57, rear 0.57)
+  ! T2 straight: axle utilization > 1.0 (exceeds empirical grip ceiling); aero balance score 0.30 (>= 17% off target for bmw); physics-vs-surrogate divergence (headroom score 0.00) (front margin 1.11, rear 1.09)
+  ! T3 straight: axle utilization > 1.0 (exceeds empirical grip ceiling); aero balance score 0.30 (>= 17% off target for bmw); physics-vs-surrogate divergence (headroom score 0.00) (front margin 1.12, rear 1.10)
+  ! T4 straight: axle utilization > 1.0 (exceeds empirical grip ceiling); aero balance score 0.30 (>= 17% off target for bmw); physics-vs-surrogate divergence (headroom score 0.00) (front margin 1.10, rear 1.09)
+
+================================================================
+FULL SETUP CARD -- bmw @ belleisle
+================================================================
+Legend: [OPT] optimizer recommendation | [OPT pin] pinned to observed median | [OPT mirror] mirrored from per-axle parameter | [past] from your most recent session (optimizer held this value) | [readout] calculated by iRacing -- verify, don't enter | [predicted] readout the optimizer projects under the new inputs.
+
+-- TIRES & AERO ------------------------------------------------
+  [TireType]
+    Tire Type                                   Dry                [past]
+  [LeftFront]
+    Starting Pressure                     152.0 kPa (was 159)      [OPT]
+    Last Hot Pressure                       166 kPa                [readout]
+    Last Temps OMI                    53C, 59C, 60C                [readout]
+    Tread Remaining                   99%, 99%, 99%                [readout]
+  [LeftRear]
+    Starting Pressure                       159 kPa                [past]
+    Last Hot Pressure                       165 kPa                [readout]
+    Last Temps OMI                    52C, 59C, 61C                [readout]
+    Tread Remaining                   99%, 99%, 99%                [readout]
+  [RightFront]
+    Starting Pressure                       159 kPa                [past]
+    Last Hot Pressure                       163 kPa                [readout]
+    Last Temps IMO                    56C, 55C, 47C                [readout]
+    Tread Remaining                  99%, 99%, 100%                [readout]
+  [RightRear]
+    Starting Pressure                       159 kPa                [past]
+    Last Hot Pressure                       164 kPa                [readout]
+    Last Temps IMO                    59C, 56C, 48C                [readout]
+    Tread Remaining                   99%, 99%, 99%                [readout]
+  [AeroBalanceCalc]
+    Front Rh At Speed                         68 mm                [readout]
+    Rear Rh At Speed                          70 mm                [readout]
+    Wing Setting                         -1 degrees                [past]
+    Front Downforce                           40.1%                [past]
+
+-- CHASSIS -----------------------------------------------------
+  [FrontBrakes]
+    Arb Blades                                    5                [past]
+    Total Toe In                            -2.8 mm                [past]
+    Front Master Cyl                        17.8 mm                [past]
+    Rear Master Cyl                         17.8 mm                [past]
+    Brake Pads                         Low friction                [past]
+    Center Front Splitter Height            70.0 mm                [past]
+  [LeftFront]
+    Corner Weight                            3343 N                [readout]
+    Ride Height                             31.2 mm (was 72.6)     [predicted]
+    Bump Rubber Gap                           15 mm                [past]
+    Spring Rate                            252 N/mm                [past]
+    Camber                                 -2.3 deg (was -4)       [OPT]
+  [LeftRear]
+    Corner Weight                            3855 N                [readout]
+    Ride Height                             46.6 mm (was 82.5)     [predicted]
+    Bump Rubber Gap                           52 mm                [past]
+    Spring Rate                            160 N/mm (was 179)      [OPT]
+    Camber                                 -1.7 deg (was -3)       [OPT]
+    Toe In                                   0.2 mm (was 1.5)      [OPT]
+  [Rear]
+    Fuel Level                               98.0 L                [past]
+    Arb Blades                           3.00 click (was 4)        [OPT]
+    Wing Angle                           -1 degrees                [past]
+  [InCarAdjustments]
+    Brake Pressure Bias                      52.50%                [past]
+    Abs Setting                             6 (ABS)                [past]
+    Tc Setting                               5 (TC)                [past]
+    FWtdist                                   46.4%                [past]
+    Cross Weight                              50.0%                [readout]
+  [RightFront]
+    Corner Weight                            3343 N                [readout]
+    Ride Height                             31.2 mm (was 72.6)     [predicted]
+    Bump Rubber Gap                           15 mm                [past]
+    Spring Rate                            252 N/mm                [past]
+    Camber                                 -2.3 deg (was -4)       [OPT mirror]
+  [RightRear]
+    Corner Weight                            3855 N                [readout]
+    Ride Height                             46.6 mm (was 82.5)     [predicted]
+    Bump Rubber Gap                           52 mm                [past]
+    Spring Rate                            160 N/mm (was 179)      [OPT mirror]
+    Camber                                 -1.7 deg (was -3)       [OPT mirror]
+    Toe In                                   0.2 mm (was 1.5)      [OPT mirror]
+  [GearsDifferential]
+    Gear Stack                                  FIA                [past]
+    Friction Faces                                8                [past]
+    Diff Preload                             100 Nm                [past]
+
+-- DAMPERS -----------------------------------------------------
+  [FrontDampers]
+    Low Speed Compression Damping           7 clicks                [past]
+    High Speed Compression Damping           3 clicks                [past]
+    Low Speed Rebound Damping              5 clicks                [past]
+    High Speed Rebound Damping             3 clicks                [past]
+  [RearDampers]
+    Low Speed Compression Damping           6 clicks                [past]
+    High Speed Compression Damping           4 clicks                [past]
+    Low Speed Rebound Damping              7 clicks                [past]
+    High Speed Rebound Damping             5 clicks                [past]

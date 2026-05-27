@@ -66,6 +66,29 @@ _MIN_CORNER_PEAK_LAT_G: float = 0.40
 _MIN_CORNER_SLOWDOWN_MS: float = 5.0
 
 
+def archetype_dict_from_row(row: dict) -> dict[str, float]:
+    """Extract v4 archetype features from a corner-phase row dict.
+
+    Rows produced by ``corner_phase_states`` carry raw speed columns;
+    ``_attach_corner_archetypes`` (fit path) or this helper (gate path)
+    must run first so ``ARCHETYPE_KEYS`` are populated.
+    """
+    import math
+
+    out: dict[str, float] = {}
+    for key in ARCHETYPE_KEYS:
+        v = row.get(key)
+        if v is None:
+            continue
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(fv):
+            out[key] = fv
+    return out
+
+
 def is_real_corner_archetype(archetype: dict[str, float] | None) -> bool:
     """True when the archetype's observed geometry is corner-like.
 
@@ -251,5 +274,6 @@ __all__ = [
     "ARCHETYPE_KEYS",
     "CornerScheduleEntry",
     "build_corner_schedule",
+    "archetype_dict_from_row",
     "is_real_corner_archetype",
 ]

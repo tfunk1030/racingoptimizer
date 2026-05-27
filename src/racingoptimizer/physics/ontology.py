@@ -325,7 +325,7 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         # Fittable since bounds landed in `bf2e48b`.
         "brake_bias_pct": ParameterSpec(
             json_path=_BRAKE_BIAS, dtype=float, units="pct",
-            family="brake_bias", fittable=True,
+            family="brake_bias", fittable=True, step=0.5,
         ),
         # Brake duct openings (front/rear). Bounds in constraints.md (0-100).
         # Paths are provisional (based on brake bias siblings + IBT inspection).
@@ -345,7 +345,7 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         # block).
         "diff_preload_nm": ParameterSpec(
             json_path=("BrakesDriveUnit", "RearDiffSpec", "Preload"),
-            dtype=float, units="Nm", family="diff", fittable=True,
+            dtype=float, units="Nm", family="diff", fittable=True, step=5.0,
         ),
         "corner_weight_fl_kg": ParameterSpec(
             json_path=("Chassis", "LeftFront", "CornerWeight"), dtype=float,
@@ -589,7 +589,7 @@ _ACURA_OVERRIDES: dict[str, ParameterSpec] = {
     ),
     "brake_bias_pct": ParameterSpec(
         json_path=("Systems", "BrakeSpec", "BrakePressureBias"),
-        dtype=float, units="pct", family="brake_bias", fittable=True,
+        dtype=float, units="pct", family="brake_bias", fittable=True, step=0.5,
     ),
     "brake_duct_front": ParameterSpec(
         json_path=("Systems", "BrakeDuctFront"), dtype=float, units="%",
@@ -601,7 +601,7 @@ _ACURA_OVERRIDES: dict[str, ParameterSpec] = {
     ),
     "diff_preload_nm": ParameterSpec(
         json_path=("Systems", "RearDiffSpec", "Preload"),
-        dtype=float, units="Nm", family="diff", fittable=True,
+        dtype=float, units="Nm", family="diff", fittable=True, step=5.0,
     ),
     # Acura has no rear coil / third perch leaves in the canonical setup YAML.
     "rear_coil_spring_rate_n_per_mm": _blocked_like(
@@ -635,7 +635,7 @@ _TORSION_BAR_OD_VALUES: tuple[float, ...] = (
 _CADILLAC_OVERRIDES: dict[str, ParameterSpec] = {
     "diff_preload_nm": ParameterSpec(
         json_path=("BrakesDriveUnit", "DiffSpec", "Preload"),
-        dtype=float, units="Nm", family="diff", fittable=True,
+        dtype=float, units="Nm", family="diff", fittable=True, step=5.0,
     ),
     # Cadillac front uses torsion bars instead of coil springs at the
     # corners. iRacing requires LF=RF symmetry (same hardware contract
