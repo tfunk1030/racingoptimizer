@@ -171,18 +171,31 @@ W1 through W4 of `docs/accuracy-rebuild-2026-05-24/PLAN.md` landed on
 
 Still open / partial:
 
-- **Lap-time correlation gate (P1.2).** Helpers + qualifying-pair
-  filter ship in `scripts/lap_time_correlation_gate.py`; the per-pair
-  LOSO refit is a placeholder pending an offline run.
-- **Hybrid vs surrogate-only A/B in CI (P1.3).** Test gates
-  non-regression invariants; per-car asymmetric "hybrid doesn't lose"
-  assertion + CI YAML flip pending.
-- **Curb / off-line row masking (P2.1).** Deferred -- needs
-  `TrackModel.bump_map` API addition.
+- **Lap-time correlation gate (P1.2).** Full LOSO loop now shipped in
+  `scripts/lap_time_correlation_gate.py`; intended as an offline weekly
+  run (~2.5 hr per 10-session pair). Has not yet been baselined --
+  no `lap_time_correlation_latest.json` exists in the tree.
+- **Hybrid vs surrogate-only A/B in CI (P1.3).** Asymmetric "hybrid
+  doesn't lose by more than 20 %" assertion now in
+  `tests/physics/test_hybrid_heldout_ab.py`; the CI YAML flip is in
+  `.github/workflows/ci.yml`'s `calibration-weekly` job. Threshold
+  pinned without explicit measurement against today's hybrid-vs-
+  surrogate deltas; worth tightening after one CI run baselines them.
 - Held-out accuracy across all 5 cars is still in `noisy` regime on
-  grip-balance channels (peak lateral G, understeer angle). P2 raises
-  the modeling floor; the closed structural bugs above unblock that
-  work being measurable.
+  grip-balance channels (peak lateral G, understeer angle). P2 raised
+  the modeling floor (mixed-effects per-track random intercepts,
+  curb-row masking, archetype as fit-time feature, inverse-sqrt-n
+  training weights) but the post-W5 gate values have not yet been
+  measured -- run `uv run python scripts/holdout_accuracy_gate.py` to
+  see if the per-channel thresholds now pass.
+- **Header error budget on tracks the gate doesn't cover.** The
+  `Predicted error on this car/track (held-out): ...` block shows up
+  ONLY when the briefing target track matches a row in
+  `holdout_accuracy_latest.json`. On other tracks the brief falls
+  back to the legacy `Confidence: <regime>` line. Held-out tracks
+  today: BMW@Spa, Cadillac@Laguna, Ferrari@Hockenheim, Acura@Daytona,
+  Porsche@Algarve. Run the brief against those pairs to see the
+  budget; everywhere else, the legacy line still serves.
 
 Full plan and prioritized fixes: `docs/accuracy-rebuild-2026-05-24/PLAN.md`.
 

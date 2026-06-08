@@ -1,8 +1,0 @@
-# Day 14 token tracker -- physics-rebuild plan
-cumulative_today: <conversation usage at end of Day 14; not separately metered>
-soft_cap: 2000000
-hard_cap: 4000000
-soft_cap_reached: false
-hard_cap_reached: false
-
-# 14-DAY BUILD COMPLETE

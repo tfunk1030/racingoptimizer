@@ -17,6 +17,8 @@ Mathematical contracts covered:
 """
 from __future__ import annotations
 
+import pytest
+
 from racingoptimizer.physics.track_random_intercepts import (
     TrackIntercept,
     fit_all_channels,
@@ -112,7 +114,7 @@ def test_predict_correction_none_or_missing_returns_zero() -> None:
     # Happy path.
     intercept, std = predict_correction(fit, "accel_lat_g_max", "spa")
     assert intercept == 0.5
-    assert std == 0.05
+    assert std == pytest.approx(0.10)  # 0.05 * W6 OOF inflation (2x)
     # Track absent from fit.
     assert predict_correction(fit, "accel_lat_g_max", "monza") == (0.0, 0.0)
     # Channel absent from fit.

@@ -77,6 +77,12 @@ class TrackIntercept:
 # residual scale on the channels we care about.
 _VAR_FLOOR: float = 1e-9
 
+# W6 P2: in-sample residual fits underestimate out-of-fold intercept
+# variance (coverage dropped on grip channels post-P2.2). Inflate the
+# posterior std used for CI widening so held-out actuals are not
+# treated as surprises the model was over-confident about.
+_INTERCEPT_STD_OOF_INFLATION: float = 2.0
+
 
 def fit_per_channel(
     per_track_residuals: dict[str, list[float] | tuple[float, ...]],
@@ -242,7 +248,8 @@ def predict_correction(
     hit = intercepts.get((channel, track))
     if hit is None:
         return (0.0, 0.0)
-    return (float(hit.intercept), float(hit.intercept_std))
+    std = float(hit.intercept_std) * _INTERCEPT_STD_OOF_INFLATION
+    return (float(hit.intercept), std)
 
 
 __all__ = [

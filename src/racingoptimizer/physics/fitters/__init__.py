@@ -65,7 +65,11 @@ from racingoptimizer.physics.fitters.ridge import RidgeFitter
 #        returns (0, 0) and the surrogate's output passes through
 #        unchanged); bumping the cache key forces a refit so new models
 #        carry the random-intercept fit.
-FITTERS_LAYOUT_VERSION: int = 11
+#  12 -- 2026-05-25 W6: aero-map + driver-control augment columns in the
+#        per-car Forest feature vector (ENV schema v8); OOF intercept_std
+#        inflation in predict_correction. Pickles from <=11 lack the new
+#        features; bump forces refit.
+FITTERS_LAYOUT_VERSION: int = 12
 
 __all__ = [
     "FITTERS_LAYOUT_VERSION",
