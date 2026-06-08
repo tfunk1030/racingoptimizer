@@ -333,11 +333,11 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         # duct settings. Added 2026 as part of brake duct integration.
         "brake_duct_front": ParameterSpec(
             json_path=("BrakesDriveUnit", "BrakeDuctFront"), dtype=float, units="%",
-            family="brake_duct", fittable=True, user_settable=True, step=1.0,
+            family="brake_duct", fittable=False, user_settable=False, step=1.0,
         ),
         "brake_duct_rear": ParameterSpec(
             json_path=("BrakesDriveUnit", "BrakeDuctRear"), dtype=float, units="%",
-            family="brake_duct", fittable=True, user_settable=True, step=1.0,
+            family="brake_duct", fittable=False, user_settable=False, step=1.0,
         ),
         # Differential preload Nm (0..150 per `constraints.md`). Coast/
         # power ratios remain CE-gated (separate parameters that aren't
@@ -413,12 +413,15 @@ def _common_ce_gated() -> dict[str, ParameterSpec]:
         # Throttle/brake mapping. Canonical CAD fixture exposes
         # `BrakesDriveUnit.TcAndThrottle.ThrottleShape`; keep this as the
         # default path and allow fitting where corpus variance exists.
-        # Cars whose setup blob omits the path naturally degrade to
-        # untrained/pinned behavior via the existing fit-parameter gates.
+        # Disabled (fittable=False) until the json_path is verified against a
+        # real setup blob: no GTP car's CarSetup YAML exposes a ThrottleShape
+        # leaf at this path, so leaving it fittable fed the optimizer a
+        # parameter it can neither read nor set. Re-enable once the live-garage
+        # path is confirmed on a session with varied throttle mapping.
         "throttle_brake_mapping": ParameterSpec(
             json_path=("BrakesDriveUnit", "TcAndThrottle", "ThrottleShape"),
             dtype=float, units="click", family="throttle_map",
-            fittable=True, user_settable=True, step=1.0,
+            fittable=False, user_settable=False, step=1.0,
         ),
     }
 
@@ -593,11 +596,11 @@ _ACURA_OVERRIDES: dict[str, ParameterSpec] = {
     ),
     "brake_duct_front": ParameterSpec(
         json_path=("Systems", "BrakeDuctFront"), dtype=float, units="%",
-        family="brake_duct", fittable=True, user_settable=True, step=1.0,
+        family="brake_duct", fittable=False, user_settable=False, step=1.0,
     ),
     "brake_duct_rear": ParameterSpec(
         json_path=("Systems", "BrakeDuctRear"), dtype=float, units="%",
-        family="brake_duct", fittable=True, user_settable=True, step=1.0,
+        family="brake_duct", fittable=False, user_settable=False, step=1.0,
     ),
     "diff_preload_nm": ParameterSpec(
         json_path=("Systems", "RearDiffSpec", "Preload"),
