@@ -20,7 +20,6 @@ tests/physics/test_score.py asserts this module contains no such reference.
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
 from statistics import median
 
 import numpy as np
@@ -30,8 +29,6 @@ from racingoptimizer.confidence import Confidence
 from racingoptimizer.constraints import ConstraintsTable, clamp
 from racingoptimizer.context import EnvironmentFrame
 from racingoptimizer.corner import CornerPhaseKey, Phase
-from racingoptimizer.ingest import api as ingest_api
-from racingoptimizer.ingest.paths import resolve_corpus_root
 from racingoptimizer.physics.axle_grip import (
     AxleGripCeiling,
     compute_axle_grip_ratios,
@@ -39,7 +36,6 @@ from racingoptimizer.physics.axle_grip import (
 from racingoptimizer.physics.model import PhysicsModel
 from racingoptimizer.physics.ontology import (
     fittable_parameters,
-    setup_value,
     snap_to_garage_step,
 )
 from racingoptimizer.physics.recommendation import SetupRecommendation
@@ -73,9 +69,6 @@ from racingoptimizer.physics.weights import weight_corners
 # values on the target track is not enough local evidence to trust
 # cross-track surrogate extrapolation during race recommend.
 _WITHIN_TRACK_COVERED_THRESHOLD: int = 3
-# Same floor as ``physics.fitter._compute_lap_time_weights`` — junk partial
-# laps on GTP tracks are always well below 60 s.
-_LAP_TIME_MIN_VALID_S: float = 60.0
 # P0.3 sensitivity floor: a move is "defensible" only if shifting the
 # parameter by one garage step changes the DE objective by at least
 # this much. Otherwise the surrogate cannot resolve +1 click from -1
@@ -104,67 +97,6 @@ def _safe_score_total(
         return 0.0
 
 
-def _track_fastest_observed_value(
-    model: PhysicsModel,
-    track: str,
-    param: str,
-    candidates: tuple[float, ...],
-    *,
-    corpus_root: Path | str | None = None,
-) -> float | None:
-    """Pick the locally observed setup value tied to the fastest laps.
-
-    Used when a parameter has only two distinct values at the target
-    track: the surrogate may prefer the slower option (cross-track drag
-    bias) even though the user's lap times at this track say otherwise.
-    """
-    if len(candidates) < 2:
-        return None
-    root = resolve_corpus_root(Path(corpus_root) if corpus_root else None)
-    sessions_df = ingest_api.sessions(
-        car=model.car, track=track, valid_only=True, corpus_root=root,
-    )
-    if sessions_df.height == 0:
-        return None
-
-    cand_set = sorted({float(c) for c in candidates})
-    laps_by_value: dict[float, list[float]] = {c: [] for c in cand_set}
-
-    for row in sessions_df.iter_rows(named=True):
-        sid = row["session_id"]
-        val = setup_value(model.car, param, row["setup"])
-        if val is None:
-            continue
-        val_f = float(val)
-        nearest = min(cand_set, key=lambda c: abs(c - val_f))
-        if abs(nearest - val_f) > 0.51:
-            continue
-        try:
-            laps_df = ingest_api.laps(
-                session_id=sid, valid_only=True, corpus_root=root,
-            )
-        except Exception:
-            continue
-        times = [
-            float(t) for t in laps_df["lap_time_s"].to_list()
-            if t is not None and float(t) >= _LAP_TIME_MIN_VALID_S
-        ]
-        if not times:
-            continue
-        laps_by_value[nearest].append(median(times))
-
-    best_val: float | None = None
-    best_time = float("inf")
-    for val, session_medians in laps_by_value.items():
-        if not session_medians:
-            continue
-        track_med = float(median(session_medians))
-        if track_med < best_time:
-            best_time = track_med
-            best_val = val
-    return best_val
-
-
 def _apply_within_track_bounds(
     *,
     sub_bounds: tuple[float, float],
@@ -172,7 +104,6 @@ def _apply_within_track_bounds(
     track_observed: tuple[float, ...],
     bound: tuple[float, float],
     reset_mode: bool,
-    track_best_value: float | None = None,
 ) -> tuple[tuple[float, float], bool, bool]:
     """Cap DE bounds to within-track evidence when local coverage is thin.
 
@@ -180,10 +111,10 @@ def _apply_within_track_bounds(
     is True when the parameter was pinned specifically because the target
     track has fewer than ``_WITHIN_TRACK_COVERED_THRESHOLD`` distinct values.
 
-    When exactly two values were observed locally and ``track_best_value``
-    identifies the faster lap-time option, pin to that value instead of
-    letting DE pick the slower cross-track-favoured extreme (e.g. wing 8
-    on Belle Isle when wing 10 produced the user's best laps).
+    With exactly two locally observed values, DE searches only between them
+    (the surrogate picks within the bracket). Per VISION §6 the recommended
+    value is chosen by per-corner-phase physics utilization alone — outcome
+    metrics never enter setup selection.
     """
     if reset_mode or not track_observed:
         return sub_bounds, was_pinned, False
@@ -194,13 +125,6 @@ def _apply_within_track_bounds(
     lo, hi = bound
     if n_distinct == 1:
         v = unique[0]
-        return ((v, v), True, True)
-    if (
-        n_distinct == 2
-        and track_best_value is not None
-        and any(abs(float(track_best_value) - u) < 1e-6 for u in unique)
-    ):
-        v = float(track_best_value)
         return ((v, v), True, True)
     # n_distinct == 2: search only between the two locally observed values.
     track_lo, track_hi = unique[0], unique[1]
@@ -388,19 +312,12 @@ def recommend(
             reset_mode=reset_mode,
         )
         track_vals = track_observed_by_param.get(name, ())
-        track_unique = sorted({float(v) for v in track_vals})
-        track_best: float | None = None
-        if len(track_unique) == 2:
-            track_best = _track_fastest_observed_value(
-                model, track, name, tuple(track_unique),
-            )
         sub_bounds, was_pinned, thin_pin = _apply_within_track_bounds(
             sub_bounds=sub_bounds,
             was_pinned=was_pinned,
             track_observed=tuple(track_vals),
             bound=bound,
             reset_mode=reset_mode,
-            track_best_value=track_best,
         )
         if thin_pin:
             pinned_within_track_thin.add(name)

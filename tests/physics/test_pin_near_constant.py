@@ -332,9 +332,9 @@ def test_full_recommend_pins_near_constant_param(bmw_model_session) -> None:
     """
     from racingoptimizer.constraints import load_constraints
     from racingoptimizer.context import EnvironmentFrame
+    from racingoptimizer.ingest.api import sessions as ingest_sessions
     from racingoptimizer.physics.corner_schedule import build_corner_schedule
     from racingoptimizer.physics.recommend import recommend
-    from racingoptimizer.ingest.api import sessions as ingest_sessions
 
     model, track, corpus_root = bmw_model_session
     # Force every parameter into the pinned regime by overriding the field.
@@ -360,10 +360,16 @@ def test_full_recommend_pins_near_constant_param(bmw_model_session) -> None:
         bound = constraints.bounds(model.car, name)
         if bound is None:
             continue
-        # Match `_PIN_HALF_WIDTH_FRACTION` * span * 2 (full pin window) plus
-        # a small slack for clamp rounding.
+        # A pinned value is snapped to the nearest iRacing garage step on the
+        # way out (recommend.py::snap_to_garage_step), so a legitimate pin can
+        # land up to step/2 from the observed median (e.g. fuel 88.1 -> 88.0 at
+        # a 1.0 L step). Allow that plus a small slack for clamp rounding; with
+        # no step we stay strict at 1e-3. This still catches real DE drift to a
+        # constraint extreme (which is many steps away).
+        spec = model.ontology.get(name)
+        step = float(spec.step) if (spec is not None and spec.step) else 0.0
         pin_tolerance_per_param[name] = max(
-            (bound[1] - bound[0]) * 1e-5, 1e-3,
+            (bound[1] - bound[0]) * 1e-5, 1e-3, step * 0.5 + 1e-6,
         )
 
     for name in rec.pinned_to_observed_median:
@@ -413,18 +419,19 @@ def test_apply_within_track_bounds_caps_to_two_local_values() -> None:
     assert thin is False
 
 
-def test_apply_within_track_bounds_pins_faster_of_two_local_values() -> None:
+def test_apply_within_track_bounds_searches_between_two_local_values() -> None:
+    # VISION §6: with two locally observed values DE searches the bracket
+    # between them (physics picks within); lap time never selects the value.
     bounds, pinned, thin = _apply_within_track_bounds(
         sub_bounds=(6.0, 12.0),
         was_pinned=False,
         track_observed=(8.0, 10.0),
         bound=(6.0, 10.0),
         reset_mode=False,
-        track_best_value=10.0,
     )
-    assert bounds == (10.0, 10.0)
-    assert pinned is True
-    assert thin is True
+    assert bounds == (8.0, 10.0)
+    assert pinned is False
+    assert thin is False
 
 
 def test_apply_within_track_bounds_skips_when_three_or_more() -> None:

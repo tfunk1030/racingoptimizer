@@ -104,7 +104,10 @@ def classify_unmapped_path(path: tuple[str, ...]) -> tuple[Classification, str]:
     # a brake_duct pattern but didn't resolve via json_path, treat as known
     # but pending exact path verification.
     if "brake_duct" in dotted.lower() or "brakeduct" in dotted.lower():
-        return "blocked_user_input", "brake duct opening — ontology entry exists; exact json_path may need per-car tuning"
+        return (
+            "blocked_user_input",
+            "brake duct opening — ontology entry exists; exact json_path may need per-car tuning",
+        )
 
     if dotted == "UpdateCount":
         return "unsupported_non_setup", "setup blob metadata counter"

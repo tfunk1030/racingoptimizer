@@ -17,14 +17,14 @@ def bmw_model_track(bmw_model_session):
     return bmw_model_session
 
 
-def test_recommend_returns_setup_recommendation(bmw_model_track) -> None:
+def test_recommend_returns_setup_recommendation(bmw_model_track, bmw_schedule) -> None:
     model, track, _ = bmw_model_track
     constraints = load_constraints()
     env = EnvironmentFrame(
         air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
         wind_dir_deg=120.0, track_wetness=0.0,
     )
-    rec = recommend(model, track, env, constraints)
+    rec = recommend(model, track, env, constraints, schedule=bmw_schedule)
     assert isinstance(rec, SetupRecommendation)
     assert rec.car == model.car
     assert rec.track == track
@@ -36,14 +36,14 @@ def test_recommend_returns_setup_recommendation(bmw_model_track) -> None:
         assert isinstance(conf, Confidence)
 
 
-def test_recommend_parameters_within_bounds(bmw_model_track) -> None:
+def test_recommend_parameters_within_bounds(bmw_model_track, bmw_schedule) -> None:
     model, track, _ = bmw_model_track
     constraints = load_constraints()
     env = EnvironmentFrame(
         air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
         wind_dir_deg=120.0, track_wetness=0.0,
     )
-    rec = recommend(model, track, env, constraints)
+    rec = recommend(model, track, env, constraints, schedule=bmw_schedule)
     for name, (value, _conf) in rec.parameters.items():
         bound = constraints.bounds(model.car, name)
         if bound is None:
@@ -52,14 +52,14 @@ def test_recommend_parameters_within_bounds(bmw_model_track) -> None:
         assert lo <= value <= hi, f"{name}={value} outside [{lo}, {hi}]"
 
 
-def test_recommend_score_breakdown_per_corner_phase(bmw_model_track) -> None:
+def test_recommend_score_breakdown_per_corner_phase(bmw_model_track, bmw_schedule) -> None:
     model, track, _ = bmw_model_track
     constraints = load_constraints()
     env = EnvironmentFrame(
         air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
         wind_dir_deg=120.0, track_wetness=0.0,
     )
-    rec = recommend(model, track, env, constraints)
+    rec = recommend(model, track, env, constraints, schedule=bmw_schedule)
     assert isinstance(rec.score_breakdown, dict)
     if not rec.score_breakdown:
         pytest.skip("model produced no per-(corner,phase) breakdown")
@@ -71,19 +71,19 @@ def test_recommend_score_breakdown_per_corner_phase(bmw_model_track) -> None:
         assert cpkey.session_id == "<recommend-virtual>"
 
 
-def test_recommend_determinism(bmw_model_track) -> None:
+def test_recommend_determinism(bmw_model_track, bmw_schedule) -> None:
     model, track, _ = bmw_model_track
     constraints = load_constraints()
     env = EnvironmentFrame(
         air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
         wind_dir_deg=120.0, track_wetness=0.0,
     )
-    rec_a = recommend(model, track, env, constraints)
-    rec_b = recommend(model, track, env, constraints)
+    rec_a = recommend(model, track, env, constraints, schedule=bmw_schedule)
+    rec_b = recommend(model, track, env, constraints, schedule=bmw_schedule)
     assert pickle.dumps(rec_a) == pickle.dumps(rec_b)
 
 
-def test_recommend_via_model_method(bmw_model_track) -> None:
+def test_recommend_via_model_method(bmw_model_track, bmw_schedule) -> None:
     """PhysicsModel.recommend / .score_setup delegate to module functions."""
     model, track, _ = bmw_model_track
     constraints = load_constraints()
@@ -91,7 +91,9 @@ def test_recommend_via_model_method(bmw_model_track) -> None:
         air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
         wind_dir_deg=120.0, track_wetness=0.0,
     )
-    rec = model.recommend(track, env, constraints)
+    rec = model.recommend(track, env, constraints, schedule=bmw_schedule)
     assert isinstance(rec, SetupRecommendation)
-    score = model.score_setup(dict(model.baseline_setup), track, env)
+    score = model.score_setup(
+        dict(model.baseline_setup), track, env, schedule=bmw_schedule,
+    )
     assert isinstance(score, float)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from racingoptimizer.context import EnvironmentFrame
 from racingoptimizer.corner.phase import CornerPhaseKey, Phase

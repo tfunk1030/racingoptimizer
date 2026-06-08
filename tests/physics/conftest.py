@@ -72,6 +72,21 @@ def bmw_model_session(tmp_path_factory):
     return model, track, root
 
 
+@pytest.fixture(scope="session")
+def bmw_schedule(bmw_model_session):
+    """Target-track corner schedule for the BMW Sebring model.
+
+    Per-car (v4) models are track-agnostic, so `recommend` / `score_setup` /
+    `score_breakdown` require the caller to pass the target track's
+    `list[CornerScheduleEntry]` (built from the session corpus). Shared
+    session-scoped so the schedule build runs once.
+    """
+    from racingoptimizer.physics.corner_schedule import build_corner_schedule
+
+    model, _track, root = bmw_model_session
+    return build_corner_schedule(sorted(model.session_ids), corpus_root=root)
+
+
 # --- per-car gap-fill helpers ---------------------------------------------
 
 

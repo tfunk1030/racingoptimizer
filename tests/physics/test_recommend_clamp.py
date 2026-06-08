@@ -22,7 +22,7 @@ def bmw_model_track(bmw_model_session):
     return model, track
 
 
-def test_score_setup_strict_rejects_out_of_bounds(bmw_model_track) -> None:
+def test_score_setup_strict_rejects_out_of_bounds(bmw_model_track, bmw_schedule) -> None:
     """`score_setup(..., strict=True)` raises on drift; the lenient default
     silently clamps and returns a number."""
     from racingoptimizer.physics.score import score_setup as _score_setup
@@ -48,13 +48,15 @@ def test_score_setup_strict_rejects_out_of_bounds(bmw_model_track) -> None:
     bad_setup = dict(model.baseline_setup)
     bad_setup[bounded_param] = bound[1] * 100.0  # absurdly out of bounds
     with pytest.raises(ValueError, match="out of bounds"):
-        _score_setup(model, bad_setup, track, env, strict=True)
+        _score_setup(
+            model, bad_setup, track, env, strict=True, schedule=bmw_schedule,
+        )
     # The lenient default just clamps and returns a value.
-    score = model.score_setup(bad_setup, track, env)
+    score = model.score_setup(bad_setup, track, env, schedule=bmw_schedule)
     assert isinstance(score, float)
 
 
-def test_recommend_post_clamp_holds(bmw_model_track) -> None:
+def test_recommend_post_clamp_holds(bmw_model_track, bmw_schedule) -> None:
     """Post-clamp drift would raise ValueError. A clean run completes silently."""
     model, track = bmw_model_track
     constraints = load_constraints()
@@ -62,7 +64,7 @@ def test_recommend_post_clamp_holds(bmw_model_track) -> None:
         air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
         wind_dir_deg=120.0, track_wetness=0.0,
     )
-    rec = recommend(model, track, env, constraints)
+    rec = recommend(model, track, env, constraints, schedule=bmw_schedule)
     # Every recommended parameter must lie within its constraint bound.
     for name, (value, _conf) in rec.parameters.items():
         bound = constraints.bounds(model.car, name)
@@ -73,7 +75,7 @@ def test_recommend_post_clamp_holds(bmw_model_track) -> None:
 
 
 def test_recommend_warns_when_observed_median_outside_bound(
-    bmw_model_track,
+    bmw_model_track, bmw_schedule,
 ) -> None:
     """If `model.baseline_setup` (observed median) sits outside the legal
     constraint range for a parameter, `recommend` must emit a clamp_warning
@@ -106,7 +108,7 @@ def test_recommend_warns_when_observed_median_outside_bound(
         air_density=1.18, track_temp_c=24.0, wind_vel_ms=2.5,
         wind_dir_deg=120.0, track_wetness=0.0,
     )
-    rec = recommend(model, track, env, constraints)
+    rec = recommend(model, track, env, constraints, schedule=bmw_schedule)
     assert chosen in rec.clamp_warnings, (
         f"expected clamp_warning for {chosen!r} when baseline "
         f"{out_of_bound} sat outside bound {chosen_bound}; got "

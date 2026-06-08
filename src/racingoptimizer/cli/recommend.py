@@ -1296,10 +1296,19 @@ def _build_or_load_per_car_model(
     cache_path = _per_car_model_cache_path(root, car, session_ids)
     if not no_cache and cache_path.exists():
         try:
-            with cache_path.open("rb") as fh:
-                return pickle.load(fh)
-        except Exception:
-            pass
+            from racingoptimizer.physics import io as physics_io
+            return physics_io.load(cache_path)
+        except Exception as exc:
+            # Route through the hardened loader (isinstance guard +
+            # P1.4 _validate_pickle_slots). A stale/incompatible/corrupt
+            # cache must not silently degrade to "refit" with no trace --
+            # surface it, then fall through to a clean refit below.
+            click.echo(
+                f"ignoring stale/incompatible model cache "
+                f"({cache_path.name}): {type(exc).__name__}; refitting "
+                f"(pass --no-cache to skip the cache).",
+                err=True,
+            )
 
     from racingoptimizer.physics import InsufficientDataError
     from racingoptimizer.physics.fitter import fit_per_car
@@ -1349,10 +1358,19 @@ def _build_or_load_model(
     cache_path = _model_cache_path(root, car, track, session_ids)
     if not no_cache and cache_path.exists():
         try:
-            with cache_path.open("rb") as fh:
-                return pickle.load(fh)
-        except Exception:
-            pass
+            from racingoptimizer.physics import io as physics_io
+            return physics_io.load(cache_path)
+        except Exception as exc:
+            # Route through the hardened loader (isinstance guard +
+            # P1.4 _validate_pickle_slots). A stale/incompatible/corrupt
+            # cache must not silently degrade to "refit" with no trace --
+            # surface it, then fall through to a clean refit below.
+            click.echo(
+                f"ignoring stale/incompatible model cache "
+                f"({cache_path.name}): {type(exc).__name__}; refitting "
+                f"(pass --no-cache to skip the cache).",
+                err=True,
+            )
 
     from racingoptimizer.physics import InsufficientDataError, fit
     from racingoptimizer.track import build_track_model

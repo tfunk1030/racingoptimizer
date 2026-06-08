@@ -54,18 +54,24 @@ def test_recommend_per_car_smoke(
 
     out = rec_result.output
     assert car in out.lower(), f"car {car} missing from briefing"
-    assert "confidence" in out.lower(), "no confidence line in briefing"
-    # The default narrative renderer (since 2026-05-06) emits an
-    # OVERALL DIRECTION block followed by a CHANGES (...) block per
-    # parameter. Older `[confidence:` per-parameter tag was render_text
-    # only and only fires under --detailed. Asserting on either lets
-    # the smoke survive a future renderer swap.
-    has_param_block = (
-        "OVERALL DIRECTION" in out
-        or "CHANGES (" in out
-        or any("[confidence:" in line for line in out.splitlines())
-    )
-    assert has_param_block, f"no parameter block in briefing for {car}:\n{out}"
+    low = out.lower()
+    # A single-session corpus trips P3.3's thin-corpus gate, which refuses
+    # (exit 0) and points the user at `calibrate` rather than rendering a
+    # briefing -- a valid healthy outcome. Assert the full briefing only when
+    # the corpus was thick enough to actually recommend.
+    if "too thin" not in low and "optimize calibrate" not in low:
+        assert "confidence" in low, "no confidence line in briefing"
+        # The default narrative renderer (since 2026-05-06) emits an
+        # OVERALL DIRECTION block followed by a CHANGES (...) block per
+        # parameter. Older `[confidence:` per-parameter tag was render_text
+        # only and only fires under --detailed. Asserting on either lets
+        # the smoke survive a future renderer swap.
+        has_param_block = (
+            "OVERALL DIRECTION" in out
+            or "CHANGES (" in out
+            or any("[confidence:" in line for line in out.splitlines())
+        )
+        assert has_param_block, f"no parameter block in briefing for {car}:\n{out}"
 
 
 @pytest.mark.parametrize("per_car_fixture", CARS, indirect=True)
@@ -91,5 +97,8 @@ def test_recommend_per_car_json(
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["car"] == car
-    assert "parameters" in payload
-    assert "confidence" in payload
+    # Thin-corpus refusal emits reason=thin_corpus instead of a full
+    # recommendation; both are valid exit-0 JSON outputs.
+    if payload.get("reason") != "thin_corpus":
+        assert "parameters" in payload
+        assert "confidence" in payload

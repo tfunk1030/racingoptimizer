@@ -82,12 +82,14 @@ def test_already_integer_arb_passes_through_unchanged() -> None:
     assert "rounded" not in clamp_warnings.get("anti_roll_bar_front", "")
 
 
-def test_continuous_parameter_keeps_fractional_value() -> None:
-    """Springs / wing / pressures keep their floating-point precision —
-    `is_discrete=False` so they are NOT rounded to integers."""
+def test_continuous_parameter_snaps_to_garage_step() -> None:
+    """Continuous (`is_discrete=False`) params are not integer-rounded, but they
+    DO snap to their garage `step` -- iRacing only accepts discrete clicks. Rear
+    wing has a 1.0 deg step, so 15.5 -> 16.0. Genuinely step-less continuous
+    params keep full precision (see brake_bias / diff_preload tests below)."""
     rec = _make_rec({"rear_wing_angle_deg": (15.5, _conf(15.5))})
     out, _, _ = _post_clamp(rec, _stub_model(), load_constraints())
-    assert out.parameters["rear_wing_angle_deg"][0] == 15.5
+    assert out.parameters["rear_wing_angle_deg"][0] == 16.0
 
 
 def test_arb_rounds_then_re_clamps_inside_bounds() -> None:

@@ -57,14 +57,13 @@ def test_status_unknown_car_exits_2(tmp_corpus: Path) -> None:
     assert result.exit_code == 2
 
 
-def test_status_notes_only_list_unbounded_families() -> None:
+def test_status_notes_flag_unverified_mappings() -> None:
     from racingoptimizer.cli.recommend import _status_notes
 
     note = " ".join(_status_notes())
 
-    assert "dampers" in note
-    assert "toe" in note
-    assert "ARBs" not in note
-    assert "brake_bias" not in note
-    assert "differential coast/power" in note
-    assert "camber" not in note
+    # The note warns that some per-car garage leaves still lack verified
+    # optimizer mappings and points the user at the source of truth.
+    assert "verified optimizer mappings" in note
+    assert "garage_inventory.py" in note
+    assert "constraints.md" in note

@@ -46,6 +46,25 @@ def render_recommendation_json(
         "track_display": track_display or rec.track,
         "environment": _env_to_json(rec.env),
         "confidence": rolled,
+        # Aggregate per-corner-phase utilization at the recommended setup
+        # (the positive part of the DE objective). This is the model's
+        # physics score for the setup; higher = the setup exploits more of
+        # the car's available grip/balance/platform. NOTE: per-car evaluator
+        # weights differ (physics/evaluator.py), so the ABSOLUTE total is not
+        # comparable across cars without normalisation — see
+        # docs/watkins-glen-runbook.md and scripts/compare_cars_at_track.py.
+        "score_total": float(sum(rec.score_breakdown.values())),
+        "score_breakdown": [
+            {
+                "corner_id": int(key.corner_id),
+                "phase": key.phase.value,
+                "score": float(value),
+            }
+            for key, value in sorted(
+                rec.score_breakdown.items(),
+                key=lambda kv: (int(kv[0].corner_id), kv[0].phase.value),
+            )
+        ],
         "pinned": dict(pinned),
         "parameters": [_justification_to_json(j) for j in justifications],
         "untrained_parameters": list(rec.untrained_parameters),

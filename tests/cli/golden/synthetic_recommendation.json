@@ -21,6 +21,34 @@
     "n_samples": 90,
     "n_parameters": 4
   },
+  "score_total": 4.094,
+  "score_breakdown": [
+    {
+      "corner_id": 1,
+      "phase": "braking",
+      "score": 0.812
+    },
+    {
+      "corner_id": 1,
+      "phase": "mid_corner",
+      "score": 0.741
+    },
+    {
+      "corner_id": 3,
+      "phase": "trail_brake",
+      "score": 0.685
+    },
+    {
+      "corner_id": 5,
+      "phase": "exit",
+      "score": 0.902
+    },
+    {
+      "corner_id": 7,
+      "phase": "straight",
+      "score": 0.954
+    }
+  ],
   "pinned": {},
   "parameters": [
     {
