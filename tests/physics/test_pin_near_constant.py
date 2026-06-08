@@ -413,18 +413,19 @@ def test_apply_within_track_bounds_caps_to_two_local_values() -> None:
     assert thin is False
 
 
-def test_apply_within_track_bounds_pins_faster_of_two_local_values() -> None:
+def test_apply_within_track_bounds_searches_between_two_local_values() -> None:
+    # VISION §6: with two locally observed values DE searches the bracket
+    # between them (physics picks within); lap time never selects the value.
     bounds, pinned, thin = _apply_within_track_bounds(
         sub_bounds=(6.0, 12.0),
         was_pinned=False,
         track_observed=(8.0, 10.0),
         bound=(6.0, 10.0),
         reset_mode=False,
-        track_best_value=10.0,
     )
-    assert bounds == (10.0, 10.0)
-    assert pinned is True
-    assert thin is True
+    assert bounds == (8.0, 10.0)
+    assert pinned is False
+    assert thin is False
 
 
 def test_apply_within_track_bounds_skips_when_three_or_more() -> None:
