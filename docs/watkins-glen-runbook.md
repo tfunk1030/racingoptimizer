@@ -83,27 +83,41 @@ machine-readable copy if needed. Optional: `--quali --fuel N` for a one-lap stin
 - If a car refuses with a thin-corpus banner, run `optimize calibrate <car> <glen>`
   and/or add more laps for that car (Acura has the smallest corpus).
 
-## Step 3 — determine the best car (driver's definition: physics + telemetry + car characteristics + lap time)
+## Step 3 — determine the best car (weighted physics + lap time)
 
-The optimizer does **not** rank cars (per-car-calibrated evaluator weights make raw
-scores non-comparable, and VISION §6 forbids lap time as the objective). So build the
-comparison explicitly from four inputs per car:
+The optimizer does **not** rank cars natively (per-car-calibrated evaluator weights
+make raw scores non-comparable, and VISION §6 forbids lap time as the objective). So
+compute an explicit **weighted composite** per car from two cross-car-comparable
+sub-scores, each min-max normalised across the five cars to `0..1`:
 
-1. **Lap time (stopwatch)** — best & median clean-lap time from the 10 Glen laps
-   (`laps` table, `valid=1`; `best=1` for the quick one). Primary tiebreaker.
-2. **Physics headroom** — per-car corner-phase utilization at the *recommended* setup
-   and guardrail status (axle-ceiling margins, balance). A car with grip headroom and
-   no guardrail flags has more left on the table.
-3. **Telemetry traits** — from `corner_phase_states`: understeer angle, traction
-   utilisation, platform stability, braking vs mid-corner vs exit behaviour. Surfaces
-   *why* a car is quick/slow at the Glen's specific corner mix (fast esses + heavy
-   stops into T1/Bus Stop).
-4. **Car characteristics** — known per-car traits (`physics/evaluator.py` weights,
-   geometry, tyre floor) and architecture differences.
+- **LapScore** — from the best clean lap of the 10 Glen laps (`laps` table,
+  `valid=1`, take `min(lap_time_s)` per car). Normalise inverse lap time so the
+  fastest car = 1.0, slowest = 0.0. Lap time is the one genuinely comparable axis.
+- **PhysScore** — the car's mean per-corner-phase **utilization at the recommended
+  setup** expressed as a fraction of its *own* achievable ceiling (so it reads as
+  "how fully this setup exploits the car," which is comparable across cars even though
+  absolute utilization is not), **minus a guardrail penalty** for any axle-ceiling /
+  balance flags (`evaluator.guardrail_check`). Normalise to `0..1`.
 
-Deliverable: a short table (car | best lap | median lap | key telemetry trait |
-physics headroom | confidence) + a reasoned pick, with the confidence caveat that
-one session per car is thin evidence — call it provisional pending more laps.
+```
+Composite(car) = W_LAP * LapScore(car) + W_PHYS * PhysScore(car)
+default weights: W_LAP = 0.6, W_PHYS = 0.4   # tune to taste; state the weights used
+```
+
+Rationale for the default tilt toward lap time: it's the only strictly comparable
+metric, while PhysScore guards against picking a car that's quick on one thin session
+but riding its grip ceiling (no headroom, likely to fall off with fuel/tyre wear).
+
+**Supporting context** (not in the weighted score, but report it so the pick is
+explainable): per-car telemetry traits from `corner_phase_states` (understeer angle,
+traction utilisation, platform stability across the Glen's fast esses + heavy stops
+into T1 / the Bus Stop chicane) and known car characteristics (`evaluator.py` weights,
+geometry, tyre floor).
+
+Deliverable: a table — `car | best lap | LapScore | PhysScore | Composite | confidence`
+— sorted by Composite, plus a 2–3 sentence reasoned pick. **Caveat:** one session per
+car is thin evidence; label the ranking provisional and note that more laps (esp. for
+Acura, the smallest corpus) would firm it up.
 
 ## Where outputs land
 
