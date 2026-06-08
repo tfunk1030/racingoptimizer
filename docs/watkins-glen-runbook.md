@@ -114,10 +114,22 @@ traction utilisation, platform stability across the Glen's fast esses + heavy st
 into T1 / the Bus Stop chicane) and known car characteristics (`evaluator.py` weights,
 geometry, tyre floor).
 
-Deliverable: a table — `car | best lap | LapScore | PhysScore | Composite | confidence`
-— sorted by Composite, plus a 2–3 sentence reasoned pick. **Caveat:** one session per
-car is thin evidence; label the ranking provisional and note that more laps (esp. for
-Acura, the smallest corpus) would firm it up.
+This is automated by **`scripts/compare_cars_at_track.py`** (added 2026-06-08), which
+runs `optimize <car> <track> --json` per car (production path), reads the new
+`score_total` field, pulls each car's best clean lap from the catalog, normalises both
+axes, and prints the ranked table:
+
+```bash
+uv run python scripts/compare_cars_at_track.py "watkins glen"          # default 0.6/0.4
+uv run python scripts/compare_cars_at_track.py "watkins glen" --w-lap 0.7 --w-phys 0.3
+```
+
+It emits: `rank | car | best lap | LapScore | PhysScore | Composite | notes`, sorted by
+Composite, and lists cars excluded for thin corpus / no clean laps. The `score_total`
+field it depends on was added to the recommend JSON in `explain/render_json.py`
+(aggregate per-corner-phase utilization). **Caveat:** one session per car is thin
+evidence; the ranking is provisional — more laps (esp. Acura, the smallest corpus)
+firm it up.
 
 ## Where outputs land
 
