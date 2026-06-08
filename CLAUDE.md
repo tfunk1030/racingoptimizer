@@ -2,6 +2,38 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Onboarding quick-reference (added 2026-06-08)
+
+New to this repo? Read this first, then `ARCHITECTURE.md` (the Phase-1 map +
+request/data-flow walkthrough) and `AUDIT.md` (ranked findings). The rest of this
+file is deep domain memory accumulated over the accuracy rebuild — skim it once,
+return to it when touching a specific subsystem.
+
+- **What it is:** a local Python `>=3.12` CLI (`optimize`) that turns iRacing
+  `.ibt` telemetry into GTP setup recommendations. No server, no network, no DB
+  server — just files. Stack: `click` (CLI), `polars` (columnar spine), `numpy`/
+  `scipy`/`scikit-learn` (fitting), `pyirsdk` (IBT parse), parquet + SQLite +
+  pickled models for storage. Package/build via `uv` + `hatchling`.
+- **Entry point:** `optimize = racingoptimizer.cli:main` (`pyproject.toml:29`).
+  `optimize <car> <track>` and `optimize <file.ibt>` both route to `recommend`
+  (`cli/__init__.py:32-45`). `optimize learn ./ibtfiles` ingests.
+- **Where data lives:** `<corpus_root>/catalog.sqlite` (sessions+laps),
+  `<corpus_root>/sessions/<car>/<track>/<id>.parquet` (telemetry),
+  `<corpus_root>/models/*.pickle` (fitted `PhysicsModel` caches). `corpus/` is
+  gitignored; `<corpus_root>` = `--corpus-root` > `$RACINGOPTIMIZER_CORPUS` >
+  `<repo>/corpus` (`ingest/paths.py:23`).
+- **The core (Slice E, `physics/`):** `fit_per_car` → pickle cache → `_predict_v4`
+  → `score.py` per-corner-phase hybrid utilisation → `recommend.py` differential
+  evolution. Cache invalidates on `constraints.md` edits, ontology changes,
+  `FITTERS_LAYOUT_VERSION` (11), or `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (7).
+- **Commands (verified in CI):** see "Commands" below; CI runs `ruff` + fast
+  pytest (`-m "not slow"`) + `verify_holdout.sh` on every PR. Accuracy gates run
+  **weekly on cron only** — accuracy is not gated per-PR (`AUDIT.md` H1).
+- **Top audit risks:** recommendation accuracy unvalidated on the full corpus and
+  not PR-gated (`AUDIT.md` H1); Cadillac static-RH predictions systematically
+  clamped out-of-envelope (`AUDIT.md` H2, see the committed `err.log`); generated
+  artifacts (`err.log`, `recommendations/*.txt`) committed (`AUDIT.md` M1).
+
 ## Repository state
 
 `racingoptimizer` is the `optimize` Python CLI for iRacing GTP setup recommendations (VISION.md §8). All six VISION slices (A–F) plus three cross-cutting modules are merged. End-user walkthrough is in `GETTING_STARTED.md`; design spec is `VISION.md` (read it first); per-clause audit is `docs/VISION_COMPLIANCE.md`.
