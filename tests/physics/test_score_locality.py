@@ -30,7 +30,7 @@ def bmw_model(bmw_model_session):
     return model, track
 
 
-def test_score_breakdown_per_fitter_locality(bmw_model) -> None:
+def test_score_breakdown_per_fitter_locality(bmw_model, bmw_schedule) -> None:
     """Patching ONE fitter's predict only changes that fitter's (corner, phase) cell.
 
     This is the per-fitter locality invariant — every other (corner, phase)
@@ -44,7 +44,7 @@ def test_score_breakdown_per_fitter_locality(bmw_model) -> None:
     )
     setup = dict(model.baseline_setup)
 
-    base = score_breakdown(model, setup, track, env)
+    base = score_breakdown(model, setup, track, env, schedule=bmw_schedule)
     if not base:
         pytest.skip("no score breakdown produced from fixture")
 
@@ -67,7 +67,7 @@ def test_score_breakdown_per_fitter_locality(bmw_model) -> None:
     fitter.predict = constant_predict  # type: ignore[assignment]
 
     try:
-        perturbed = score_breakdown(model, setup, track, env)
+        perturbed = score_breakdown(model, setup, track, env, schedule=bmw_schedule)
     finally:
         fitter.predict = original_predict  # type: ignore[assignment]
 

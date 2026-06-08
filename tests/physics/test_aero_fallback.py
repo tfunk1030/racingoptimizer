@@ -87,7 +87,10 @@ def test_predict_aero_unavailable_downgrades_one_tier(
     tm = build_track_model(track, sids, corpus_root=root)
 
     import racingoptimizer.physics.fitter as fitter_mod
-    monkeypatch.setattr(fitter_mod, "_try_load_aero", lambda _car: False)
+    # Patch the actual aero-load gate the fit path uses (`_load_aero_surface`),
+    # not the orphaned `_try_load_aero` wrapper -- otherwise the real aero map
+    # still loads and aero_correction_available stays True.
+    monkeypatch.setattr(fitter_mod, "_load_aero_surface", lambda _car: None)
     model = fit(car, sids, tm, corpus_root=root, k_folds=2, seed=0xC0FFEE)
     assert model.aero_correction_available is False
     env = EnvironmentFrame(
