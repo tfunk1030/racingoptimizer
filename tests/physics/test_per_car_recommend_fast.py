@@ -21,11 +21,17 @@ _ENV = EnvironmentFrame(
 )
 def test_recommend_bmw_sebring_fast(per_car_model_factory) -> None:
     """Single-car DE smoke promoted out of the slow-only suite."""
-    model, _ = per_car_model_factory(
+    model, root = per_car_model_factory(
         "bmw", "sebring_international", (BMW_SEBRING_IBT,),
     )
     constraints = load_constraints()
-    rec = model.recommend("sebring_international", _ENV, constraints)
+    # Per-car (v4) models are track-agnostic; recommend requires the target
+    # track's corner schedule built from the session corpus.
+    from racingoptimizer.physics.corner_schedule import build_corner_schedule
+    schedule = build_corner_schedule(sorted(model.session_ids), corpus_root=root)
+    rec = model.recommend(
+        "sebring_international", _ENV, constraints, schedule=schedule,
+    )
 
     assert isinstance(rec, SetupRecommendation)
     assert rec.car == "bmw"
