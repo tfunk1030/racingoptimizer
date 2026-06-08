@@ -332,9 +332,9 @@ def test_full_recommend_pins_near_constant_param(bmw_model_session) -> None:
     """
     from racingoptimizer.constraints import load_constraints
     from racingoptimizer.context import EnvironmentFrame
+    from racingoptimizer.ingest.api import sessions as ingest_sessions
     from racingoptimizer.physics.corner_schedule import build_corner_schedule
     from racingoptimizer.physics.recommend import recommend
-    from racingoptimizer.ingest.api import sessions as ingest_sessions
 
     model, track, corpus_root = bmw_model_session
     # Force every parameter into the pinned regime by overriding the field.
