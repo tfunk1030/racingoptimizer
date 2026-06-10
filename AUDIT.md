@@ -145,6 +145,52 @@ The code infrastructure for validation is merged, but **no empirical evidence
 is committed**. Status of the accuracy-rebuild definition-of-done
 (`docs/accuracy-rebuild-2026-05-24/PLAN.md` §5):
 
+### Independent read of the committed evidence (2026-06-10)
+
+The only committed accuracy measurement is `scripts/_holdout_run_latest.log`
+(UTF-16, schema-v5-era run; raw telemetry is LFS-unfetchable in this
+environment — N5). Decoding it and re-scoring every figure against the gate's
+own P1.1 thresholds (`scripts/holdout_accuracy_gate.py:86`):
+
+- **34 / 34 gated (car, channel) pairs FAIL the per-channel thresholds.** The
+  "GATE PASS 5/5" headline in the log is the lenient *aggregate* gate only
+  (median normed ≤ 2.0).
+- The worst misses are exactly the channels the physics evaluator and
+  guardrails consume: `accel_lat_g_max` misses its 0.30 g budget by
+  **2.3–3.8×** on every car (Porsche worst: 1.13 g mean-abs, normed 1.26 —
+  residuals as large as the signal), and `understeer_angle_mean_rad` misses
+  its 0.10 rad budget by **3.5–7.1×** (Cadillac worst: 0.71 rad, normed 1.46).
+- Dynamic wheel-RH misses 3.0 mm on all cars (3.3–6.2 mm); damper force p99
+  misses by 2.4–3.0×. Coverage is high (0.84–1.0) only because the CIs are
+  wide — the model *knows* it doesn't know, but the score path consumes the
+  mean, not the CI.
+- Implication: per-corner guardrail penalties (`over_axle_ceiling`,
+  `severely_off_balance`) fire on predictions whose error is the size of the
+  signal. At current accuracy they are corpus-level sanity rails, not
+  corner-level facts.
+
+Independent aero-map analysis (the 33 `aero-maps/*.json` are real data in
+this clone): all five cars share the same calibrated envelope (front RH
+25–75 mm, rear 5–50 mm); the balance gradient at the front floor is
+~0.18–0.19 %/mm on every car. Cadillac's observed ~8.4 mm front RH is
+**16.6 mm below the floor**, so every clamped query carries a front-balance
+bias of **≥ ~+3 %** (floor-gradient × excursion; true bias below the floor
+is unknowable from the map) — large in GTP terms, one-directional, and since
+W6 it also contaminates the `aero_map_*` *training* features
+(`physics/aero_fit_features.py`). The Acura spec's own 15 mm front-RH target
+(`docs/cars/acura_arx06.md`) is also below the floor — this is a fleet-wide
+domain mismatch, not a Cadillac quirk.
+
+**Optimizer improvement applied on this branch (2026-06-10, user-directed):**
+out-of-domain aero is now detected and made consequential —
+`aero/interpolator.py::AeroClampStats` counts clamped queries + max excursion
+per `AeroSurface`; `cli/recommend.py::_aero_out_of_domain_warnings` (wired
+after `_post_clamp`) emits a briefing/JSON warning quantifying the bias and
+downgrades the aero-driven families (`rear_wing`, `pushrod`, `perch_offset`,
+`ride_height`) one confidence tier; `physics/score.py` warn-once replaces the
+silent constant-default aero fallback (M5). Re-deriving the maps below 25 mm
+front RH remains the real fix (H2).
+
 | DoD item | Criterion | Status | Evidence |
 |---|---|---|---|
 | §5.1 held-out gate | green on all 5 cars, per-channel | **Unproven** — result JSON deleted (N2); `scripts/_holdout_run_latest.log` shows the *aggregate* gate passing all 5 cars (median normed residual 0.56–0.70) but prints no per-channel pass/fail | `scripts/holdout_accuracy_gate.py:86` `_PER_CHANNEL_THRESHOLDS`; log tracked in repo |
@@ -190,6 +236,13 @@ Structural blockers documented in-repo (verified locations):
 - **Fix:** re-derive/extend the Cadillac map below 25 mm front RH, or apply an
   explicit out-of-domain confidence downgrade + briefing warning when clamping
   fires during scoring.
+- **Status: PARTIALLY MITIGATED on this branch (2026-06-10, user-directed):**
+  the downgrade-and-warn half is implemented (`AeroClampStats` accounting in
+  `aero/interpolator.py`; `_aero_out_of_domain_warnings` in
+  `cli/recommend.py` warns with a quantified floor-gradient bias estimate and
+  downgrades `rear_wing`/`pushrod`/`perch_offset`/`ride_height` one tier).
+  Map re-derivation below the 25 mm front floor remains open — see the
+  "Independent read" section for why this is fleet-wide.
 
 ### M1 — Generated artifacts committed — **PARTIALLY FIXED**
 - Cleaned since the last audit: `err.log` and all `recommendations/*.txt` are no
@@ -219,12 +272,12 @@ Structural blockers documented in-repo (verified locations):
 - `.claude/hooks/protect-data.sh:16-18` unchanged; `>[[:space:]]*[^|]` still
   matches `2>/dev/null`, blocking read-only `ls ibtfiles … 2>/dev/null`.
 
-### M5 — Silent aero fallback defaults in the DE objective — **STILL OPEN**
-- `physics/score.py:62-64`: `_DEFAULT_AERO_BALANCE_PCT=50.0`,
-  `_DEFAULT_AERO_LD=3.5` used when the aero surface is `None`, with no warning
-  or confidence downgrade. Note W6 (`physics/aero_fit_features.py`) added
-  aero-map features *at fit time*, which reduces but does not remove the
-  exposure at score time.
+### M5 — Silent aero fallback defaults in the DE objective — **FIXED on this branch (2026-06-10)**
+- Was: `physics/score.py:62-64` defaults (`balance=50%`, `L/D=3.5`) used
+  silently when the aero surface is `None`. Now
+  `_aero_surface_or_none` warns once per car
+  (`physics/score.py::_warn_aero_defaults_once`) that aero terms carry no
+  signal for that car.
 
 ### L1 — `per_track_residuals` retired but still written — **STILL OPEN**
 - Computed-as-empty and stored: `physics/fitter.py:1302,1351`; slot kept at

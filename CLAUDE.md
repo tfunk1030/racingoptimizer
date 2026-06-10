@@ -433,6 +433,15 @@ Default output path: `recommendations/<car>-<short-track>-<mode>[-<fuel>L]-<MMDD
 
 **Known regressions / gaps:**
 
+- **Out-of-domain aero now warns + downgrades (2026-06-10).** All five aero
+  maps share a 25 mm front-RH floor while the cars run below it (Cadillac
+  ~8 mm → ≥ ~+3 % front-balance bias at the floor gradient of ~0.19 %/mm).
+  `AeroSurface` counts clamped queries (`aero/interpolator.py::AeroClampStats`);
+  `cli/recommend.py::_aero_out_of_domain_warnings` warns and downgrades the
+  `rear_wing`/`pushrod`/`perch_offset`/`ride_height` families one confidence
+  tier when ≥ 50 % of a run's queries clamped on the front axis. The real fix
+  (re-deriving maps below 25 mm) is still open — AUDIT.md H2.
+
 - **`per_track_residuals` flattens setup gradient — FIXED 2026-05-24 (P0.1).** Predict path no longer reads it; fitter no longer computes it; cache key bumped to `FITTERS_LAYOUT_VERSION=10` so pre-2026-05-24 pickles refit clean.
 - **Sensitivity floor enforced — FIXED 2026-05-24 (P0.3).** Moves below `_SENSITIVITY_FLOOR = 0.005` on ±1 step are reverted to baseline and listed in `SetupRecommendation.suppressed_below_sensitivity`; narrative renderer excludes them from the "moved" block.
 - **Phantom corner 0 + 5-line spam — FIXED 2026-05-24 (P0.4).** `is_real_corner_archetype` gates both guardrail paths; `guardrail_warnings_for_setup` dedupes per corner.
