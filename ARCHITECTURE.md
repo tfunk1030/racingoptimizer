@@ -1,8 +1,11 @@
 # ARCHITECTURE.md
 
 Map of the `racingoptimizer` codebase produced during the 2026-06-08 onboarding
-audit. Pairs with `AUDIT.md` (findings) and `CLAUDE.md` (working memory + the
-deep domain notes). Read `VISION.md` for the design intent this implements.
+audit, **refreshed 2026-06-10** to fold in the "belleisle"/W6 changes
+(`785b87b`/`a4e4f5f`: aero-map fit features, garage-step ontology, deletion of
+the `day_NN` gate scripts and `docs/physics-rebuild/`). Pairs with `AUDIT.md`
+(findings) and `CLAUDE.md` (working memory + the deep domain notes). Read
+`VISION.md` for the design intent this implements.
 
 Everything below is grounded in `file:line` references verified by reading the
 code. Where a claim is inferred rather than read, it is marked *(inferred)*.
@@ -46,7 +49,9 @@ src/racingoptimizer/
   confidence/ cross-cutting — Confidence (value, lo, hi, n, regime)
   constraints/cross-cutting — parse constraints.md, clamp values to legal bounds
 
-scripts/      day_NN_*.py validation gates + holdout/lap-time/ontology gates + verify_holdout.sh
+scripts/      holdout_accuracy_gate.py, lap_time_correlation_gate.py,
+              compare_cars_at_track.py (cross-car ranking), validate_ontology_paths.py,
+              verify_holdout.sh  (the old day_NN_*.py gates were deleted in a4e4f5f)
 tests/        145 files mirroring each slice; per_car smoke tests + slow/calibration marks
 docs/         VISION_COMPLIANCE, physics-rebuild plan, accuracy-rebuild plan, slice specs
 aero-maps/    parsed aero surfaces, one JSON per (car, wing angle)   [git-lfs / data asset]
@@ -151,25 +156,31 @@ recommend_cmd (cli/recommend.py:199)
 ### Model cache key (`cli/recommend.py::_model_cache_parts`, ~1326-1410)
 
 Digest folds: pooled `session_ids` + ontology fingerprint (incl. `json_path`) +
-`constraints.md` content hash + `FITTERS_LAYOUT_VERSION` (**11**,
-`physics/fitters/__init__.py:68`) + `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (**7**).
-Editing `constraints.md` invalidates **every** per-car cache → ~15-min refit per car.
+`constraints.md` content hash + `FITTERS_LAYOUT_VERSION` (**12**,
+`physics/fitters/__init__.py:72`) + `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (**8**,
+`physics/fitter.py:215`). v12 / schema-8 correspond to W6's aero-map fit
+features (`physics/aero_fit_features.py`). Editing `constraints.md` invalidates
+**every** per-car cache → ~15-min refit per car.
 
 ---
 
 ## 6. The physics core (Slice E)
 
-### Fit (`physics/fitter.py::fit_per_car`, ~1021-1358)
+### Fit (`physics/fitter.py::fit_per_car`, starts :1030)
 
 1. Pull each session's setup JSON; collect **corner-phase training frames**
    (`_collect_training_frames`) — one row per `(corner_id, phase)` with ~60 physics
    columns, **quality-filtered** (P2.1: drops rows where `curb_frac_mean>0.5` or
    `off_track_frac_mean>0.0` once the track model is in the compounding regime).
 2. Attach setup columns, **corner archetypes** (apex speed, peak lat-G, duration,
-   `phase_duration_s`), static-RH readouts, dynamic-at-speed RH, and P2.3
-   inverse-track-sample-count weights (`1/sqrt(n_track_rows)`).
+   `phase_duration_s`), static-RH readouts, dynamic-at-speed RH, P2.3
+   inverse-track-sample-count weights (`1/sqrt(n_track_rows)`), and (W6,
+   `physics/aero_fit_features.py`) per-row **aero-map features**
+   (`aero_map_ld_ratio`, `aero_map_balance_pct`) queried at the observed
+   platform RH + wing + air density, so grip-balance channels don't have to
+   learn downforce implicitly from setup alone.
 3. Per `(phase, channel)` quadruple, fit a model via `_fit_one_quadruple`
-   (~1411-1532). Per-car v4 always uses **ForestFitter** (mixed 35-dim feature space
+   (:1435). Per-car v4 always uses **ForestFitter** (mixed 35-dim feature space
    defeats the scalar-scale GP). Static/aero/dynamic readout channels route to
    **Ridge**. K-fold CV gives `cv_residual_std`; forest also yields a bootstrap std.
 4. Assemble a `PhysicsModel` (`physics/model.py:104-227`): `fitters{(phase,channel)
@@ -183,12 +194,14 @@ Fitter families: `fitters/forest.py` (RF 50 trees, per-tree std), `fitters/gp.py
 
 ### Predict (`physics/model.py`)
 
-`_predict_v4` (model.py:507-615) keys on `(phase, channel)`, assembles a feature row
+`_predict_v4` (model.py:513) keys on `(phase, channel)`, assembles a feature row
 [setup params | 12 env channels | corner archetype], adds the P2.2
 `track_random_intercepts` correction when a `track=` is supplied, widens CI in
-quadrature. `_predict_v3`/`_predict_legacy` retained for rollback. `__setstate__`
-(model.py:242-280) backfills slots, runs `_repair_legacy_slot_shift` then
-`_validate_pickle_slots` (type-safety, P1.4).
+quadrature. `_predict_v3`/`_predict_legacy` retained for rollback. At predict time the W6
+aero features are approximated from the deterministic static-RH readouts
+(telemetry RH unavailable — `physics/aero_fit_features.py` module docstring).
+`__setstate__` (model.py:242) backfills slots, runs `_repair_legacy_slot_shift`
+then `_validate_pickle_slots` (type-safety, P1.4).
 
 ### Score (`physics/score.py`)
 
@@ -258,7 +271,16 @@ uv run pytest -q                            # full suite, ~15 min (slow tests lo
 
 **Weekly cron only** (`calibration-weekly`, `if: schedule`): day-12b evaluator
 calibration, `holdout_accuracy_gate.py`, hybrid-vs-surrogate A/B, lap-time Spearman
-gate. → **Accuracy is NOT gated on PRs** (see `AUDIT.md`).
+gate. → **Accuracy is NOT gated on PRs** (see `AUDIT.md` H1).
+
+**CI state as of 2026-06-10 (verified against workflow run 27168788022):**
+master is **red** — two stale tests in `tests/cli/test_post_clamp_discrete.py`
+fail against the W6 garage-step ontology (`AUDIT.md` N1); the "fast" suite took
+**87 minutes** in CI, not the documented ~2 (`AUDIT.md` N3); and because pytest
+fails first, the `verify_holdout.sh` step is skipped — once N1 is fixed it will
+exit 4 anyway because `docs/physics-rebuild/holdout.sha256` was deleted
+(`AUDIT.md` N2). The weekly day-12b calibration step is vacuous: its script was
+deleted and the test skips.
 
 ---
 

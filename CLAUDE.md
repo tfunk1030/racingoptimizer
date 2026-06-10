@@ -25,14 +25,17 @@ return to it when touching a specific subsystem.
 - **The core (Slice E, `physics/`):** `fit_per_car` → pickle cache → `_predict_v4`
   → `score.py` per-corner-phase hybrid utilisation → `recommend.py` differential
   evolution. Cache invalidates on `constraints.md` edits, ontology changes,
-  `FITTERS_LAYOUT_VERSION` (11), or `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (7).
+  `FITTERS_LAYOUT_VERSION` (12), or `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (8).
 - **Commands (verified in CI):** see "Commands" below; CI runs `ruff` + fast
   pytest (`-m "not slow"`) + `verify_holdout.sh` on every PR. Accuracy gates run
   **weekly on cron only** — accuracy is not gated per-PR (`AUDIT.md` H1).
-- **Top audit risks:** recommendation accuracy unvalidated on the full corpus and
-  not PR-gated (`AUDIT.md` H1); Cadillac static-RH predictions systematically
-  clamped out-of-envelope (`AUDIT.md` H2, see the committed `err.log`); generated
-  artifacts (`err.log`, `recommendations/*.txt`) committed (`AUDIT.md` M1).
+- **Top audit risks (2026-06-10 refresh):** CI is **red on master** — two stale
+  tests vs the W6 garage-step ontology (`AUDIT.md` N1); `docs/physics-rebuild/`
+  was deleted but `verify_holdout.sh`, the weekly accuracy gate's output path,
+  and the briefing error-budget header still point into it (`AUDIT.md` N2);
+  recommendation accuracy still unvalidated on the full corpus and not PR-gated
+  (`AUDIT.md` H1); Cadillac static-RH predictions systematically clamped
+  out-of-envelope (`AUDIT.md` H2).
 
 ## Repository state
 
@@ -60,7 +63,41 @@ The post-physics-rebuild work (2026-05-09 → 2026-05-24) wired hybrid scoring, 
 - **P2.1 — Curb / off-line row masking before fit (W5, 2026-05-25).** `corner.states.corner_phase_states` gained a `track_model=` kwarg; `_attach_cleanliness_masks` pulls per-sample curb + off-track masks from the TrackModel and the aggregator emits `curb_frac_mean` + `off_track_frac_mean` per (corner, phase). `physics/fitter.py::_collect_training_frames` lazily builds a per-track TrackModel from the catalog and filters rows where `curb_frac_mean > 0.5` (the plan's "median sample on a curb" cutoff) or `off_track_frac_mean > 0.0` before training. Cold-start TrackModels return zero masks; the filter is a no-op until the corpus reaches the compounding regime. `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` 6 → 7.
 - **P2.2 — Per-track random intercepts (W5, 2026-05-25).** `physics/track_random_intercepts.py` ports the conjugate-Gaussian random-intercept math from `bayes_retrofit.py` and centres the prior on zero (residuals already have the surrogate's mean removed). `fit_per_car` populates `PhysicsModel.track_random_intercepts` with `(channel, track) -> TrackIntercept` posteriors (empirical-Bayes shrinkage; pruned to ≥10 residuals per channel). `_predict_v4` accepts a new `track=` kwarg (threaded by the score path) and adds the intercept to mu; CI widens in quadrature by `intercept_std`. The setup gradient is preserved because `alpha_t` does not depend on setup. `FITTERS_LAYOUT_VERSION` 10 → 11.
 
-Full plan: `docs/accuracy-rebuild-2026-05-24/PLAN.md`. Definition-of-done items §5.1 / §5.3 / §5.6 (empirical validation on populated corpus + in-garage RH check) require offline runs and are not gated by these code changes.
+Full plan: `docs/accuracy-rebuild-2026-05-24/PLAN.md`. Definition-of-done items §5.1 / §5.3 / §5.6 (empirical validation on populated corpus + in-garage RH check) require offline runs and are not gated by these code changes. **As of 2026-06-10 none of the DoD evidence is committed** — see `AUDIT.md` "Accuracy & correlation state".
+
+## W6 "belleisle" + post-audit fixes (2026-05-26 → 2026-06-08)
+
+Changes that landed after the W5 wave and around the 2026-06-08 onboarding audit
+(commits `785b87b`, `a4e4f5f`, `ccc0dee`, `1c30b33`, `f16d0a8`, `1f64966`):
+
+- **W6 aero-map fit features** (`physics/aero_fit_features.py`): each training
+  row gains `aero_map_ld_ratio` + `aero_map_balance_pct` queried at observed
+  platform RH + wing + air density; at predict time approximated from the
+  deterministic static-RH readouts. `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` 7 → **8**,
+  `FITTERS_LAYOUT_VERSION` 11 → **12**.
+- **Garage steps for previously step-less params**: `brake_bias_pct` `step=0.5`,
+  `diff_preload_nm` `step=5.0` (`physics/ontology.py:326-348`); `_post_clamp`
+  snaps to them. Two stale tests in `tests/cli/test_post_clamp_discrete.py:110-120`
+  still assert step-less behaviour → **CI red on master** (`AUDIT.md` N1).
+- **Deletions**: the `scripts/day_NN_*.py` gate scripts and the whole
+  `docs/physics-rebuild/` tree (incl. `holdout.sha256` and
+  `holdout_accuracy_latest.json`) are gone. `verify_holdout.sh` exits 4 on the
+  missing manifest; the held-out integrity check has not actually run since
+  (`AUDIT.md` N2). `recommendations/*.txt` and `err.log` were untracked (good).
+- **VISION §6 restored** (`ccc0dee`): `_track_fastest_observed_value` and the
+  `track_best_value` pin branch were removed from `physics/recommend.py` — lap
+  time no longer selects setup values (it remains, legitimately, the corner
+  time-sensitivity weight at fit time).
+- **AUDIT M3 fixed** (`1c30b33`): both model-cache loads route through
+  `physics.io.load` (type guard) with a stderr "refitting" note
+  (`cli/recommend.py:1296-1312`, `:1358-1374`).
+- **Ontology integrity** (`f16d0a8`): brake-duct / throttle-map params set
+  `fittable=False, user_settable=False` (no CarSetup YAML leaves exist).
+- **Cross-car ranking** (`1f64966`): `scripts/compare_cars_at_track.py` ranks
+  the 5 cars at a track by `0.6*LapScore + 0.4*PhysScore` (reads recommend
+  `--json` `score_total` + catalog best laps; does not touch the DE objective).
+  Runbook: `docs/watkins-glen-runbook.md`. Watkins Glen has exactly **one IBT
+  per car** → cold-start TrackModel, no curb/off-track masking there yet.
 
 ## Commands
 
@@ -82,7 +119,7 @@ uv run optimize calibrate bmw spa --status  # just the per-parameter coverage ta
 uv run optimize bmw spa --physics           # Day 14: prepend physics-view banner (per-car evaluator weights, geometry, tyre floor)
 
 uv run pytest -q                            # full suite (~15 min)
-uv run pytest -q -m "not slow"              # fast suite (~2 min)
+uv run pytest -q -m "not slow"              # fast suite (~2 min locally; ~87 min in CI with LFS ibtfiles — AUDIT.md N3)
 uv run ruff check src tests                 # lint (must stay clean)
 ```
 
@@ -130,9 +167,10 @@ Cross-cutting modules (master-plan §2) — all merged:
 ## Physics-rebuild modules (2026-05-08, Days 8-13 of the 14-day plan)
 
 Eight new modules across `physics/` and `aero/` shipped via the
-physics-rebuild plan (`docs/physics-rebuild/PLAN.md`,
-`docs/physics-rebuild/COMPLETE.md`). Production wiring varies by
-module:
+physics-rebuild plan (the plan docs `docs/physics-rebuild/PLAN.md` and
+`COMPLETE.md` were deleted in `a4e4f5f`; recover via
+`git show 94ce009:docs/physics-rebuild/PLAN.md` if needed). Production wiring
+varies by module:
 
 - **`physics.diagnostic_state`** — body slip β = atan2(Vy, Vx),
   per-axle kinematic slip angles (bicycle model with per-car wheelbase
@@ -204,6 +242,11 @@ module:
 
 ## Held-out IBT system (2026-05-08, Day 0 prep)
 
+**BROKEN as of 2026-06-10:** `docs/physics-rebuild/holdout.sha256` was deleted
+in commit `a4e4f5f` ("belleisle") — `verify_holdout.sh` exits 4 on the missing
+manifest, so the integrity check has not actually run since (`AUDIT.md` N2).
+Recover the manifest via `git show 94ce009:docs/physics-rebuild/holdout.sha256`.
+
 5 hash-pinned IBTs in `docs/physics-rebuild/holdout.sha256` are
 flagged `held_out=1` in the catalog and excluded from production
 queries by default. Used by gate scripts (which opt in via
@@ -225,7 +268,9 @@ reports per-channel `mean_abs`, `normed_residual` (residual / channel
 signal std), and `coverage` (fraction of actuals inside the predicted
 CI). Per-car pass criteria: median coverage >= 0.50, dense-regime
 mean coverage >= 0.85, median normed residual <= 2.0. Output JSON at
-`docs/physics-rebuild/holdout_accuracy_latest.json`.
+`docs/physics-rebuild/holdout_accuracy_latest.json` (directory currently
+deleted — the write will fail until the path is restored or relocated;
+`explain/narrative.py:52` reads the same JSON for the briefing error budget).
 
 `cat.set_held_out_sessions(conn, ids, held_out=True)` is the
 helper to mark sessions gate-only; `upsert_session`'s ON CONFLICT
@@ -282,8 +327,8 @@ Cache files at `corpus/models/<car>__per-car__<digest>.pickle` (or `<car>__<trac
 1. `session_ids` — adding a session = new training data
 2. `ontology` fingerprint — `(name, family, fittable, user_settable, json_path)` per spec. **The `json_path` is critical** — without it, a leaf-path correction (e.g. moving `fuel_level_l` from `Chassis.Fuel` to `BrakesDriveUnit.Fuel`) silently reuses the OLD pickle that trained against the wrong YAML field, masking the fix.
 3. `constraints.md` content hash — bounds are baked into the pickle at fit time; editing them must invalidate the cache so DE doesn't search against stale bounds.
-4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`, **currently 11** as of 2026-05-25) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`), OR when PhysicsModel gains a new field that production paths read (forces refit so the field populates rather than default-empty). v11 (W5) adds `track_random_intercepts`.
-5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4); bumped to 6 on 2026-05-24 with P2.4's `phase_duration_s` injection; bumped to **7 on 2026-05-25 (W5)** with P2.1's curb/off-track row masking changing the training-set composition.
+4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`, **currently 12** as of 2026-05-26) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`), OR when PhysicsModel gains a new field that production paths read (forces refit so the field populates rather than default-empty). v11 (W5) adds `track_random_intercepts`; v12 (W6, `785b87b`) corresponds to the aero-map fit features.
+5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4); bumped to 6 on 2026-05-24 with P2.4's `phase_duration_s` injection; to 7 on 2026-05-25 (W5) with P2.1's curb/off-track row masking; to **8 on 2026-05-26 (W6)** with `physics/aero_fit_features.py` adding `aero_map_ld_ratio`/`aero_map_balance_pct` to the joint feature vector.
 
 Editing `constraints.md` invalidates EVERY per-car cache (constraint content hash is a cache-key ingredient). Next recommend per car triggers a ~15-min refit. Plan constraint edits in batches.
 
