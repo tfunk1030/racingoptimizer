@@ -95,6 +95,30 @@ still point at it:
 - **Proposed fix:** `git rm --cached -r .claude/worktrees/` and add
   `.claude/worktrees/` to `.gitignore`.
 
+### N5 — GitHub LFS budget exhausted: CI cannot even check out (High, blocking)
+- **Where:** workflow run 27248186852 (PR #94, 2026-06-10), `lint-and-test` →
+  checkout step: `batch response: This repository exceeded its LFS budget. The
+  account responsible for the budget should increase it to restore access.` —
+  three retries, then job failure ~40 s in. `.github/workflows/ci.yml:14-16`
+  checks out with `lfs: true`.
+- **What:** Every CI job fetches the full LFS object set (`ibtfiles/`, multi-GB)
+  on every run. Combined with N3 (87-minute fast suite, so runs are frequent and
+  heavyweight) and the 2026-06-08 Watkins Glen IBT pushes, the account's LFS
+  bandwidth budget is now exhausted. Until it resets or is increased, **every CI
+  run on every branch fails at checkout** — the N1 test failures aren't even
+  reached.
+- **Risk:** Total loss of CI signal; merges proceed unverified.
+- **Proposed fix (pick one or both):**
+  1. *No-cost code fix:* set `lfs: false` in the per-PR `lint-and-test` job.
+     `tests/conftest.py:31-60` already skips corpus-gated tests when fixtures
+     are unmaterialised LFS pointers, so the fast suite passes legitimately in
+     minutes (also fixing N3 for PRs). Keep `lfs: true` only on the weekly
+     `calibration-weekly` job. Note the per-PR `verify_holdout.sh` hash check
+     needs the real IBT bytes, so it would move to the weekly job too (it is
+     currently broken anyway, N2).
+  2. *Billing fix:* increase the LFS data-pack budget on the GitHub account —
+     restores the status quo, including its multi-GB-per-run bandwidth burn.
+
 ---
 
 ## Accuracy & correlation state (the product goal)
@@ -237,6 +261,9 @@ Structural blockers documented in-repo (verified locations):
 
 ## Suggested first actions (cheap, high-leverage, in order)
 
+0. **N5** — unblock CI entirely: either drop `lfs: true` from the per-PR job
+   (tests already skip unmaterialised fixtures) or raise the LFS budget;
+   nothing else in CI matters until checkout succeeds (15 min / billing).
 1. **N1** — fix the two stale asserts in
    `tests/cli/test_post_clamp_discrete.py:110-120` → CI signal restored (10 min).
 2. **N2** — restore `docs/physics-rebuild/holdout.sha256` (or relocate + update
