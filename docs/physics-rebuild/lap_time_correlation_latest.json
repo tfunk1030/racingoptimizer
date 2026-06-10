@@ -1,0 +1,11 @@
+[
+  {
+    "car": "cadillac",
+    "track": "lagunaseca",
+    "n_sessions": 14,
+    "n_loso_pairs": 12,
+    "spearman": -0.06655001449214289,
+    "passed": false,
+    "reason": "rho=-0.067<0.30"
+  }
+]
