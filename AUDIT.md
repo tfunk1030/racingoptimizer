@@ -74,11 +74,10 @@ still point at it:
   (`bmw @ spa_2024_up` → "peak lateral G +/- 0.78 g (noisy)" …), and
   `verify_holdout.sh` gains a distinct exit **5** + message for
   unmaterialised-LFS-pointer checkouts so a pointer clone reads as "data not
-  fetched", not as a bogus tampering MISMATCH. Still open: the day-12b
-  calibration cron step is vacuous (restore the script from
-  `git show a4e4f5f^:scripts/day_12b_calibrate_evaluator.py` or retire the
-  step), and the weekly job needs the LFS budget back to actually hash the
-  IBTs.
+  fetched", not as a bogus tampering MISMATCH.
+  `day_12b_calibrate_evaluator.py` is restored from `a4e4f5f^` (lint-fixed;
+  all imports verified against the current package). Remaining: the weekly
+  job needs the LFS budget back to actually hash the IBTs (N5).
 
 ### N3 — The "fast" CI suite takes 87 minutes (Med)
 - **Where:** CI run 27168788022, `Pytest (fast)` step: 21:44 → 23:11 (5225 s).
@@ -219,15 +218,32 @@ Structural blockers documented in-repo (verified locations):
 
 ## Carried findings (2026-06-08), current status
 
-### H1 — Accuracy unvalidated on the full corpus and not PR-gated — **STILL OPEN**
-- `.github/workflows/ci.yml:37-39`: the holdout gate, hybrid A/B, and lap-time
+### H1 — Accuracy unvalidated on the full corpus and not PR-gated — **PARTIALLY FIXED on this branch**
+- `.github/workflows/ci.yml`: the holdout gate, hybrid A/B, and lap-time
   gate run only `if: github.event_name == 'schedule'` (weekly). Per-PR CI runs
-  lint, fast pytest, and `verify_holdout.sh` (integrity only). A change that
-  degrades recommendation accuracy merges green — and currently *everything*
-  merges red (N1), which is worse.
-- **Fix:** as before — add a cheap per-PR accuracy smoke (one car, held-out
-  channels, loose threshold); commit a dated results JSON and assert freshness.
-  Now additionally blocked on N2 (the results path no longer exists).
+  lint and fast pytest. A change that degrades recommendation accuracy can
+  still merge green.
+- **Worse than first reported (verified 2026-06-10):** the weekly job had
+  **never actually measured anything**. Every gate needs
+  `corpus/catalog.sqlite` + parquet sessions, and the workflow never built a
+  corpus (no `optimize learn` step): `tests/test_calibration_gate.py:23-25,43`
+  skips both calibration tests without a catalog,
+  `lap_time_correlation_gate.py:127-158` returns an empty pair dict ("no
+  qualifying pairs … skipping", exit 0), and the holdout gate short-circuits
+  the same way. Gate JSONs were also never uploaded, so even a hypothetical
+  run's evidence evaporated with the runner.
+- **Fixed on this branch (2026-06-10):** `calibration-weekly` now (1) builds
+  the corpus (`uv run optimize learn ./ibtfiles`), (2) re-applies the
+  gate-only flags via the new `scripts/mark_holdout_sessions.py` — a fresh
+  ingest writes `held_out=0`, so without this step the per-car fits would
+  *train on the held-out IBTs* (leak), (3) runs `verify_holdout.sh` before
+  the gates, and (4) uploads `docs/physics-rebuild/*.json` as a run artifact
+  with `if: always()`. `day_12b_calibrate_evaluator.py` is restored from
+  `a4e4f5f^` so the calibration step is no longer vacuous. The job is
+  capped at `timeout-minutes: 350`.
+- **Still open:** the weekly job needs the LFS budget restored to fetch
+  telemetry (N5) — until then the ingest step has only pointer files; and a
+  cheap per-PR accuracy smoke remains unbuilt.
 
 ### H2 — Cadillac ride heights clamped out of the aero-map envelope — **STILL OPEN**
 - Clamp logic unchanged: `aero/interpolator.py:46-52` (`_clamp`), `:150-172`
