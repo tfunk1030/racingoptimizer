@@ -151,27 +151,45 @@ is committed**. Status of the accuracy-rebuild definition-of-done
 
 ### Independent read of the committed evidence (2026-06-10)
 
-The only committed accuracy measurement is `scripts/_holdout_run_latest.log`
-(UTF-16, schema-v5-era run; raw telemetry is LFS-unfetchable in this
-environment — N5). Decoding it and re-scoring every figure against the gate's
-own P1.1 thresholds (`scripts/holdout_accuracy_gate.py:86`):
+**Fresh measurement (2026-06-10, this session):** with the LFS budget
+restored, the full 192-IBT corpus was pulled, ingested, leak-guarded
+(`mark_holdout_sessions.py`, `verify_holdout.sh` exit 0), and
+`holdout_accuracy_gate.py` was run at the **current schema-v8 code state** —
+the first measurement since the v5-era log. Committed at
+`docs/physics-rebuild/holdout_accuracy_latest.json`. Verdict: **per-channel
+gate 0/5 cars pass** (aggregate: 2/5), but the picture moved a lot in both
+directions vs the v5-era baseline:
 
-- **34 / 34 gated (car, channel) pairs FAIL the per-channel thresholds.** The
-  "GATE PASS 5/5" headline in the log is the lenient *aggregate* gate only
-  (median normed ≤ 2.0).
-- The worst misses are exactly the channels the physics evaluator and
-  guardrails consume: `accel_lat_g_max` misses its 0.30 g budget by
-  **2.3–3.8×** on every car (Porsche worst: 1.13 g mean-abs, normed 1.26 —
-  residuals as large as the signal), and `understeer_angle_mean_rad` misses
-  its 0.10 rad budget by **3.5–7.1×** (Cadillac worst: 0.71 rad, normed 1.46).
-- Dynamic wheel-RH misses 3.0 mm on all cars (3.3–6.2 mm); damper force p99
-  misses by 2.4–3.0×. Coverage is high (0.84–1.0) only because the CIs are
-  wide — the model *knows* it doesn't know, but the score path consumes the
-  mean, not the CI.
-- Implication: per-corner guardrail penalties (`over_axle_ceiling`,
-  `severely_off_balance`) fire on predictions whose error is the size of the
-  signal. At current accuracy they are corpus-level sanity rails, not
-  corner-level facts.
+| channel (mean_abs) | budget | v5 era | **v8 now** | delta |
+|---|---|---|---|---|
+| accel_lat_g_max — bmw | 0.30 g | 0.789 | **0.365** | −54 % |
+| accel_lat_g_max — porsche | 0.30 g | 1.126 | **0.419** | −63 % |
+| accel_lat_g_max — ferrari | 0.30 g | 0.921 | **0.328** | −64 %, near-pass |
+| understeer — cadillac | 0.10 rad | 0.712 | **0.219** | −69 % |
+| understeer — bmw | 0.10 rad | 0.350 | **0.188** | −46 % |
+| rr_ride_height — bmw | 3.0 mm | 4.628 | **10.375** | **+124 % REGRESSION** |
+| lr_ride_height — cadillac | 3.0 mm | 5.858 | **10.490** | **+79 % REGRESSION** |
+
+- **The W5/W6 rebuild worked where it aimed:** peak lat-G error halved on
+  every car, understeer down 46–69 %, longitudinal-G channels now PASS on
+  4/5 cars, and driver-input channels are near-zero error. The remaining
+  lat-G/understeer gaps are 1.1–2.6× over budget (was 2.3–7.1×).
+- **NEW finding — rear ride-height regression:** lr/rr dynamic RH roughly
+  doubled in error on BMW and Cadillac vs the v5 baseline, with **coverage
+  collapsing** (BMW rr: 0.99 → 0.35; Cadillac lr: 0.99 → 0.27) while the
+  regime label reads "confident" — the model is now *confidently wrong* on
+  rear platform height. Prime suspects are the W6 changes that touch RH at
+  fit time (`physics/aero_fit_features.py` queries the aero map at platform
+  RH; P2.2 `track_random_intercepts` shrink per-track) — isolating which
+  requires ablation refits (~1–2 h each). This matters doubly because the
+  rear-RH prediction feeds the aero-map query (rake), compounding with H2.
+- All `dense_mean_cov` failures (bmw/cadillac/porsche 0.81–0.82 vs ≥ 0.85)
+  trace to the same rear-RH coverage collapse.
+
+The earlier read of the v5-era log (kept for the trend): 34/34 gated pairs
+failed, lat-G 2.3–3.8× over, understeer 3.5–7.1× over; coverage was high
+(0.84–1.0) because CIs were wide — the score path consumes the mean, not
+the CI.
 
 Independent aero-map analysis (the 33 `aero-maps/*.json` are real data in
 this clone): all five cars share the same calibrated envelope (front RH

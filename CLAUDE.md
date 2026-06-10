@@ -33,11 +33,14 @@ return to it when touching a specific subsystem.
   the W6 garage-step ontology — fixed on the audit branch, `AUDIT.md` N1) and
   the GitHub **LFS budget is exhausted** (`AUDIT.md` N5 — per-PR CI no longer
   fetches LFS; the weekly full-data job stays blocked until the budget
-  returns); recommendation accuracy is **measured-failing**: 34/34 gated
-  (car, channel) pairs miss the P1.1 per-channel thresholds (`AUDIT.md`
-  "Independent read") and lap-time correlation has never been run (`AUDIT.md`
-  H1); all five aero maps stop at a 25 mm front-RH floor the cars run below
-  (`AUDIT.md` H2 — out-of-domain queries now warn + downgrade confidence).
+  returns); recommendation accuracy is **measured-failing but improving**:
+  the fresh 2026-06-10 schema-v8 held-out run (committed at
+  `docs/physics-rebuild/holdout_accuracy_latest.json`) passes 0/5 cars on the
+  P1.1 per-channel gate — lat-G error halved vs the v5 baseline but **rear
+  dynamic ride height regressed ~2x with coverage collapse** (`AUDIT.md`
+  "Independent read"); all five aero maps stop at a 25 mm front-RH floor the
+  cars run below (`AUDIT.md` H2 — out-of-domain queries now warn + downgrade
+  confidence).
 
 ## Repository state
 
