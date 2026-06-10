@@ -48,19 +48,16 @@ still point at it:
 
 1. **Held-out integrity check is inoperative.**
    `scripts/verify_holdout.sh:24` reads
-   `docs/physics-rebuild/holdout.sha256`; `:27-30` exits **4** when missing.
+   `docs/physics-rebuild/holdout.sha256`; exits **4** when missing.
    The actual protection (hash check, catalog-flag check, pickle-leak check)
-   has not run since the deletion. *(2026-06-10: the per-PR CI step was removed
-   along with the N5 LFS mitigation — it needs real IBT bytes the per-PR job no
-   longer fetches; the weekly `calibration-weekly` job still runs it and will
-   exit 4 there until the manifest is restored.)*
-2. **Weekly accuracy gate writes into a nonexistent directory.**
-   `scripts/holdout_accuracy_gate.py:942` writes
-   `docs/physics-rebuild/holdout_accuracy_latest.json`; with the parent dir gone
-   the write raises `FileNotFoundError` *(inferred from `Path.write_text`
-   semantics; not executed)*.
+   has not run since the deletion.
+2. ~~Weekly accuracy gate writes into a nonexistent directory~~ —
+   **retracted on closer read**: both gate scripts already
+   `mkdir(parents=True)` before writing
+   (`scripts/holdout_accuracy_gate.py:957`,
+   `scripts/lap_time_correlation_gate.py:425`).
 3. **Briefing error-budget header silently never renders.**
-   `src/racingoptimizer/explain/narrative.py:52` loads the same JSON; the P3.1
+   `src/racingoptimizer/explain/narrative.py:52` loads the gate JSON; the P3.1
    per-channel error-budget block falls back to the legacy confidence line for
    every briefing, permanently, with no warning.
 4. **Weekly "Day 12b evaluator calibration gate" is vacuous.**
@@ -69,11 +66,19 @@ still point at it:
    "day_12b_calibrate_evaluator.py missing", so the cron step
    (`ci.yml:53-54`) passes by skipping everything.
 
-- **Proposed fix:** Restore `docs/physics-rebuild/holdout.sha256` (recoverable
-  via `git show 94ce009:docs/physics-rebuild/holdout.sha256`) or move the
-  manifest to `scripts/`/`docs/holdout/` and update the four references. Decide
-  whether the day-12b calibration gate is retired (then delete the cron step and
-  test) or restore the script.
+- **Status: LARGELY REPAIRED on this branch (2026-06-10):**
+  `docs/physics-rebuild/holdout.sha256` restored from `94ce009` and
+  `holdout_accuracy_latest.json` restored from `ff357c8` (the newest revision
+  with populated per-channel data; the post-W6 revision had empty channel
+  arrays). Verified live: the briefing error budget renders again
+  (`bmw @ spa_2024_up` → "peak lateral G +/- 0.78 g (noisy)" …), and
+  `verify_holdout.sh` gains a distinct exit **5** + message for
+  unmaterialised-LFS-pointer checkouts so a pointer clone reads as "data not
+  fetched", not as a bogus tampering MISMATCH. Still open: the day-12b
+  calibration cron step is vacuous (restore the script from
+  `git show a4e4f5f^:scripts/day_12b_calibrate_evaluator.py` or retire the
+  step), and the weekly job needs the LFS budget back to actually hash the
+  IBTs.
 
 ### N3 — The "fast" CI suite takes 87 minutes (Med)
 - **Where:** CI run 27168788022, `Pytest (fast)` step: 21:44 → 23:11 (5225 s).
@@ -194,7 +199,7 @@ front RH remains the real fix (H2).
 | DoD item | Criterion | Status | Evidence |
 |---|---|---|---|
 | §5.1 held-out gate | green on all 5 cars, per-channel | **Unproven** — result JSON deleted (N2); `scripts/_holdout_run_latest.log` shows the *aggregate* gate passing all 5 cars (median normed residual 0.56–0.70) but prints no per-channel pass/fail | `scripts/holdout_accuracy_gate.py:86` `_PER_CHANNEL_THRESHOLDS`; log tracked in repo |
-| §5.3 lap-time Spearman | ρ ≥ 0.30 per qualifying (car, track) pair | **Never computed** — the LOSO per-pair refit is an explicit placeholder writing an empty result list; the cron step (`ci.yml:62-63`) gates on nothing | `scripts/lap_time_correlation_gate.py:31` (`_SPEARMAN_TARGET=0.30`), module docstring *(agent-verified)* |
+| §5.3 lap-time Spearman | ρ ≥ 0.30 per qualifying (car, track) pair | **Implemented but never run** — the LOSO orchestration is real (`_compute_loso_pairs_for_track`, `lap_time_correlation_gate.py:161-364`, called from `main()` at `:395`; corrects an earlier agent-reported "placeholder" claim) but no results JSON has ever been produced/committed; in corpus-less CI it short-circuits to "no qualifying pairs" | `scripts/lap_time_correlation_gate.py:31` (`_SPEARMAN_TARGET=0.30`), `:127-158` catalog walk |
 | §5.6 in-garage static RH | within 1 mm | **Unvalidated offline** — kinematic fit ships gated on in-sample R² ≥ 0.98 only | `physics/static_rh_kinematic.py` *(agent-verified)* |
 | Evaluator lap-time correlation | target 0.35 (fallback 0.20) | **Below target**: BMW +0.189, Cadillac +0.122, Ferrari +0.249 (only Ferrari passes fallback); Porsche undocumented; Acura uncalibrated (default weights) | `src/racingoptimizer/physics/evaluator.py:86-101` |
 | Hybrid ≥ surrogate A/B (P1.3) | hybrid not >20 % below surrogate on H1–H5 | Wired into weekly cron only; no committed results | `tests/physics/test_hybrid_heldout_ab.py` assert `total_h >= total_s * 0.80` *(agent-verified)*; `ci.yml:59-60` |
@@ -336,9 +341,10 @@ Structural blockers documented in-repo (verified locations):
    nothing else in CI matters until checkout succeeds (15 min / billing).
 1. **N1** — fix the two stale asserts in
    `tests/cli/test_post_clamp_discrete.py:110-120` → CI signal restored (10 min).
-2. **N2** — restore `docs/physics-rebuild/holdout.sha256` (or relocate + update
-   the 4 references) → held-out integrity protection live again, weekly gate
-   can write results, briefing error budget renders (1 hr).
+2. **N2** — ~~restore the holdout manifest + gate JSON~~ **done on this branch
+   (2026-06-10)**; remaining: restore or retire
+   `scripts/day_12b_calibrate_evaluator.py` (the weekly calibration step is
+   vacuous without it).
 3. **N4 + M1** — drop the `.claude/worktrees/` gitlinks and the five generated
    artifacts; extend `.gitignore` (15 min).
 4. **H1/§5.1** — run `scripts/holdout_accuracy_gate.py` offline on the full

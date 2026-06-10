@@ -29,13 +29,15 @@ return to it when touching a specific subsystem.
 - **Commands (verified in CI):** see "Commands" below; CI runs `ruff` + fast
   pytest (`-m "not slow"`) + `verify_holdout.sh` on every PR. Accuracy gates run
   **weekly on cron only** — accuracy is not gated per-PR (`AUDIT.md` H1).
-- **Top audit risks (2026-06-10 refresh):** CI is **red on master** — two stale
-  tests vs the W6 garage-step ontology (`AUDIT.md` N1); `docs/physics-rebuild/`
-  was deleted but `verify_holdout.sh`, the weekly accuracy gate's output path,
-  and the briefing error-budget header still point into it (`AUDIT.md` N2);
-  recommendation accuracy still unvalidated on the full corpus and not PR-gated
-  (`AUDIT.md` H1); Cadillac static-RH predictions systematically clamped
-  out-of-envelope (`AUDIT.md` H2).
+- **Top audit risks (2026-06-10 refresh):** master CI was red (stale tests vs
+  the W6 garage-step ontology — fixed on the audit branch, `AUDIT.md` N1) and
+  the GitHub **LFS budget is exhausted** (`AUDIT.md` N5 — per-PR CI no longer
+  fetches LFS; the weekly full-data job stays blocked until the budget
+  returns); recommendation accuracy is **measured-failing**: 34/34 gated
+  (car, channel) pairs miss the P1.1 per-channel thresholds (`AUDIT.md`
+  "Independent read") and lap-time correlation has never been run (`AUDIT.md`
+  H1); all five aero maps stop at a 25 mm front-RH floor the cars run below
+  (`AUDIT.md` H2 — out-of-domain queries now warn + downgrade confidence).
 
 ## Repository state
 
@@ -81,9 +83,11 @@ Changes that landed after the W5 wave and around the 2026-06-08 onboarding audit
   still assert step-less behaviour → **CI red on master** (`AUDIT.md` N1).
 - **Deletions**: the `scripts/day_NN_*.py` gate scripts and the whole
   `docs/physics-rebuild/` tree (incl. `holdout.sha256` and
-  `holdout_accuracy_latest.json`) are gone. `verify_holdout.sh` exits 4 on the
-  missing manifest; the held-out integrity check has not actually run since
-  (`AUDIT.md` N2). `recommendations/*.txt` and `err.log` were untracked (good).
+  `holdout_accuracy_latest.json`) were deleted, severing the held-out
+  integrity check (`AUDIT.md` N2; manifest + results JSON restored 2026-06-10
+  — see "Held-out IBT system" below). `recommendations/*.txt` and `err.log`
+  were untracked (good). `day_12b_calibrate_evaluator.py` is still gone, so
+  the weekly calibration cron step skips vacuously.
 - **VISION §6 restored** (`ccc0dee`): `_track_fastest_observed_value` and the
   `track_best_value` pin branch were removed from `physics/recommend.py` — lap
   time no longer selects setup values (it remains, legitimately, the corner
@@ -242,10 +246,14 @@ varies by module:
 
 ## Held-out IBT system (2026-05-08, Day 0 prep)
 
-**BROKEN as of 2026-06-10:** `docs/physics-rebuild/holdout.sha256` was deleted
-in commit `a4e4f5f` ("belleisle") — `verify_holdout.sh` exits 4 on the missing
-manifest, so the integrity check has not actually run since (`AUDIT.md` N2).
-Recover the manifest via `git show 94ce009:docs/physics-rebuild/holdout.sha256`.
+**Repaired 2026-06-10 (was broken since `a4e4f5f`):** the manifest
+`docs/physics-rebuild/holdout.sha256` (restored from `94ce009`) and the gate
+results `holdout_accuracy_latest.json` (restored from `ff357c8`, the newest
+revision with populated channels) are back in-tree; the briefing error-budget
+header renders again. `verify_holdout.sh` now exits **5** with a clear message
+on unmaterialised-LFS-pointer checkouts (pointer ≠ tampering); a real
+integrity pass still needs `git lfs pull` (blocked on the LFS budget,
+`AUDIT.md` N5).
 
 5 hash-pinned IBTs in `docs/physics-rebuild/holdout.sha256` are
 flagged `held_out=1` in the catalog and excluded from production
@@ -453,7 +461,7 @@ Default output path: `recommendations/<car>-<short-track>-<mode>[-<fuel>L]-<MMDD
 - **Inverse-track-sample-count training weights — FIXED 2026-05-24 (P2.3).** Forest fitter honours `sample_weight = 1 / sqrt(n_track_rows)` so a Sebring-heavy corpus doesn't drown Spa rows.
 - **Corner archetype `phase_duration_s` at fit time — FIXED 2026-05-24 (P2.4).** `CORNER_ARCHETYPE_COLUMNS` extended; `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` 5 → 6.
 - **Briefing header per-channel error budget — FIXED 2026-05-24 (P3.1).** `_render_error_budget_block` reads `holdout_accuracy_latest.json` and renders per-channel `mean_abs` lines; falls back to the legacy `Confidence: ...` line on missing rows.
-- **Lap-time Spearman gate (PARTIAL — P1.2).** `scripts/lap_time_correlation_gate.py` ships with helpers + qualifying-pair filter; the per-pair LOSO refit is a placeholder (~2.5 hr/car-track to populate offline).
+- **Lap-time Spearman gate (P1.2 — code real, results missing).** `scripts/lap_time_correlation_gate.py` carries the full LOSO orchestration (`_compute_loso_pairs_for_track`, lines 161-364) but it has never been run on a populated corpus (~2.5 hr/car-track offline) — no `lap_time_correlation_latest.json` exists, so correlation is still unmeasured.
 - **Hybrid vs surrogate-only A/B in CI (PARTIAL — P1.3).** `tests/physics/test_hybrid_heldout_ab.py` gates non-regression invariants (key-set match, finite totals, 50 % relative-delta bound). CI YAML flip + per-car asymmetric "hybrid doesn't lose" assertion still pending.
 - **Curb / off-line row masking (DEFERRED — P2.1).** Needs `TrackModel.bump_map` API addition; deferred to next pass.
 - `optimize <car> <track> --json` emits valid JSON to stdout; pin/fuel/reset/static-RH warnings populate the `warnings` array (stderr save line still present unless `--output-file -`).
