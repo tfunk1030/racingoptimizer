@@ -354,6 +354,7 @@ def recommend_cmd(
             wind=wind, wetness=wetness,
             corpus_root=root,
         )
+        _reset_aero_clamp_stats(model)
         rec = model.recommend(
             track_slug, env, pinned_constraints,
             schedule=schedule, quali=quali, explore_pct=explore_pct,
@@ -376,6 +377,7 @@ def recommend_cmd(
             wind=wind, wetness=wetness,
             corpus_root=root,
         )
+        _reset_aero_clamp_stats(model)
         rec = model.recommend(
             fit_track, env, pinned_constraints,
             quali=quali, explore_pct=explore_pct,
@@ -396,6 +398,7 @@ def recommend_cmd(
     top_warnings.extend(
         _static_ride_height_envelope_warnings(predicted_readouts),
     )
+    top_warnings.extend(_aero_out_of_domain_warnings(rec, model))
     top_warnings.extend(
         _heave_slider_tech_warnings(model, recommended_setup, env, schedule),
     )
@@ -1844,6 +1847,104 @@ def _unlearned_ibt_on_disk_warnings(
         f"{shown}{extra} -- run `optimize learn` before recommend so the "
         f"past setup and coverage table reflect your latest stints."
     ]
+
+
+# A DE run whose aero queries clamp on the front-RH axis at least this
+# often is treated as systematically out of the aero map's calibrated
+# domain (AUDIT H2: Cadillac runs ~8 mm front RH vs the 25 mm map floor).
+_AERO_OOD_FRACTION_THRESHOLD: float = 0.5
+
+# Parameter families whose recommendation rests most directly on the aero
+# map (wing trim + the ride-height levers). Downgraded one confidence tier
+# when the run scored on out-of-domain aero.
+_AERO_OOD_DOWNGRADE_FAMILIES: frozenset[str] = frozenset(
+    {"rear_wing", "pushrod", "perch_offset", "ride_height"}
+)
+
+
+def _reset_aero_clamp_stats(model) -> None:
+    """Zero the AeroSurface clamp counters so they measure one DE run."""
+    from racingoptimizer.physics.score import _aero_surface_or_none
+
+    aero = _aero_surface_or_none(model)
+    if aero is not None:
+        aero.reset_clamp_stats()
+
+
+def _aero_out_of_domain_warnings(rec, model) -> list[str]:
+    """Surface systematic out-of-envelope aero-map queries (AUDIT H2).
+
+    When the DE run evaluated the aero map at clamped ride heights for a
+    majority of queries, the balance / L-D the optimizer scored against is
+    the envelope-edge value, not the car's true (lower-RH) aero. Estimate
+    the minimum bias as gradient-at-the-floor x max excursion, warn, and
+    downgrade the aero-driven parameter families one confidence tier in
+    place (mirrors `Confidence.with_local_density` semantics: the global
+    label overstates trust where the model had no calibrated data).
+    """
+    from racingoptimizer.aero import BASELINE_AIR_DENSITY
+    from racingoptimizer.physics.ontology import ontology_for
+    from racingoptimizer.physics.score import _aero_surface_or_none
+
+    aero = _aero_surface_or_none(model)
+    if aero is None:
+        return []
+    stats = aero.clamp_stats
+    if stats.queries == 0 or stats.front_clamp_fraction < _AERO_OOD_FRACTION_THRESHOLD:
+        return []
+
+    # Snapshot before the gradient probes below add queries of their own.
+    fraction = stats.front_clamp_fraction
+    excursion = float(stats.max_front_excursion_mm)
+
+    bounds = aero.bounds
+    floor = float(bounds.front_rh_mm[0])
+    rear_mid = (float(bounds.rear_rh_mm[0]) + float(bounds.rear_rh_mm[1])) / 2.0
+    wing_entry = rec.parameters.get("rear_wing_angle_deg")
+    if wing_entry is not None:
+        wing = float(wing_entry[0])
+    else:
+        wing = float(bounds.wing_angles[len(bounds.wing_angles) // 2])
+    probe_mm = min(2.0, (float(bounds.front_rh_mm[1]) - floor) / 2.0)
+    bias_txt = ""
+    if probe_mm > 0:
+        bal_floor, _ = aero.interpolate(floor, rear_mid, wing, BASELINE_AIR_DENSITY)
+        bal_probe, _ = aero.interpolate(
+            floor + probe_mm, rear_mid, wing, BASELINE_AIR_DENSITY,
+        )
+        bias = (bal_probe - bal_floor) / probe_mm * excursion
+        bias_txt = (
+            f"; balance bias at the floor est. {bias:+.1f}% front "
+            "(floor gradient x excursion -- true bias below the floor is "
+            "larger or unknown)"
+        )
+
+    try:
+        onto = ontology_for(model.car)
+    except KeyError:
+        onto = {}
+    downgraded: list[str] = []
+    for name, (value, confidence) in rec.parameters.items():
+        spec = onto.get(name)
+        if spec is None or spec.family not in _AERO_OOD_DOWNGRADE_FAMILIES:
+            continue
+        if confidence.regime == "sparse":
+            continue
+        rec.parameters[name] = (value, confidence.downgrade())
+        downgraded.append(name)
+
+    warnings = [
+        f"aero map evaluated OUT OF DOMAIN for {fraction:.0%} of corner-phase "
+        f"queries: front ride height up to {excursion:.1f} mm below the map "
+        f"floor ({floor:.0f} mm){bias_txt}. Aero-driven terms scored against "
+        "envelope-edge aero, not the car's true platform."
+    ]
+    if downgraded:
+        warnings.append(
+            "confidence downgraded one tier for aero-driven parameters "
+            "(out-of-domain aero evidence): " + ", ".join(sorted(downgraded))
+        )
+    return warnings
 
 
 def _static_ride_height_envelope_warnings(

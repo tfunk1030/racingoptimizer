@@ -1,0 +1,20 @@
+[
+  {
+    "car": "bmw",
+    "track": "spa_2024_up",
+    "n_sessions": 14,
+    "n_loso_pairs": 14,
+    "spearman": -0.22197802197802197,
+    "passed": false,
+    "reason": "rho=-0.222<0.30"
+  },
+  {
+    "car": "cadillac",
+    "track": "lagunaseca",
+    "n_sessions": 14,
+    "n_loso_pairs": 12,
+    "spearman": -0.06655001449214289,
+    "passed": false,
+    "reason": "rho=-0.067<0.30"
+  }
+]

@@ -10,6 +10,7 @@ tests/physics/test_score.py asserts this module contains no such reference.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 import numpy as np
@@ -577,9 +578,31 @@ def _aero_ld_for_state(
 # JSON for the car; called inside the optimisation hot loop, so memoise it.
 _AERO_CACHE: dict[str, AeroSurface | None] = {}
 
+_logger = logging.getLogger("racingoptimizer.physics.score")
+
+# Cars already warned about scoring on constant aero defaults (AUDIT M5:
+# a missing surface must not silently optimise on fabricated aero).
+_AERO_DEFAULTS_WARNED: set[str] = set()
+
+
+def _warn_aero_defaults_once(car: str, why: str) -> None:
+    if car in _AERO_DEFAULTS_WARNED:
+        return
+    _AERO_DEFAULTS_WARNED.add(car)
+    _logger.warning(
+        "no aero surface for %s (%s): scoring falls back to constant "
+        "defaults (balance=%.0f%%, L/D=%.1f) -- aero terms carry no signal "
+        "for this car",
+        car,
+        why,
+        _DEFAULT_AERO_BALANCE_PCT,
+        _DEFAULT_AERO_LD,
+    )
+
 
 def _aero_surface_or_none(model: PhysicsModel) -> AeroSurface | None:
     if not model.aero_correction_available:
+        _warn_aero_defaults_once(model.car, "aero_correction_available=False")
         return None
     if model.car in _AERO_CACHE:
         return _AERO_CACHE[model.car]
@@ -588,6 +611,8 @@ def _aero_surface_or_none(model: PhysicsModel) -> AeroSurface | None:
         surface = load_aero_maps(model.car)
     except Exception:  # pragma: no cover — aero_correction_available is the gate
         surface = None
+    if surface is None:  # pragma: no cover — same gate as above
+        _warn_aero_defaults_once(model.car, "aero map failed to load")
     _AERO_CACHE[model.car] = surface
     return surface
 
