@@ -21,6 +21,10 @@ _ENV = EnvironmentFrame(
 )
 def test_recommend_bmw_sebring_fast(per_car_model_factory) -> None:
     """Single-car DE smoke promoted out of the slow-only suite."""
+    from tests._lfs_util import is_unmaterialised_lfs_pointer, lfs_skip_message
+
+    if is_unmaterialised_lfs_pointer(BMW_SEBRING_IBT):
+        pytest.skip(lfs_skip_message(BMW_SEBRING_IBT))
     model, root = per_car_model_factory(
         "bmw", "sebring_international", (BMW_SEBRING_IBT,),
     )

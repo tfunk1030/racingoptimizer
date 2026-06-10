@@ -37,19 +37,23 @@ Spearman) backing it.
 - **Proposed fix:** Update the two tests to assert the snapped values (47.5,
   75.0) — the snap is the intended product behaviour; the tests are the stale
   half. One-line each.
+- **Status: FIXED on this branch (2026-06-10, user-approved):** both tests now
+  assert the step-snapped values
+  (`test_brake_bias_snaps_to_half_pct_step` / `test_diff_preload_snaps_to_5nm_step`).
 
 ### N2 — `docs/physics-rebuild/` was deleted but is still load-bearing (High)
 Commit `a4e4f5f` ("belleisle") deleted the entire `docs/physics-rebuild/` tree,
 including `holdout.sha256` and `holdout_accuracy_latest.json`. Four consumers
 still point at it:
 
-1. **Held-out integrity check is inoperative and will hard-fail CI.**
+1. **Held-out integrity check is inoperative.**
    `scripts/verify_holdout.sh:24` reads
    `docs/physics-rebuild/holdout.sha256`; `:27-30` exits **4** when missing.
-   It runs on every push/PR (`.github/workflows/ci.yml:34-35`). Today it is
-   *skipped* because the pytest step fails first — fix N1 and every CI run will
-   fail here instead. Meanwhile the actual protection (hash check, catalog-flag
-   check, pickle-leak check) has not run since the deletion.
+   The actual protection (hash check, catalog-flag check, pickle-leak check)
+   has not run since the deletion. *(2026-06-10: the per-PR CI step was removed
+   along with the N5 LFS mitigation — it needs real IBT bytes the per-PR job no
+   longer fetches; the weekly `calibration-weekly` job still runs it and will
+   exit 4 there until the manifest is restored.)*
 2. **Weekly accuracy gate writes into a nonexistent directory.**
    `scripts/holdout_accuracy_gate.py:942` writes
    `docs/physics-rebuild/holdout_accuracy_latest.json`; with the parent dir gone
@@ -118,6 +122,19 @@ still point at it:
      currently broken anyway, N2).
   2. *Billing fix:* increase the LFS data-pack budget on the GitHub account —
      restores the status quo, including its multi-GB-per-run bandwidth burn.
+- **Status: MITIGATED on this branch (2026-06-10, user-approved):** option 1
+  applied — the per-PR `lint-and-test` job no longer fetches LFS and the
+  (broken, LFS-dependent) `verify_holdout.sh` step moved out of the per-PR job
+  (it already runs in `calibration-weekly`). This also resolves N3 for PRs.
+  The weekly job keeps `lfs: true` and still needs the budget restored.
+  One latent land mine was fixed to make this viable:
+  `tests/physics/test_per_car_recommend_fast.py` gated only on `.exists()`,
+  so on a pointer-only checkout it fed the 133-byte LFS pointer to irsdk —
+  the documented runaway-allocation failure (`tests/_lfs_util.py:1-9`) —
+  and got OOM-killed. It now uses the standard
+  `is_unmaterialised_lfs_pointer` skip. Verified locally on a pointer-only
+  clone (the exact post-fix CI environment): `917 passed, 103 skipped,
+  0 failed in 8.4 s`.
 
 ---
 

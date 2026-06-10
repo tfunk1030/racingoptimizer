@@ -11,9 +11,12 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     steps:
+      # No LFS on the per-PR job: the repo's LFS bandwidth budget is finite
+      # and the multi-GB ibtfiles set burned through it (AUDIT.md N5).
+      # tests/conftest.py skips corpus-gated tests when fixtures are
+      # unmaterialised LFS pointers, so the fast suite stays meaningful.
+      # Full-data checks (holdout integrity, accuracy gates) run weekly below.
       - uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -30,9 +33,6 @@ jobs:
 
       - name: Pytest (fast)
         run: uv run pytest -q -m "not slow"
-
-      - name: Verify held-out integrity
-        run: bash scripts/verify_holdout.sh
 
   calibration-weekly:
     runs-on: ubuntu-latest
