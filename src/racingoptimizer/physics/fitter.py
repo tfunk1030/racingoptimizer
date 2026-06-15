@@ -212,7 +212,10 @@ ENV_FEATURE_COUNT_V1: int = 5
 #      part of the input feature vector so the same fitter can score any
 #      corner on any track once the target's archetypes are extracted.
 ENV_FEATURE_SCHEMA_VERSION: int = 3
-ENV_FEATURE_SCHEMA_VERSION_PER_CAR: int = 8
+# v9 (2026-06-10): W6 aero-map fit features DISABLED by default after a
+# held-out ablation showed the static-vs-dynamic RH train/serve skew was
+# degrading every gated channel (see physics/aero_fit_features.py).
+ENV_FEATURE_SCHEMA_VERSION_PER_CAR: int = 9
 
 # W6 P4 -- driver-input control variables per (corner, phase). Isolates
 # setup signal from driver noise on grip-balance channels. Already emitted
@@ -1121,11 +1124,15 @@ def fit_per_car(
     joint = _attach_setup_columns(training, sid_to_param_value, available_params)
     joint = _attach_corner_archetypes(joint)
     aero_surface = _load_aero_surface(car_key)
-    from racingoptimizer.physics.aero_fit_features import attach_aero_map_features
-
-    joint = attach_aero_map_features(
-        joint, car_key, setups, aero_surface,
+    from racingoptimizer.physics.aero_fit_features import (
+        AERO_MAP_FIT_FEATURES_ENABLED,
+        attach_aero_map_features,
     )
+
+    if AERO_MAP_FIT_FEATURES_ENABLED:
+        joint = attach_aero_map_features(
+            joint, car_key, setups, aero_surface,
+        )
     # Setup-readout target columns (static RH + aero calc) — track-invariant
     # so the fitters learn the clean setup→equilibrium chain. Particularly
     # important for the per-car path because cross-track pooling otherwise

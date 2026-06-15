@@ -551,19 +551,24 @@ class PhysicsModel:
 
         env_features = _env_to_array(env)
         from racingoptimizer.physics.aero_fit_features import (
+            AERO_MAP_FIT_FEATURES_ENABLED,
             aero_map_features_for_predict,
         )
-        from racingoptimizer.physics.fitter import _load_aero_surface
 
-        static_readouts = self.predict_setup_readouts(setup, env)
-        aero_surface = _load_aero_surface(self.car)
-        extra_features = aero_map_features_for_predict(
-            car=self.car,
-            setup=setup,
-            aero_surface=aero_surface,
-            air_density=float(env.air_density),
-            static_readouts=static_readouts,
-        )
+        if AERO_MAP_FIT_FEATURES_ENABLED:
+            from racingoptimizer.physics.fitter import _load_aero_surface
+
+            static_readouts = self.predict_setup_readouts(setup, env)
+            aero_surface = _load_aero_surface(self.car)
+            extra_features = aero_map_features_for_predict(
+                car=self.car,
+                setup=setup,
+                aero_surface=aero_surface,
+                air_density=float(env.air_density),
+                static_readouts=static_readouts,
+            )
+        else:
+            extra_features = {}
         if context_features:
             for name, value in context_features.items():
                 if value is not None:

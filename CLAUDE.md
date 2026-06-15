@@ -25,7 +25,7 @@ return to it when touching a specific subsystem.
 - **The core (Slice E, `physics/`):** `fit_per_car` → pickle cache → `_predict_v4`
   → `score.py` per-corner-phase hybrid utilisation → `recommend.py` differential
   evolution. Cache invalidates on `constraints.md` edits, ontology changes,
-  `FITTERS_LAYOUT_VERSION` (12), or `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (8).
+  `FITTERS_LAYOUT_VERSION` (12), or `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (9).
 - **Commands (verified in CI):** see "Commands" below; CI runs `ruff` + fast
   pytest (`-m "not slow"`) + `verify_holdout.sh` on every PR. Accuracy gates run
   **weekly on cron only** — accuracy is not gated per-PR (`AUDIT.md` H1).
@@ -33,14 +33,19 @@ return to it when touching a specific subsystem.
   the W6 garage-step ontology — fixed on the audit branch, `AUDIT.md` N1) and
   the GitHub **LFS budget is exhausted** (`AUDIT.md` N5 — per-PR CI no longer
   fetches LFS; the weekly full-data job stays blocked until the budget
-  returns); recommendation accuracy is **measured-failing but improving**:
-  the fresh 2026-06-10 schema-v8 held-out run (committed at
-  `docs/physics-rebuild/holdout_accuracy_latest.json`) passes 0/5 cars on the
-  P1.1 per-channel gate — lat-G error halved vs the v5 baseline but **rear
-  dynamic ride height regressed ~2x with coverage collapse** (`AUDIT.md`
-  "Independent read"); all five aero maps stop at a 25 mm front-RH floor the
-  cars run below (`AUDIT.md` H2 — out-of-domain queries now warn + downgrade
-  confidence).
+  returns); recommendation accuracy is **measured-failing but much
+  improved**: the 2026-06-10 held-out run (committed at
+  `docs/physics-rebuild/holdout_accuracy_latest.json`, **schema v9**) passes
+  the aggregate gate **5/5 cars** (was 2/5) and peak lat-G is now under
+  budget on 4/5 cars — after this session root-caused a rear-RH regression to
+  the W6 aero-map fit features (static-vs-dynamic RH train/serve skew) and
+  **disabled them** (`AERO_MAP_FIT_FEATURES_ENABLED=False`, `AUDIT.md`
+  "Independent read"). The P1.1 per-channel gate is still 0/5, blocked mainly
+  by `damper_force_p99_n` (a driver-input structural ceiling) and acura's thin
+  corpus. Lap-time Spearman measured on 2 pairs is ≤ 0 (`AUDIT.md` §5.3) — the
+  objective↔pace link is the open correlation problem. All five aero maps stop
+  at a 25 mm front-RH floor the cars run below (`AUDIT.md` H2 — out-of-domain
+  queries warn + downgrade confidence).
 
 ## Repository state
 
@@ -79,7 +84,13 @@ Changes that landed after the W5 wave and around the 2026-06-08 onboarding audit
   row gains `aero_map_ld_ratio` + `aero_map_balance_pct` queried at observed
   platform RH + wing + air density; at predict time approximated from the
   deterministic static-RH readouts. `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` 7 → **8**,
-  `FITTERS_LAYOUT_VERSION` 11 → **12**.
+  `FITTERS_LAYOUT_VERSION` 11 → **12**. **DISABLED 2026-06-10**
+  (`AERO_MAP_FIT_FEATURES_ENABLED=False`, schema → 9): a held-out ablation
+  proved the observed-RH-at-fit vs static-RH-at-predict skew was degrading
+  every gated channel (rear-RH error 10→3 mm, lat-G under budget on 4/5 cars
+  once removed). Helpers stay pure + tested; both call sites gate on the flag.
+  Re-enable only with a predict-time query at predicted *dynamic* platform RH
+  plus a fresh held-out A/B.
 - **Garage steps for previously step-less params**: `brake_bias_pct` `step=0.5`,
   `diff_preload_nm` `step=5.0` (`physics/ontology.py:326-348`); `_post_clamp`
   snaps to them. Two stale tests in `tests/cli/test_post_clamp_discrete.py:110-120`
@@ -339,7 +350,7 @@ Cache files at `corpus/models/<car>__per-car__<digest>.pickle` (or `<car>__<trac
 2. `ontology` fingerprint — `(name, family, fittable, user_settable, json_path)` per spec. **The `json_path` is critical** — without it, a leaf-path correction (e.g. moving `fuel_level_l` from `Chassis.Fuel` to `BrakesDriveUnit.Fuel`) silently reuses the OLD pickle that trained against the wrong YAML field, masking the fix.
 3. `constraints.md` content hash — bounds are baked into the pickle at fit time; editing them must invalidate the cache so DE doesn't search against stale bounds.
 4. `FITTERS_LAYOUT_VERSION` (in `physics.fitters.__init__`, **currently 12** as of 2026-05-26) — bump when class names / module paths under `physics.fitters` change so old pickles don't fail to revive (`ModuleNotFoundError`), OR when PhysicsModel gains a new field that production paths read (forces refit so the field populates rather than default-empty). v11 (W5) adds `track_random_intercepts`; v12 (W6, `785b87b`) corresponds to the aero-map fit features.
-5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4); bumped to 6 on 2026-05-24 with P2.4's `phase_duration_s` injection; to 7 on 2026-05-25 (W5) with P2.1's curb/off-track row masking; to **8 on 2026-05-26 (W6)** with `physics/aero_fit_features.py` adding `aero_map_ld_ratio`/`aero_map_balance_pct` to the joint feature vector.
+5. `ENV_FEATURE_SCHEMA_VERSION[_PER_CAR]` — pre-S2.2 (v1), S2.2 env-12 (v2), Stage-3 coupled (v3), per-car (v4); bumped to 6 on 2026-05-24 with P2.4's `phase_duration_s` injection; to 7 on 2026-05-25 (W5) with P2.1's curb/off-track row masking; to 8 on 2026-05-26 (W6) with `physics/aero_fit_features.py` adding `aero_map_ld_ratio`/`aero_map_balance_pct`; to **9 on 2026-06-10** when those W6 aero-map fit features were **disabled** (`AERO_MAP_FIT_FEATURES_ENABLED=False`) after a held-out ablation showed a static-vs-dynamic-RH train/serve skew was degrading every gated channel.
 
 Editing `constraints.md` invalidates EVERY per-car cache (constraint content hash is a cache-key ingredient). Next recommend per car triggers a ~15-min refit. Plan constraint edits in batches.
 

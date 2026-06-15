@@ -29,6 +29,22 @@ _AERO_FIT_COLUMNS: tuple[str, ...] = (
     "aero_map_balance_pct",
 )
 
+# DISABLED 2026-06-10 after a measured held-out ablation. The fit-time
+# features are computed at observed *dynamic platform* RH while the
+# predict-time approximation uses *static garage* readouts -- distributions
+# 10-40 mm apart (rear static RH even clamps at the map's 50 mm ceiling).
+# The Forest follows the skewed feature into sparsely-trained regions and
+# every gated channel suffers. Held-out A/B (same corpus, same seed):
+#   cadillac@lagunaseca  with -> without
+#     rr_ride_height_mean_mm  9.95 -> 2.77 mm   (coverage 0.51 -> 0.98)
+#     lr_ride_height_mean_mm 10.49 -> 2.67 mm   (coverage 0.27 -> 0.94)
+#     accel_lat_g_max         0.437 -> 0.285 g  (passes its 0.30 budget)
+#     understeer_mean         0.219 -> 0.112 rad
+# Re-enable only with a predict-time query at predicted DYNAMIC platform RH
+# (not static readouts) and a fresh held-out A/B showing no regression.
+# The helpers below stay pure/testable; call sites gate on this flag.
+AERO_MAP_FIT_FEATURES_ENABLED: bool = False
+
 _AIR_DENSITY_REF: float = 1.225
 
 
