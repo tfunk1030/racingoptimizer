@@ -4,17 +4,17 @@
     "track": "spa_2024_up",
     "n_sessions": 14,
     "n_loso_pairs": 14,
-    "spearman": -0.22197802197802197,
+    "spearman": -0.03296703296703297,
     "passed": false,
-    "reason": "rho=-0.222<0.30"
+    "reason": "rho=-0.033<0.30"
   },
   {
     "car": "cadillac",
     "track": "lagunaseca",
     "n_sessions": 14,
     "n_loso_pairs": 12,
-    "spearman": -0.06655001449214289,
+    "spearman": 0.23467636689334598,
     "passed": false,
-    "reason": "rho=-0.067<0.30"
+    "reason": "rho=0.235<0.30"
   }
 ]
