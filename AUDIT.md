@@ -200,14 +200,50 @@ post-fix** state. The trajectory across all three measurements:
   Re-running the full gate gives **aggregate 5/5 pass** (was 2/5) and
   per-channel failure counts of bmw 6, cadillac 2, ferrari 4, acura 8,
   porsche 2 (was 7/7/6/8/7). Committed JSON reflects the post-fix state.
-- **Remaining per-channel blockers (post-fix):** `damper_force_p99_n`
-  (271–354 N vs ~145–189 budget on 4/5 cars) is the dominant blocker — it is
-  derived from damper *velocity*, a driver-input-dominated channel CLAUDE.md
-  already flags as a structural fit-quality ceiling (~0.50), so it is unlikely
-  to clear a setup-predictability budget; `acura` (thin corpus, 8 fails); and
-  understeer barely over (cadillac 0.112, porsche 0.138 vs 0.10). The
-  per-channel gate is still 0/5, but cadillac and porsche are now one
-  driver-input channel + a hair of understeer away from clean.
+- **Remaining per-channel blockers (post-fix), ranked by tractability:**
+  1. **`damper_force_p99_n` — gate-classification inconsistency (NEW finding,
+     fit-quality-proven).** Blocks 4/5 cars (271–354 N vs ~145–189 budget).
+     Measured per-channel fit skill `cv_residual_std / signal_std` (lower =
+     better, from a fitted Cadillac model; `physics/model.py:68-69`):
+
+     | channel | gated? | skill |
+     |---|---|---|
+     | `damper_force_p99_n` | **GATED** | 0.650 |
+     | `damper_force_mean_n` | exempt | 0.578 |
+     | `damper_velocity_p99_mms` | exempt | 0.755 |
+     | `damper_velocity_mean_mms` | exempt | 0.605 |
+     | grip + dynamic-RH channels | gated | **0.13–0.31** |
+     | throttle / brake / wheel-speed (driver-input) | exempt | 0.17–0.36 |
+
+     The whole damper family clusters at 0.58–0.76 — structurally distinct
+     from the genuinely setup-driven channels (0.13–0.31) and *worse*-fit than
+     the exempt driver-input channels. `damper_force` is a deterministic
+     digressive transform of damper velocity (`physics/damper_force.py:102`),
+     which CLAUDE.md already classifies as a structural fit ceiling. Gating the
+     p99 force while exempting `damper_force_mean_n`,
+     `damper_velocity_p99_mms`, and `damper_velocity_mean_mms` (same family,
+     equal-or-better fit) is internally inconsistent
+     (`scripts/holdout_accuracy_gate.py:103`). **Recommended (not applied,
+     user's call — it changes the metric definition):** move
+     `damper_force_p99_n` to informational, consistent with the rest of its
+     family. Verified this does NOT make any car pass on its own (cadillac/
+     porsche drop to a single remaining fail), so it is an honesty fix, not a
+     gate-gaming lever.
+  2. **understeer near-misses** — cadillac 0.112, porsche 0.138 vs 0.10 rad.
+     Genuinely close; the only blocker on those two cars besides damper. A
+     real model improvement here (better mid-corner slip-angle signal) would
+     flip both cars green once #1 is resolved.
+  3. **front dynamic RH** — bmw lf 4.27, ferrari lf 4.07 / rf 3.72 vs 3.0 mm.
+     Note disabling the aero features slightly *raised* front-lf error on
+     bmw/ferrari (3.49 → 4.27) while massively fixing the rear — a residual
+     of the same train/serve issue, now front-only.
+  4. **acura — thin corpus, not a code bug.** 8 fails incl. accel_lon_g_min
+     1.011 (banked Daytona). Axle-ceiling fit needs ≥ 100 corner-phase rows;
+     acura has ~36 (CLAUDE.md). Needs more sessions, not more code.
+
+  **Net:** the per-channel gate is 0/5 and is *not* closable by code alone on
+  this corpus — #1 is a metric-definition call, #4 is a data-volume problem,
+  and #2/#3 are real (tractable) model-accuracy work.
 
 The earlier read of the v5-era log (kept for the trend): 34/34 gated pairs
 failed, lat-G 2.3–3.8× over, understeer 3.5–7.1× over; coverage was high
