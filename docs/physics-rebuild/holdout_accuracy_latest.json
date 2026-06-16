@@ -221,7 +221,6 @@
       "accel_lon_g_min"
     ],
     "per_channel_failed": [
-      "damper_force_p99_n: mean_abs=280.905 > 146.309 | normed=0.58 > 0.50",
       "lf_ride_height_mean_mm: mean_abs=4.270 > 3.000 | normed=0.80 > 0.50",
       "lr_ride_height_mean_mm: mean_abs=3.659 > 3.000",
       "rf_ride_height_mean_mm: mean_abs=3.439 > 3.000 | normed=0.62 > 0.50",
@@ -455,7 +454,6 @@
       "rr_ride_height_mean_mm"
     ],
     "per_channel_failed": [
-      "damper_force_p99_n: mean_abs=271.624 > 144.782 | normed=0.56 > 0.50",
       "understeer_angle_mean_rad: mean_abs=0.112 > 0.100"
     ]
   },
@@ -683,7 +681,6 @@
       "rr_ride_height_mean_mm"
     ],
     "per_channel_failed": [
-      "damper_force_p99_n: mean_abs=301.661 > 188.974",
       "lf_ride_height_mean_mm: mean_abs=4.072 > 3.000 | normed=0.77 > 0.50",
       "rf_ride_height_mean_mm: mean_abs=3.724 > 3.000 | normed=0.64 > 0.50",
       "understeer_angle_mean_rad: mean_abs=0.105 > 0.100"
@@ -803,7 +800,7 @@
         "actual_std": 0.39472560722284866,
         "normed_residual": 0.19021164648718225,
         "coverage": 0.9477611940298507,
-        "regime": "confident"
+        "regime": "noisy"
       },
       {
         "channel": "throttle_mean",
@@ -995,7 +992,7 @@
         "actual_std": 7.9236605267094005,
         "normed_residual": 0.37995607411763826,
         "coverage": 0.90625,
-        "regime": "confident"
+        "regime": "noisy"
       },
       {
         "channel": "rr_ride_height_mean_mm",
@@ -1071,7 +1068,6 @@
       "rr_ride_height_mean_mm"
     ],
     "per_channel_failed": [
-      "damper_force_p99_n: mean_abs=354.111 > 173.757 | normed=0.61 > 0.50",
       "understeer_angle_mean_rad: mean_abs=0.138 > 0.100"
     ]
   }

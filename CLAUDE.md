@@ -40,12 +40,17 @@ return to it when touching a specific subsystem.
   budget on 4/5 cars — after this session root-caused a rear-RH regression to
   the W6 aero-map fit features (static-vs-dynamic RH train/serve skew) and
   **disabled them** (`AERO_MAP_FIT_FEATURES_ENABLED=False`, `AUDIT.md`
-  "Independent read"). The P1.1 per-channel gate is still 0/5, blocked mainly
-  by `damper_force_p99_n` (a driver-input structural ceiling) and acura's thin
-  corpus. Lap-time Spearman measured on 2 pairs is ≤ 0 (`AUDIT.md` §5.3) — the
-  objective↔pace link is the open correlation problem. All five aero maps stop
-  at a 25 mm front-RH floor the cars run below (`AUDIT.md` H2 — out-of-domain
-  queries warn + downgrade confidence).
+  "Independent read"). The P1.1 per-channel gate is still 0/5; after
+  reclassifying `damper_force_p99_n` to informational (2026-06-16, a
+  fit-quality-justified driver-input channel — `AUDIT.md`), cadillac and
+  porsche have a single remaining blocker each (understeer ~0.11–0.14 vs
+  0.10), bmw/ferrari are blocked by front dynamic RH, and acura by its thin
+  corpus (data, not code). Lap-time Spearman is intrinsically ~0.24 (cadillac,
+  production-faithful all-track refit; `AUDIT.md` §5.3) — below the 0.30 target
+  but a deliberate VISION §6 limitation (the objective is physics utilization,
+  never lap time), accepted by user decision rather than chased. All five aero
+  maps stop at a 25 mm front-RH floor the cars run below (`AUDIT.md` H2 —
+  out-of-domain queries warn + downgrade confidence).
 
 ## Repository state
 
