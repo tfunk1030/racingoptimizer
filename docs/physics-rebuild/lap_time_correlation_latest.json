@@ -13,8 +13,8 @@
     "track": "lagunaseca",
     "n_sessions": 14,
     "n_loso_pairs": 12,
-    "spearman": 0.23467636689334598,
+    "spearman": 0.24168163157672945,
     "passed": false,
-    "reason": "rho=0.235<0.30"
+    "reason": "rho=0.242<0.30"
   }
 ]

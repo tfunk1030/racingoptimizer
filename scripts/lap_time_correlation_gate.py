@@ -255,9 +255,26 @@ def _compute_loso_pairs_for_track(
             skies=int(med("skies_mean", default=-1.0)),
         )
 
+    # Production-faithful training set: `optimize <car> <track>` fits
+    # fit_per_car on EVERY production session for the car across ALL
+    # tracks, not just the target track's sessions. The earlier
+    # same-track-only `rest` measured a strictly weaker model than
+    # production ships, biasing the measured correlation downward. Pull
+    # the full per-car production corpus once; LOSO then holds out one
+    # target-track session at a time from THIS set.
+    with cat.open_catalog(catalog_path(corpus_root)) as conn:
+        all_car_sids = sorted(
+            s.session_id
+            for s in cat.query_sessions(
+                conn, car=car, valid_only=True, include_held_out=False,
+            )
+        )
+
     out: list[tuple[float, float]] = []
     for held_sid in session_ids:
-        rest = [s for s in session_ids if s != held_sid]
+        # Train on the full per-car corpus minus the held target-track
+        # session (matches production's all-tracks pooling).
+        rest = [s for s in all_car_sids if s != held_sid]
         # Must leave enough training material for a stable per-car fit
         # AND must keep at least 5 sessions of cross-track variety so
         # the surrogate doesn't degenerate to a constant per-track fit.
