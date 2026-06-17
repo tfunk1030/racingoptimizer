@@ -157,10 +157,13 @@ recommend_cmd (cli/recommend.py:199)
 
 Digest folds: pooled `session_ids` + ontology fingerprint (incl. `json_path`) +
 `constraints.md` content hash + `FITTERS_LAYOUT_VERSION` (**12**,
-`physics/fitters/__init__.py:72`) + `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (**8**,
-`physics/fitter.py:215`). v12 / schema-8 correspond to W6's aero-map fit
-features (`physics/aero_fit_features.py`). Editing `constraints.md` invalidates
-**every** per-car cache → ~15-min refit per car.
+`physics/fitters/__init__.py:72`) + `ENV_FEATURE_SCHEMA_VERSION_PER_CAR` (**9**,
+`physics/fitter.py:215`). v12 / schema-9: schema 8 added W6's aero-map fit
+features (`physics/aero_fit_features.py`); schema 9 (2026-06-10) **disabled**
+them (`AERO_MAP_FIT_FEATURES_ENABLED=False`) after a held-out ablation showed a
+static-vs-dynamic-RH train/serve skew degrading every gated channel (AUDIT.md
+"Independent read"). Editing `constraints.md` invalidates **every** per-car
+cache → ~15-min refit per car.
 
 ---
 
@@ -174,11 +177,12 @@ features (`physics/aero_fit_features.py`). Editing `constraints.md` invalidates
    `off_track_frac_mean>0.0` once the track model is in the compounding regime).
 2. Attach setup columns, **corner archetypes** (apex speed, peak lat-G, duration,
    `phase_duration_s`), static-RH readouts, dynamic-at-speed RH, P2.3
-   inverse-track-sample-count weights (`1/sqrt(n_track_rows)`), and (W6,
-   `physics/aero_fit_features.py`) per-row **aero-map features**
-   (`aero_map_ld_ratio`, `aero_map_balance_pct`) queried at the observed
-   platform RH + wing + air density, so grip-balance channels don't have to
-   learn downforce implicitly from setup alone.
+   inverse-track-sample-count weights (`1/sqrt(n_track_rows)`). (The W6
+   aero-map features `aero_map_ld_ratio`/`aero_map_balance_pct` in
+   `physics/aero_fit_features.py` are **disabled by default since schema 9** —
+   the fit-time query used observed dynamic platform RH while predict used
+   static readouts, a train/serve skew; the helpers stay pure + tested but
+   both call sites gate on `AERO_MAP_FIT_FEATURES_ENABLED`.)
 3. Per `(phase, channel)` quadruple, fit a model via `_fit_one_quadruple`
    (:1435). Per-car v4 always uses **ForestFitter** (mixed 35-dim feature space
    defeats the scalar-scale GP). Static/aero/dynamic readout channels route to
@@ -197,9 +201,9 @@ Fitter families: `fitters/forest.py` (RF 50 trees, per-tree std), `fitters/gp.py
 `_predict_v4` (model.py:513) keys on `(phase, channel)`, assembles a feature row
 [setup params | 12 env channels | corner archetype], adds the P2.2
 `track_random_intercepts` correction when a `track=` is supplied, widens CI in
-quadrature. `_predict_v3`/`_predict_legacy` retained for rollback. At predict time the W6
-aero features are approximated from the deterministic static-RH readouts
-(telemetry RH unavailable — `physics/aero_fit_features.py` module docstring).
+quadrature. `_predict_v3`/`_predict_legacy` retained for rollback. (When the W6
+aero features are enabled they are approximated at predict from the static-RH
+readouts; disabled by default since schema 9 — see Fit step 2.)
 `__setstate__` (model.py:242) backfills slots, runs `_repair_legacy_slot_shift`
 then `_validate_pickle_slots` (type-safety, P1.4).
 
