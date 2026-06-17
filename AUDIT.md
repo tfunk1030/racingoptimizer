@@ -231,9 +231,20 @@ post-fix** state. The trajectory across all three measurements:
      acura unchanged at 8 — so it is an honesty fix, not a gate-gaming lever
      (per-channel gate stays 0/5).
   2. **understeer near-misses** — cadillac 0.112, porsche 0.138 vs 0.10 rad.
-     Genuinely close; the only blocker on those two cars besides damper. A
-     real model improvement here (better mid-corner slip-angle signal) would
-     flip both cars green once #1 is resolved.
+     Genuinely close; the only blocker on those two cars besides damper.
+     **Forest-hyperparameter tuning ruled out (2026-06-16, user-authorized
+     investigation):** held-out understeer on cadillac under refit variants —
+     baseline (n50/d15) **0.1124**, shallower d10 **0.1163**, d8 **0.1195**.
+     Shallower trees make it *worse*, so the model is not overfitting and the
+     obvious fitter-tuning lever does not exist. Note understeer
+     (`SteeringWheelAngle − k·AccelLat`, `corner/states.py:555`) is partly
+     driver-input like damper, but it is the canonical balance metric and the
+     single most important gated channel, so it is NOT a reclassification
+     candidate. The remaining gap is a genuine model-accuracy limit on a tight
+     0.10 rad budget; a real improvement would need a predict-time balance
+     feature the surrogate doesn't have (the kinematic slip-angle in
+     `physics/diagnostic_state.py` is telemetry-derived, unavailable at
+     predict time — dead end for setup recommendation).
   3. **front dynamic RH** — bmw lf 4.27, ferrari lf 4.07 / rf 3.72 vs 3.0 mm.
      Note disabling the aero features slightly *raised* front-lf error on
      bmw/ferrari (3.49 → 4.27) while massively fixing the rear — a residual
