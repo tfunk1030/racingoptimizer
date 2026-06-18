@@ -100,32 +100,20 @@ def test_missing_channel_is_skipped(gate_mod) -> None:
     assert failed == []
 
 
-def test_damper_force_uses_30_percent_of_std_rule(gate_mod) -> None:
-    """``damper_force_p99_n`` mean_abs target is 30 % of the channel std."""
-    # std=1000 -> dynamic mean_abs target = 300 N. mean_abs=400 must fail.
-    rows_fail = [
-        _row("damper_force_p99_n", mean_abs=400.0, normed=0.40, std=1000.0),
+def test_damper_force_is_informational_not_gated(gate_mod) -> None:
+    """``damper_force_p99_n`` was reclassified to informational (2026-06-16,
+    fit-quality-justified -- it is a deterministic transform of damper
+    velocity, the codebase's structural fit ceiling). A damper row far over
+    the old 30%-of-std budget must now be SKIPPED, not failed."""
+    rows = [
+        _row("damper_force_p99_n", mean_abs=400.0, normed=0.90, std=1000.0),
     ]
-    ok, failed = gate_mod._per_channel_pass(rows_fail)
-    assert ok is False
-    assert any("damper_force_p99_n" in line for line in failed)
-
-    # std=2000 -> dynamic mean_abs target = 600 N. mean_abs=400 must pass
-    # (and normed below 0.5).
-    rows_pass = [
-        _row("damper_force_p99_n", mean_abs=400.0, normed=0.20, std=2000.0),
-    ]
-    ok, failed = gate_mod._per_channel_pass(rows_pass)
+    ok, failed = gate_mod._per_channel_pass(rows)
     assert ok is True
     assert failed == []
-
-
-def test_damper_force_zero_std_skips_mean_abs_check(gate_mod) -> None:
-    """When channel std is non-positive, dynamic mean_abs target collapses
-    to ``None`` so the channel is gated by ``normed`` only."""
-    rows = [_row("damper_force_p99_n", mean_abs=99.0, normed=0.20, std=0.0)]
-    ok, _failed = gate_mod._per_channel_pass(rows)
-    assert ok is True
+    # And the rest of the damper family stays informational too.
+    for ch in gate_mod._INFORMATIONAL_DAMPER_CHANNELS:
+        assert ch not in gate_mod._PER_CHANNEL_THRESHOLDS
 
 
 def test_failure_message_format(gate_mod) -> None:

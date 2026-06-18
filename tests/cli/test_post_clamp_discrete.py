@@ -85,8 +85,7 @@ def test_already_integer_arb_passes_through_unchanged() -> None:
 def test_continuous_parameter_snaps_to_garage_step() -> None:
     """Continuous (`is_discrete=False`) params are not integer-rounded, but they
     DO snap to their garage `step` -- iRacing only accepts discrete clicks. Rear
-    wing has a 1.0 deg step, so 15.5 -> 16.0. Genuinely step-less continuous
-    params keep full precision (see brake_bias / diff_preload tests below)."""
+    wing has a 1.0 deg step, so 15.5 -> 16.0."""
     rec = _make_rec({"rear_wing_angle_deg": (15.5, _conf(15.5))})
     out, _, _ = _post_clamp(rec, _stub_model(), load_constraints())
     assert out.parameters["rear_wing_angle_deg"][0] == 16.0
@@ -107,14 +106,17 @@ def test_arb_rounds_at_upper_edge() -> None:
     assert out.parameters["anti_roll_bar_front"][0] == 5.0
 
 
-def test_brake_bias_is_continuous_not_rounded() -> None:
-    """Brake bias is `is_discrete=False` (continuous %); 47.3 % stays 47.3."""
+def test_brake_bias_snaps_to_half_pct_step() -> None:
+    """Brake bias is continuous but carries a 0.5 % garage step (W6,
+    `brake_bias_pct step=0.5` in the ontology); 47.3 % snaps to 47.5."""
     rec = _make_rec({"brake_bias_pct": (47.3, _conf(47.3))})
     out, _, _ = _post_clamp(rec, _stub_model(), load_constraints())
-    assert out.parameters["brake_bias_pct"][0] == 47.3
+    assert out.parameters["brake_bias_pct"][0] == 47.5
 
 
-def test_diff_preload_is_continuous_not_rounded() -> None:
+def test_diff_preload_snaps_to_5nm_step() -> None:
+    """Diff preload carries a 5 Nm garage step (W6, `diff_preload_nm
+    step=5.0` in the ontology); 75.5 Nm snaps to 75.0."""
     rec = _make_rec({"diff_preload_nm": (75.5, _conf(75.5))})
     out, _, _ = _post_clamp(rec, _stub_model(), load_constraints())
-    assert out.parameters["diff_preload_nm"][0] == 75.5
+    assert out.parameters["diff_preload_nm"][0] == 75.0

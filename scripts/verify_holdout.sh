@@ -16,6 +16,9 @@
 #   2  catalog flag missing (a held-out session is being treated as production).
 #   3  pickle leak (a model was trained on held-out data).
 #   4  manifest missing or malformed.
+#   5  held-out IBT is an unmaterialised git-lfs pointer (integrity cannot
+#      be attested without the real bytes -- run `git lfs pull` first; NOT
+#      a tampering signal).
 #
 # Usage: bash scripts/verify_holdout.sh
 set -uo pipefail
@@ -36,12 +39,22 @@ fi
 # on whitespace -- the awk pattern strips column 1 then the comment suffix.
 HASH_FAIL=0
 HASH_LINES=0
+LFS_POINTER=0
 while IFS='|' read -r expected path; do
   [[ -z "$expected" || -z "$path" ]] && continue
   HASH_LINES=$((HASH_LINES + 1))
   if [[ ! -f "$REPO_ROOT/$path" ]]; then
     echo "verify_holdout: missing IBT: $path" >&2
     HASH_FAIL=1
+    continue
+  fi
+  # A ~130-byte "version https://git-lfs..." text means the LFS object was
+  # never fetched. Hashing it would report a bogus MISMATCH (tampering
+  # signal) when the truth is "data not materialised" -- distinguish them.
+  if head -c 42 "$REPO_ROOT/$path" 2>/dev/null \
+       | grep -q "^version https://git-lfs"; then
+    echo "verify_holdout: UNMATERIALISED LFS POINTER: $path" >&2
+    LFS_POINTER=1
     continue
   fi
   actual=$(sha256sum "$REPO_ROOT/$path" 2>/dev/null | awk '{print $1}')
@@ -67,6 +80,10 @@ if [[ $HASH_LINES -eq 0 ]]; then
 fi
 if [[ $HASH_FAIL -ne 0 ]]; then
   exit 1
+fi
+if [[ $LFS_POINTER -ne 0 ]]; then
+  echo "verify_holdout: held-out IBTs are git-lfs pointers; run 'git lfs pull' first" >&2
+  exit 5
 fi
 
 # 2. Catalog flag check (skipped if catalog file missing -- fresh corpus,

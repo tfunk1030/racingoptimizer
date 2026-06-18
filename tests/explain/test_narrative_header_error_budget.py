@@ -167,9 +167,11 @@ def test_header_block_handles_malformed_json(tmp_path, monkeypatch) -> None:
 
 
 def test_header_channels_match_per_channel_thresholds_subset() -> None:
-    """The budget's channels must be a subset of the gating dict in
-    ``scripts/holdout_accuracy_gate.py`` so the header doesn't reference
-    a channel the gate doesn't track."""
+    """The budget's channels must be a subset of what the gate REPORTS so
+    the header never references an untracked channel. The reported set is
+    the gated thresholds plus the informational damper family (still
+    measured + surfaced after the 2026-06-16 reclassification, just not
+    gated -- see scripts/holdout_accuracy_gate.py)."""
     import importlib.util
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -180,9 +182,11 @@ def test_header_channels_match_per_channel_thresholds_subset() -> None:
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    gate_channels = set(mod._PER_CHANNEL_THRESHOLDS)
+    reported_channels = set(mod._PER_CHANNEL_THRESHOLDS) | set(
+        mod._INFORMATIONAL_DAMPER_CHANNELS
+    )
     header_channels = {ch for ch, _label, _unit in _HEADER_ERROR_BUDGET_CHANNELS}
-    assert header_channels.issubset(gate_channels), (
-        f"header references channels not in gate: "
-        f"{header_channels - gate_channels}"
+    assert header_channels.issubset(reported_channels), (
+        f"header references channels the gate doesn't report: "
+        f"{header_channels - reported_channels}"
     )

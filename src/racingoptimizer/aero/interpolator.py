@@ -43,6 +43,39 @@ class AeroBounds:
     wing_angles: tuple[float, ...]
 
 
+@dataclass
+class AeroClampStats:
+    """Out-of-domain accounting for ``AeroSurface.interpolate`` queries.
+
+    GTPs run below the aero map's calibrated front-RH floor (25 mm on every
+    map in the corpus) much of the time, so each clamp silently substitutes
+    the envelope-edge aero for the true (unknown) aero. The per-query DEBUG
+    log is invisible in production; these counters make the bias visible to
+    the recommend pipeline so it can warn and downgrade confidence
+    (AUDIT.md H2) instead of treating the clamped value as truth.
+
+    ``max_*_excursion_mm`` is the largest distance a query fell outside the
+    envelope on that axis — gradient-at-the-floor x excursion bounds the
+    minimum bias of the clamped lookup (the true bias below the floor is
+    unknowable from the map).
+    """
+
+    queries: int = 0
+    front_clamped: int = 0
+    rear_clamped: int = 0
+    wing_clamped: int = 0
+    max_front_excursion_mm: float = 0.0
+    max_rear_excursion_mm: float = 0.0
+
+    @property
+    def front_clamp_fraction(self) -> float:
+        return self.front_clamped / self.queries if self.queries else 0.0
+
+    @property
+    def rear_clamp_fraction(self) -> float:
+        return self.rear_clamped / self.queries if self.queries else 0.0
+
+
 def _clamp(value: float, lo: float, hi: float) -> tuple[float, bool]:
     """Clamp value to [lo, hi]; second return is True if clamping happened."""
     if value < lo:
@@ -69,6 +102,7 @@ class AeroSurface:
         self._data = data
         self._baseline_air_density = baseline_air_density
         self._wing_axis = np.asarray(data.wing_angles, dtype=float)
+        self._clamp_stats = AeroClampStats()
 
         self._balance_interps: list[RegularGridInterpolator] = []
         self._ld_interps: list[RegularGridInterpolator] = []
@@ -99,6 +133,15 @@ class AeroSurface:
     @property
     def baseline_air_density(self) -> float:
         return self._baseline_air_density
+
+    @property
+    def clamp_stats(self) -> AeroClampStats:
+        """Cumulative out-of-domain accounting since the last reset."""
+        return self._clamp_stats
+
+    def reset_clamp_stats(self) -> None:
+        """Zero the clamp counters (call before a measurement window)."""
+        self._clamp_stats = AeroClampStats()
 
     @property
     def bounds(self) -> AeroBounds:
@@ -138,6 +181,23 @@ class AeroSurface:
         wing_clamped, wing_was_clamped = _clamp(
             float(wing_deg), float(self._wing_axis[0]), float(self._wing_axis[-1])
         )
+
+        stats = self._clamp_stats
+        stats.queries += 1
+        if front_was_clamped:
+            stats.front_clamped += 1
+            stats.max_front_excursion_mm = max(
+                stats.max_front_excursion_mm,
+                abs(float(front_rh_mm) - front_clamped),
+            )
+        if rear_was_clamped:
+            stats.rear_clamped += 1
+            stats.max_rear_excursion_mm = max(
+                stats.max_rear_excursion_mm,
+                abs(float(rear_rh_mm) - rear_clamped),
+            )
+        if wing_was_clamped:
+            stats.wing_clamped += 1
 
         # Demoted to DEBUG: GTPs run BELOW the aero map's calibrated front-rh
         # envelope floor (typically 25mm) at all times — every aero call

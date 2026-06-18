@@ -1,0 +1,1074 @@
+[
+  {
+    "car": "bmw",
+    "eval_mode": "heldout",
+    "session_id": "3f0a05d3f44527bd",
+    "track": "spa_2024_up",
+    "n_prod_sessions": 53,
+    "n_holdout_rows": 144,
+    "channels": [
+      {
+        "channel": "accel_lat_g_max",
+        "n": 144,
+        "mean_abs": 0.2958432877435584,
+        "actual_std": 0.781608956506691,
+        "normed_residual": 0.37850549853701143,
+        "coverage": 0.9583333333333334,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lat_g_mean",
+        "n": 144,
+        "mean_abs": 0.24207275247869278,
+        "actual_std": 1.1658059341755493,
+        "normed_residual": 0.207644124448453,
+        "coverage": 0.9444444444444444,
+        "regime": "dense"
+      },
+      {
+        "channel": "accel_lon_g_max",
+        "n": 144,
+        "mean_abs": 0.11900691697903902,
+        "actual_std": 0.480748913406849,
+        "normed_residual": 0.2475448485898618,
+        "coverage": 0.9652777777777778,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lon_g_min",
+        "n": 144,
+        "mean_abs": 0.16956293419014004,
+        "actual_std": 0.7586283290818318,
+        "normed_residual": 0.2235125260815954,
+        "coverage": 0.9722222222222222,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_max",
+        "n": 144,
+        "mean_abs": 0.02160993358665876,
+        "actual_std": 0.2146054880146187,
+        "normed_residual": 0.1006960902378541,
+        "coverage": 0.9722222222222222,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_mean",
+        "n": 144,
+        "mean_abs": 0.0001782958364830548,
+        "actual_std": 0.11962317490983104,
+        "normed_residual": 0.0014904790532223355,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "damper_force_mean_n",
+        "n": 144,
+        "mean_abs": 51.58877108359287,
+        "actual_std": 81.99745456007568,
+        "normed_residual": 0.6291508847484552,
+        "coverage": 0.9930555555555556,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_force_p99_n",
+        "n": 144,
+        "mean_abs": 280.90493093921276,
+        "actual_std": 487.6962200146107,
+        "normed_residual": 0.5759834081363133,
+        "coverage": 0.9652777777777778,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_velocity_mean_mms",
+        "n": 144,
+        "mean_abs": 8.57431836336286,
+        "actual_std": 13.354696250098359,
+        "normed_residual": 0.6420451804210604,
+        "coverage": 0.9930555555555556,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_velocity_p99_mms",
+        "n": 144,
+        "mean_abs": 64.94831083322363,
+        "actual_std": 103.22334354649514,
+        "normed_residual": 0.6292017735694524,
+        "coverage": 0.9861111111111112,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lf_ride_height_mean_mm",
+        "n": 144,
+        "mean_abs": 4.269866049088652,
+        "actual_std": 5.342902871555643,
+        "normed_residual": 0.7991659499970349,
+        "coverage": 0.9166666666666666,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lf_shock_defl_p99_mm",
+        "n": 144,
+        "mean_abs": 4.60615979879198,
+        "actual_std": 4.741346180624823,
+        "normed_residual": 0.9714877638791126,
+        "coverage": 0.7986111111111112,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lr_ride_height_mean_mm",
+        "n": 144,
+        "mean_abs": 3.658515364764968,
+        "actual_std": 8.690983222865368,
+        "normed_residual": 0.4209552902069435,
+        "coverage": 0.9444444444444444,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lr_shock_defl_p99_mm",
+        "n": 144,
+        "mean_abs": 3.122501803229109,
+        "actual_std": 6.8107728068666855,
+        "normed_residual": 0.4584651245569333,
+        "coverage": 0.9791666666666666,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rf_ride_height_mean_mm",
+        "n": 144,
+        "mean_abs": 3.438763530072412,
+        "actual_std": 5.574984496186243,
+        "normed_residual": 0.6168202857648868,
+        "coverage": 0.9375,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rf_shock_defl_p99_mm",
+        "n": 144,
+        "mean_abs": 3.5222539048972408,
+        "actual_std": 5.286106365930263,
+        "normed_residual": 0.6663229343243428,
+        "coverage": 0.9791666666666666,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rr_ride_height_mean_mm",
+        "n": 144,
+        "mean_abs": 3.5448553023448586,
+        "actual_std": 10.316443261230914,
+        "normed_residual": 0.34361215513745785,
+        "coverage": 0.9930555555555556,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rr_shock_defl_p99_mm",
+        "n": 144,
+        "mean_abs": 2.6127163189437925,
+        "actual_std": 7.778515894688328,
+        "normed_residual": 0.33588879348153333,
+        "coverage": 0.9930555555555556,
+        "regime": "noisy"
+      },
+      {
+        "channel": "steering_max_rad",
+        "n": 144,
+        "mean_abs": 0.14654298369804863,
+        "actual_std": 0.7710693042171147,
+        "normed_residual": 0.19005163724788302,
+        "coverage": 0.9236111111111112,
+        "regime": "confident"
+      },
+      {
+        "channel": "throttle_max",
+        "n": 144,
+        "mean_abs": 0.05037831650146876,
+        "actual_std": 0.3376892941754887,
+        "normed_residual": 0.14918541206487998,
+        "coverage": 0.9791666666666666,
+        "regime": "noisy"
+      },
+      {
+        "channel": "throttle_mean",
+        "n": 144,
+        "mean_abs": 0.001203576795334311,
+        "actual_std": 0.38631257969773714,
+        "normed_residual": 0.003115551650624545,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "understeer_angle_mean_rad",
+        "n": 144,
+        "mean_abs": 0.13993593401975746,
+        "actual_std": 0.5277169812212387,
+        "normed_residual": 0.26517231584232664,
+        "coverage": 0.9583333333333334,
+        "regime": "confident"
+      },
+      {
+        "channel": "wheel_speed_max_diff_ms",
+        "n": 144,
+        "mean_abs": 0.28341168108039977,
+        "actual_std": 0.6058887370480359,
+        "normed_residual": 0.4677619235195164,
+        "coverage": 0.9722222222222222,
+        "regime": "noisy"
+      }
+    ],
+    "per_channel_pass": [
+      "accel_lat_g_max",
+      "accel_lon_g_max",
+      "accel_lon_g_min"
+    ],
+    "per_channel_failed": [
+      "lf_ride_height_mean_mm: mean_abs=4.270 > 3.000 | normed=0.80 > 0.50",
+      "lr_ride_height_mean_mm: mean_abs=3.659 > 3.000",
+      "rf_ride_height_mean_mm: mean_abs=3.439 > 3.000 | normed=0.62 > 0.50",
+      "rr_ride_height_mean_mm: mean_abs=3.545 > 3.000",
+      "understeer_angle_mean_rad: mean_abs=0.140 > 0.100"
+    ]
+  },
+  {
+    "car": "cadillac",
+    "eval_mode": "heldout",
+    "session_id": "d236a089300fc0ea",
+    "track": "lagunaseca",
+    "n_prod_sessions": 19,
+    "n_holdout_rows": 85,
+    "channels": [
+      {
+        "channel": "accel_lat_g_max",
+        "n": 85,
+        "mean_abs": 0.2852781237156009,
+        "actual_std": 0.8665750348025302,
+        "normed_residual": 0.32920187203478385,
+        "coverage": 0.9764705882352941,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lat_g_mean",
+        "n": 85,
+        "mean_abs": 0.20150797644394194,
+        "actual_std": 1.3051071354527823,
+        "normed_residual": 0.15439956687849427,
+        "coverage": 0.9411764705882353,
+        "regime": "dense"
+      },
+      {
+        "channel": "accel_lon_g_max",
+        "n": 85,
+        "mean_abs": 0.12427476968385574,
+        "actual_std": 0.5674790300535355,
+        "normed_residual": 0.21899447046022436,
+        "coverage": 0.9294117647058824,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lon_g_min",
+        "n": 85,
+        "mean_abs": 0.11854246629855407,
+        "actual_std": 0.6938333259234619,
+        "normed_residual": 0.1708515026152415,
+        "coverage": 1.0,
+        "regime": "noisy"
+      },
+      {
+        "channel": "brake_max",
+        "n": 85,
+        "mean_abs": 0.01805271891857332,
+        "actual_std": 0.23010396628505153,
+        "normed_residual": 0.07845461862317363,
+        "coverage": 0.9764705882352941,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_mean",
+        "n": 85,
+        "mean_abs": 0.0006007736315124743,
+        "actual_std": 0.1341390435904966,
+        "normed_residual": 0.004478737997763968,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "damper_force_mean_n",
+        "n": 85,
+        "mean_abs": 55.30212650733065,
+        "actual_std": 128.85916240300017,
+        "normed_residual": 0.42916720453588075,
+        "coverage": 0.9529411764705882,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_force_p99_n",
+        "n": 85,
+        "mean_abs": 271.6238366926109,
+        "actual_std": 482.607602285769,
+        "normed_residual": 0.5628254412199931,
+        "coverage": 0.9764705882352941,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_velocity_mean_mms",
+        "n": 85,
+        "mean_abs": 8.736431144012158,
+        "actual_std": 19.540217066698805,
+        "normed_residual": 0.4471000047845488,
+        "coverage": 0.9764705882352941,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_velocity_p99_mms",
+        "n": 85,
+        "mean_abs": 57.52997406796649,
+        "actual_std": 98.64937743656675,
+        "normed_residual": 0.5831762507062881,
+        "coverage": 1.0,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lf_ride_height_mean_mm",
+        "n": 85,
+        "mean_abs": 1.8089846340665858,
+        "actual_std": 6.981916348328399,
+        "normed_residual": 0.25909571868469755,
+        "coverage": 0.9647058823529412,
+        "regime": "confident"
+      },
+      {
+        "channel": "lf_shock_defl_p99_mm",
+        "n": 85,
+        "mean_abs": 1.5588011449377375,
+        "actual_std": 6.849439665981915,
+        "normed_residual": 0.22758082718497416,
+        "coverage": 1.0,
+        "regime": "confident"
+      },
+      {
+        "channel": "lr_ride_height_mean_mm",
+        "n": 85,
+        "mean_abs": 2.667902189541139,
+        "actual_std": 8.965335782194199,
+        "normed_residual": 0.29757972867450033,
+        "coverage": 0.9411764705882353,
+        "regime": "confident"
+      },
+      {
+        "channel": "lr_shock_defl_p99_mm",
+        "n": 85,
+        "mean_abs": 1.865868512222129,
+        "actual_std": 6.760969576902716,
+        "normed_residual": 0.2759764692029433,
+        "coverage": 0.9647058823529412,
+        "regime": "confident"
+      },
+      {
+        "channel": "rf_ride_height_mean_mm",
+        "n": 85,
+        "mean_abs": 2.3369836537940487,
+        "actual_std": 6.688904864852061,
+        "normed_residual": 0.3493821037991001,
+        "coverage": 0.9411764705882353,
+        "regime": "confident"
+      },
+      {
+        "channel": "rf_shock_defl_p99_mm",
+        "n": 85,
+        "mean_abs": 1.628552689734251,
+        "actual_std": 6.242656583562973,
+        "normed_residual": 0.2608749444943455,
+        "coverage": 0.9764705882352941,
+        "regime": "confident"
+      },
+      {
+        "channel": "rr_ride_height_mean_mm",
+        "n": 85,
+        "mean_abs": 2.7720376043043617,
+        "actual_std": 8.725350527030175,
+        "normed_residual": 0.31769928276427345,
+        "coverage": 0.9764705882352941,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rr_shock_defl_p99_mm",
+        "n": 85,
+        "mean_abs": 2.2065800274053218,
+        "actual_std": 7.679045322191282,
+        "normed_residual": 0.28735082745619933,
+        "coverage": 0.9529411764705882,
+        "regime": "confident"
+      },
+      {
+        "channel": "steering_max_rad",
+        "n": 85,
+        "mean_abs": 0.14471362244731076,
+        "actual_std": 0.7888016161262018,
+        "normed_residual": 0.1834600988243383,
+        "coverage": 0.9294117647058824,
+        "regime": "confident"
+      },
+      {
+        "channel": "throttle_max",
+        "n": 85,
+        "mean_abs": 0.046313836351757266,
+        "actual_std": 0.38054734087364567,
+        "normed_residual": 0.12170321896201344,
+        "coverage": 0.9882352941176471,
+        "regime": "noisy"
+      },
+      {
+        "channel": "throttle_mean",
+        "n": 85,
+        "mean_abs": 0.0013072244813521249,
+        "actual_std": 0.3887496992265464,
+        "normed_residual": 0.0033626379234581254,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "understeer_angle_mean_rad",
+        "n": 85,
+        "mean_abs": 0.11241147648917435,
+        "actual_std": 0.4870110041190864,
+        "normed_residual": 0.23081917151442216,
+        "coverage": 0.9647058823529412,
+        "regime": "confident"
+      },
+      {
+        "channel": "wheel_speed_max_diff_ms",
+        "n": 85,
+        "mean_abs": 0.32339884392577184,
+        "actual_std": 0.8040216955101003,
+        "normed_residual": 0.4022265141994657,
+        "coverage": 0.9294117647058824,
+        "regime": "noisy"
+      }
+    ],
+    "per_channel_pass": [
+      "accel_lat_g_max",
+      "accel_lon_g_max",
+      "accel_lon_g_min",
+      "lf_ride_height_mean_mm",
+      "lr_ride_height_mean_mm",
+      "rf_ride_height_mean_mm",
+      "rr_ride_height_mean_mm"
+    ],
+    "per_channel_failed": [
+      "understeer_angle_mean_rad: mean_abs=0.112 > 0.100"
+    ]
+  },
+  {
+    "car": "ferrari",
+    "eval_mode": "heldout",
+    "session_id": "fc96805e3b1a27cc",
+    "track": "hockenheim_gp",
+    "n_prod_sessions": 39,
+    "n_holdout_rows": 57,
+    "channels": [
+      {
+        "channel": "accel_lat_g_max",
+        "n": 57,
+        "mean_abs": 0.2652455985030518,
+        "actual_std": 0.8431721201547299,
+        "normed_residual": 0.3145806083512068,
+        "coverage": 0.9473684210526315,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lat_g_mean",
+        "n": 57,
+        "mean_abs": 0.1346099390243053,
+        "actual_std": 1.4484314127864084,
+        "normed_residual": 0.09293497630333113,
+        "coverage": 0.9649122807017544,
+        "regime": "dense"
+      },
+      {
+        "channel": "accel_lon_g_max",
+        "n": 57,
+        "mean_abs": 0.0985952682481852,
+        "actual_std": 0.5307205261650626,
+        "normed_residual": 0.1857762483027093,
+        "coverage": 1.0,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lon_g_min",
+        "n": 57,
+        "mean_abs": 0.1343532749741066,
+        "actual_std": 0.7840627747040694,
+        "normed_residual": 0.1713552528046187,
+        "coverage": 0.9298245614035088,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_max",
+        "n": 57,
+        "mean_abs": 0.025299817083240847,
+        "actual_std": 0.24833571065093868,
+        "normed_residual": 0.10187748277090256,
+        "coverage": 0.9649122807017544,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_mean",
+        "n": 57,
+        "mean_abs": 0.0008383931680831616,
+        "actual_std": 0.1533634655586954,
+        "normed_residual": 0.005466707243664177,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "damper_force_mean_n",
+        "n": 57,
+        "mean_abs": 60.854452828698925,
+        "actual_std": 153.90298668844514,
+        "normed_residual": 0.3954078743896645,
+        "coverage": 0.9298245614035088,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_force_p99_n",
+        "n": 57,
+        "mean_abs": 301.660804408785,
+        "actual_std": 629.9128310667185,
+        "normed_residual": 0.4788929349128213,
+        "coverage": 0.9122807017543859,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_velocity_mean_mms",
+        "n": 57,
+        "mean_abs": 12.93060078967229,
+        "actual_std": 33.001699355852104,
+        "normed_residual": 0.3918162107424732,
+        "coverage": 0.9298245614035088,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_velocity_p99_mms",
+        "n": 57,
+        "mean_abs": 106.0695322041544,
+        "actual_std": 219.06762297476854,
+        "normed_residual": 0.48418625611494914,
+        "coverage": 0.8947368421052632,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lf_ride_height_mean_mm",
+        "n": 57,
+        "mean_abs": 4.071569727419124,
+        "actual_std": 5.254756120827199,
+        "normed_residual": 0.7748351462556898,
+        "coverage": 0.9298245614035088,
+        "regime": "confident"
+      },
+      {
+        "channel": "lf_shock_defl_p99_mm",
+        "n": 57,
+        "mean_abs": 2.325246238003918,
+        "actual_std": 4.6313079761227955,
+        "normed_residual": 0.5020711751392855,
+        "coverage": 0.8947368421052632,
+        "regime": "confident"
+      },
+      {
+        "channel": "lr_ride_height_mean_mm",
+        "n": 57,
+        "mean_abs": 2.790778469391337,
+        "actual_std": 8.30867750366281,
+        "normed_residual": 0.33588720565469604,
+        "coverage": 0.9824561403508771,
+        "regime": "confident"
+      },
+      {
+        "channel": "lr_shock_defl_p99_mm",
+        "n": 57,
+        "mean_abs": 3.0271884645038853,
+        "actual_std": 8.262726210109761,
+        "normed_residual": 0.3663667883367604,
+        "coverage": 0.9122807017543859,
+        "regime": "confident"
+      },
+      {
+        "channel": "rf_ride_height_mean_mm",
+        "n": 57,
+        "mean_abs": 3.724190188116179,
+        "actual_std": 5.845207749240741,
+        "normed_residual": 0.6371356413465253,
+        "coverage": 0.9122807017543859,
+        "regime": "confident"
+      },
+      {
+        "channel": "rf_shock_defl_p99_mm",
+        "n": 57,
+        "mean_abs": 2.156360256731723,
+        "actual_std": 4.012253817763188,
+        "normed_residual": 0.5374436301075995,
+        "coverage": 0.9649122807017544,
+        "regime": "confident"
+      },
+      {
+        "channel": "rr_ride_height_mean_mm",
+        "n": 57,
+        "mean_abs": 2.921083946777266,
+        "actual_std": 8.129149924614147,
+        "normed_residual": 0.35933449055141103,
+        "coverage": 0.9649122807017544,
+        "regime": "confident"
+      },
+      {
+        "channel": "rr_shock_defl_p99_mm",
+        "n": 57,
+        "mean_abs": 2.043911863656229,
+        "actual_std": 6.14259845873434,
+        "normed_residual": 0.3327438505686353,
+        "coverage": 0.9298245614035088,
+        "regime": "confident"
+      },
+      {
+        "channel": "steering_max_rad",
+        "n": 57,
+        "mean_abs": 0.07338822890077853,
+        "actual_std": 0.7719390652417657,
+        "normed_residual": 0.09506997664095919,
+        "coverage": 1.0,
+        "regime": "confident"
+      },
+      {
+        "channel": "throttle_max",
+        "n": 57,
+        "mean_abs": 0.03214152697669665,
+        "actual_std": 0.28271370984524136,
+        "normed_residual": 0.11368931133297729,
+        "coverage": 0.9824561403508771,
+        "regime": "noisy"
+      },
+      {
+        "channel": "throttle_mean",
+        "n": 57,
+        "mean_abs": 0.000647252788676536,
+        "actual_std": 0.38895904286552396,
+        "normed_residual": 0.0016640641233280512,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "understeer_angle_mean_rad",
+        "n": 57,
+        "mean_abs": 0.10458395457626163,
+        "actual_std": 0.6136990250027874,
+        "normed_residual": 0.17041570919195548,
+        "coverage": 0.9473684210526315,
+        "regime": "confident"
+      },
+      {
+        "channel": "wheel_speed_max_diff_ms",
+        "n": 57,
+        "mean_abs": 0.3263554239574328,
+        "actual_std": 0.9230928833597609,
+        "normed_residual": 0.3535455963755284,
+        "coverage": 0.9473684210526315,
+        "regime": "noisy"
+      }
+    ],
+    "per_channel_pass": [
+      "accel_lat_g_max",
+      "accel_lon_g_max",
+      "accel_lon_g_min",
+      "lr_ride_height_mean_mm",
+      "rr_ride_height_mean_mm"
+    ],
+    "per_channel_failed": [
+      "lf_ride_height_mean_mm: mean_abs=4.072 > 3.000 | normed=0.77 > 0.50",
+      "rf_ride_height_mean_mm: mean_abs=3.724 > 3.000 | normed=0.64 > 0.50",
+      "understeer_angle_mean_rad: mean_abs=0.105 > 0.100"
+    ]
+  },
+  {
+    "car": "acura",
+    "eval_mode": "heldout",
+    "session_id": "72f43fa4527c4260",
+    "track": "daytona_2011_road",
+    "n_prod_sessions": 32,
+    "n_holdout_rows": 134,
+    "channels": [
+      {
+        "channel": "accel_lat_g_max",
+        "n": 134,
+        "mean_abs": 0.6551690422718851,
+        "actual_std": 1.1451469491200539,
+        "normed_residual": 0.572126610279428,
+        "coverage": 0.8880597014925373,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lat_g_mean",
+        "n": 134,
+        "mean_abs": 0.32848168179741605,
+        "actual_std": 0.8766004872213669,
+        "normed_residual": 0.3747222213378316,
+        "coverage": 0.8582089552238806,
+        "regime": "confident"
+      },
+      {
+        "channel": "accel_lon_g_max",
+        "n": 134,
+        "mean_abs": 0.31105324953911945,
+        "actual_std": 0.7909781811065643,
+        "normed_residual": 0.39325136516908915,
+        "coverage": 0.8731343283582089,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lon_g_min",
+        "n": 134,
+        "mean_abs": 1.010554545103125,
+        "actual_std": 6.105612090271047,
+        "normed_residual": 0.16551240566255224,
+        "coverage": 0.8432835820895522,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_max",
+        "n": 134,
+        "mean_abs": 0.030394735791603893,
+        "actual_std": 0.2666080090780182,
+        "normed_residual": 0.11400533651151269,
+        "coverage": 0.9626865671641791,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_mean",
+        "n": 134,
+        "mean_abs": 0.004158721178149216,
+        "actual_std": 0.21938293232702338,
+        "normed_residual": 0.01895644813403266,
+        "coverage": 1.0,
+        "regime": "confident"
+      },
+      {
+        "channel": "lf_ride_height_mean_mm",
+        "n": 134,
+        "mean_abs": 3.7313645438657606,
+        "actual_std": 6.620341292989416,
+        "normed_residual": 0.5636211758171855,
+        "coverage": 0.9253731343283582,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lr_ride_height_mean_mm",
+        "n": 134,
+        "mean_abs": 3.5574809598625166,
+        "actual_std": 7.293800394479591,
+        "normed_residual": 0.48774037778097723,
+        "coverage": 0.9253731343283582,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rf_ride_height_mean_mm",
+        "n": 134,
+        "mean_abs": 4.37349250694595,
+        "actual_std": 8.196225444945698,
+        "normed_residual": 0.5335983662629628,
+        "coverage": 0.8731343283582089,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rr_ride_height_mean_mm",
+        "n": 134,
+        "mean_abs": 4.479095645037888,
+        "actual_std": 8.95767568732656,
+        "normed_residual": 0.5000287799406461,
+        "coverage": 0.8880597014925373,
+        "regime": "noisy"
+      },
+      {
+        "channel": "steering_max_rad",
+        "n": 134,
+        "mean_abs": 0.16510886136180836,
+        "actual_std": 0.5027544976179801,
+        "normed_residual": 0.3284085217418919,
+        "coverage": 0.8805970149253731,
+        "regime": "confident"
+      },
+      {
+        "channel": "throttle_max",
+        "n": 134,
+        "mean_abs": 0.07508140766051084,
+        "actual_std": 0.39472560722284866,
+        "normed_residual": 0.19021164648718225,
+        "coverage": 0.9477611940298507,
+        "regime": "noisy"
+      },
+      {
+        "channel": "throttle_mean",
+        "n": 134,
+        "mean_abs": 0.004121459597168306,
+        "actual_std": 0.41037022259406913,
+        "normed_residual": 0.010043271588068368,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "understeer_angle_mean_rad",
+        "n": 134,
+        "mean_abs": 0.26197776523077815,
+        "actual_std": 0.4961453290636369,
+        "normed_residual": 0.5280262654597645,
+        "coverage": 0.8880597014925373,
+        "regime": "confident"
+      },
+      {
+        "channel": "wheel_speed_max_diff_ms",
+        "n": 134,
+        "mean_abs": 1.5074424438986085,
+        "actual_std": 4.111753609964963,
+        "normed_residual": 0.36661789272715045,
+        "coverage": 0.835820895522388,
+        "regime": "noisy"
+      }
+    ],
+    "per_channel_pass": [],
+    "per_channel_failed": [
+      "accel_lat_g_max: mean_abs=0.655 > 0.300 | normed=0.57 > 0.50",
+      "accel_lon_g_max: mean_abs=0.311 > 0.300",
+      "accel_lon_g_min: mean_abs=1.011 > 0.300",
+      "lf_ride_height_mean_mm: mean_abs=3.731 > 3.000 | normed=0.56 > 0.50",
+      "lr_ride_height_mean_mm: mean_abs=3.557 > 3.000",
+      "rf_ride_height_mean_mm: mean_abs=4.373 > 3.000 | normed=0.53 > 0.50",
+      "rr_ride_height_mean_mm: mean_abs=4.479 > 3.000 | normed=0.50 > 0.50",
+      "understeer_angle_mean_rad: mean_abs=0.262 > 0.100 | normed=0.53 > 0.50"
+    ]
+  },
+  {
+    "car": "porsche",
+    "eval_mode": "heldout",
+    "session_id": "a3d43056a952ff99",
+    "track": "algarve_gp",
+    "n_prod_sessions": 41,
+    "n_holdout_rows": 128,
+    "channels": [
+      {
+        "channel": "accel_lat_g_max",
+        "n": 128,
+        "mean_abs": 0.29433291595788597,
+        "actual_std": 0.8967186478538285,
+        "normed_residual": 0.3282332944255491,
+        "coverage": 0.96875,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lat_g_mean",
+        "n": 128,
+        "mean_abs": 0.23415201046529815,
+        "actual_std": 1.4219524478442758,
+        "normed_residual": 0.16466936768545243,
+        "coverage": 0.96875,
+        "regime": "confident"
+      },
+      {
+        "channel": "accel_lon_g_max",
+        "n": 128,
+        "mean_abs": 0.12424831379749879,
+        "actual_std": 0.5271137223245388,
+        "normed_residual": 0.2357144360605363,
+        "coverage": 0.9453125,
+        "regime": "noisy"
+      },
+      {
+        "channel": "accel_lon_g_min",
+        "n": 128,
+        "mean_abs": 0.17941789728299756,
+        "actual_std": 0.8588676273453045,
+        "normed_residual": 0.2089005238648531,
+        "coverage": 0.90625,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_max",
+        "n": 128,
+        "mean_abs": 0.03083890737632538,
+        "actual_std": 0.25839563133357235,
+        "normed_residual": 0.11934763454461933,
+        "coverage": 0.9609375,
+        "regime": "confident"
+      },
+      {
+        "channel": "brake_mean",
+        "n": 128,
+        "mean_abs": 0.0008204301141051403,
+        "actual_std": 0.11425755535037108,
+        "normed_residual": 0.007180532714788876,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "damper_force_mean_n",
+        "n": 128,
+        "mean_abs": 87.45635826921185,
+        "actual_std": 143.81310938642446,
+        "normed_residual": 0.6081250773475556,
+        "coverage": 0.8671875,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_force_p99_n",
+        "n": 128,
+        "mean_abs": 354.1109150455742,
+        "actual_std": 579.1910562185243,
+        "normed_residual": 0.6113887831029816,
+        "coverage": 0.9140625,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_velocity_mean_mms",
+        "n": 128,
+        "mean_abs": 13.207518935421138,
+        "actual_std": 22.582681095148796,
+        "normed_residual": 0.5848516781410146,
+        "coverage": 0.8984375,
+        "regime": "noisy"
+      },
+      {
+        "channel": "damper_velocity_p99_mms",
+        "n": 128,
+        "mean_abs": 85.97436222421723,
+        "actual_std": 148.58351179280413,
+        "normed_residual": 0.5786265325597247,
+        "coverage": 0.890625,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lf_ride_height_mean_mm",
+        "n": 128,
+        "mean_abs": 2.5295376841397688,
+        "actual_std": 9.373630517755078,
+        "normed_residual": 0.26985677314125417,
+        "coverage": 0.9609375,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lf_shock_defl_p99_mm",
+        "n": 128,
+        "mean_abs": 3.177627054744717,
+        "actual_std": 8.513334519987152,
+        "normed_residual": 0.3732529301279603,
+        "coverage": 0.90625,
+        "regime": "noisy"
+      },
+      {
+        "channel": "lr_ride_height_mean_mm",
+        "n": 128,
+        "mean_abs": 2.869940506914238,
+        "actual_std": 8.749991566814481,
+        "normed_residual": 0.32799351690793316,
+        "coverage": 0.953125,
+        "regime": "confident"
+      },
+      {
+        "channel": "lr_shock_defl_p99_mm",
+        "n": 128,
+        "mean_abs": 3.882155379473245,
+        "actual_std": 8.607276830236081,
+        "normed_residual": 0.45103177881252887,
+        "coverage": 0.90625,
+        "regime": "confident"
+      },
+      {
+        "channel": "rf_ride_height_mean_mm",
+        "n": 128,
+        "mean_abs": 2.7491583663493175,
+        "actual_std": 8.12441868523897,
+        "normed_residual": 0.33838216281789946,
+        "coverage": 0.921875,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rf_shock_defl_p99_mm",
+        "n": 128,
+        "mean_abs": 3.0106429463694018,
+        "actual_std": 7.9236605267094005,
+        "normed_residual": 0.37995607411763826,
+        "coverage": 0.90625,
+        "regime": "noisy"
+      },
+      {
+        "channel": "rr_ride_height_mean_mm",
+        "n": 128,
+        "mean_abs": 2.474948521421476,
+        "actual_std": 8.101833811939377,
+        "normed_residual": 0.3054800405525765,
+        "coverage": 0.9453125,
+        "regime": "confident"
+      },
+      {
+        "channel": "rr_shock_defl_p99_mm",
+        "n": 128,
+        "mean_abs": 3.6690279066586253,
+        "actual_std": 8.749861890268589,
+        "normed_residual": 0.41932409364532264,
+        "coverage": 0.9375,
+        "regime": "confident"
+      },
+      {
+        "channel": "steering_max_rad",
+        "n": 128,
+        "mean_abs": 0.09649120135558337,
+        "actual_std": 0.961531369328205,
+        "normed_residual": 0.10035158959296259,
+        "coverage": 0.9765625,
+        "regime": "confident"
+      },
+      {
+        "channel": "throttle_max",
+        "n": 128,
+        "mean_abs": 0.03219919342394908,
+        "actual_std": 0.29000674856312864,
+        "normed_residual": 0.11102911771358301,
+        "coverage": 0.96875,
+        "regime": "confident"
+      },
+      {
+        "channel": "throttle_mean",
+        "n": 128,
+        "mean_abs": 0.0006865320052885742,
+        "actual_std": 0.3725108954434801,
+        "normed_residual": 0.0018429850339578577,
+        "coverage": 1.0,
+        "regime": "dense"
+      },
+      {
+        "channel": "understeer_angle_mean_rad",
+        "n": 128,
+        "mean_abs": 0.1384758231416331,
+        "actual_std": 0.6199154053455425,
+        "normed_residual": 0.22337858028297636,
+        "coverage": 0.9765625,
+        "regime": "confident"
+      },
+      {
+        "channel": "wheel_speed_max_diff_ms",
+        "n": 128,
+        "mean_abs": 0.28555894185254105,
+        "actual_std": 0.6047093200543223,
+        "normed_residual": 0.47222513757004553,
+        "coverage": 0.953125,
+        "regime": "noisy"
+      }
+    ],
+    "per_channel_pass": [
+      "accel_lat_g_max",
+      "accel_lon_g_max",
+      "accel_lon_g_min",
+      "lf_ride_height_mean_mm",
+      "lr_ride_height_mean_mm",
+      "rf_ride_height_mean_mm",
+      "rr_ride_height_mean_mm"
+    ],
+    "per_channel_failed": [
+      "understeer_angle_mean_rad: mean_abs=0.138 > 0.100"
+    ]
+  }
+]

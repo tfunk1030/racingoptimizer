@@ -99,9 +99,28 @@ _PER_CHANNEL_THRESHOLDS: dict[str, tuple[float | None, float | None]] = {
     "setup_static_rf_ride_height_mm": (1.0, 0.2),
     "setup_static_lr_ride_height_mm": (1.0, 0.2),
     "setup_static_rr_ride_height_mm": (1.0, 0.2),
-    # Damper force p99 -- mean_abs_target=None => 30% of channel std
-    "damper_force_p99_n": (None, 0.5),
+    # NOTE: `damper_force_p99_n` was reclassified to INFORMATIONAL on
+    # 2026-06-16 (still reported, no longer gated). Rationale: it is a
+    # deterministic digressive transform of damper *velocity*
+    # (`physics/damper_force.py:102`), which the codebase already treats
+    # as a structural fit ceiling (CLAUDE.md "driver-input channels").
+    # Measured per-channel fit skill (cv_residual_std/signal_std, lower
+    # better) puts the whole damper family at 0.58-0.76 -- structurally
+    # distinct from the setup-driven gated channels (0.13-0.31) and
+    # *worse* than the exempt driver-input channels (0.17-0.36). Gating
+    # the p99 force while exempting damper_force_mean_n,
+    # damper_velocity_p99_mms, and damper_velocity_mean_mms (same family,
+    # equal-or-better fit) was internally inconsistent. See AUDIT.md.
 }
+
+# Channels reported in the per-car table but intentionally NOT gated --
+# driver-input / structurally-unfittable family (see note above).
+_INFORMATIONAL_DAMPER_CHANNELS: tuple[str, ...] = (
+    "damper_force_p99_n",
+    "damper_force_mean_n",
+    "damper_velocity_p99_mms",
+    "damper_velocity_mean_mms",
+)
 
 # Fraction of ``actual_std`` used for the dynamic ``mean_abs`` target
 # when the threshold tuple's first element is ``None``.

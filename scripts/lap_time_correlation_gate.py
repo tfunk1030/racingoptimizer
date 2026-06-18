@@ -255,22 +255,40 @@ def _compute_loso_pairs_for_track(
             skies=int(med("skies_mean", default=-1.0)),
         )
 
+    # Production-faithful training set: `optimize <car> <track>` fits
+    # fit_per_car on EVERY production session for the car across ALL
+    # tracks, not just the target track's sessions. The earlier
+    # same-track-only `rest` measured a strictly weaker model than
+    # production ships, biasing the measured correlation downward. Pull
+    # the full per-car production corpus once; LOSO then holds out one
+    # target-track session at a time from THIS set.
+    with cat.open_catalog(catalog_path(corpus_root)) as conn:
+        all_car_sids = sorted(
+            s.session_id
+            for s in cat.query_sessions(
+                conn, car=car, valid_only=True, include_held_out=False,
+            )
+        )
+
     out: list[tuple[float, float]] = []
     for held_sid in session_ids:
-        rest = [s for s in session_ids if s != held_sid]
+        # Train on the full per-car corpus minus the held target-track
+        # session (matches production's all-tracks pooling).
+        rest = [s for s in all_car_sids if s != held_sid]
         # Must leave enough training material for a stable per-car fit
         # AND must keep at least 5 sessions of cross-track variety so
         # the surrogate doesn't degenerate to a constant per-track fit.
         if len(rest) < 5:
             continue
 
-        # 1. Catalog lookup: held session must exist and be valid.
+        # 1. Catalog lookup: held session must exist and be usable
+        #    (the catalog's validity notion is status, not a `valid` flag).
         try:
             with cat.open_catalog(catalog_path(corpus_root)) as conn:
                 held = cat.get_session(conn, held_sid)
         except Exception:
             continue
-        if held is None or not held.valid:
+        if held is None or held.status not in ("ok", "partial"):
             continue
 
         # 2. Held session's observed setup blob -> bounded vector.
@@ -364,13 +382,43 @@ def _compute_loso_pairs_for_track(
     return out
 
 
-def main() -> int:
+def _parse_pair_filters(argv: list[str]) -> set[tuple[str, str]]:
+    """Parse optional ``car:track`` positional filters.
+
+    The full qualifying sweep is ~150 per-car refits (many hours); the
+    filters let an offline run tackle one pair at a time and commit
+    results incrementally. Unknown/malformed tokens raise ValueError so a
+    typo doesn't silently run the full sweep.
+    """
+    out: set[tuple[str, str]] = set()
+    for token in argv:
+        car, sep, track = token.partition(":")
+        if not sep or not car or not track:
+            raise ValueError(f"expected car:track, got {token!r}")
+        out.add((car.lower(), track.lower()))
+    return out
+
+
+def main(argv: list[str] | None = None) -> int:
     print("=" * 72)
     print("Lap-time correlation gate (P1.2)")
     print("=" * 72)
 
+    try:
+        pair_filters = _parse_pair_filters(list(argv or []))
+    except ValueError as exc:
+        print(f"  ERROR: {exc}")
+        return 2
+
     pair_sessions = _build_pair_sessions_from_catalog()
     qualifying = _qualifying_pairs(pair_sessions)
+    if pair_filters:
+        unknown = pair_filters - set(qualifying)
+        if unknown:
+            print(f"  ERROR: filter(s) not in qualifying pairs: {sorted(unknown)}")
+            print(f"  qualifying: {sorted(qualifying)}")
+            return 2
+        qualifying = [p for p in qualifying if p in pair_filters]
     if not qualifying:
         print(
             "no qualifying (car, track) pairs "
@@ -423,10 +471,25 @@ def main() -> int:
 
     out_path = Path("docs/physics-rebuild/lap_time_correlation_latest.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2, default=str))
+    # Merge-write so pair-filtered runs accumulate instead of clobbering
+    # earlier pairs' results (the offline sweep lands one pair at a time).
+    merged: dict[tuple[str, str], dict] = {}
+    if out_path.is_file():
+        try:
+            for entry in json.loads(out_path.read_text()):
+                if isinstance(entry, dict):
+                    merged[(str(entry.get("car")), str(entry.get("track")))] = entry
+        except (OSError, json.JSONDecodeError):
+            merged = {}
+    for entry in payload:
+        merged[(entry["car"], entry["track"])] = entry
+    out_path.write_text(
+        json.dumps(sorted(merged.values(), key=lambda e: (e["car"], e["track"])),
+                   indent=2, default=str)
+    )
     print(f"\n[saved JSON: {out_path}]")
     return 0 if overall_pass else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
